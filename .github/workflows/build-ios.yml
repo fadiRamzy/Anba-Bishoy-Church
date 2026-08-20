@@ -1,0 +1,71 @@
+name: Build iOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'ios/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.json'
+      - '.github/workflows/build-ios.yml'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Populate www/ from website root
+        run: |
+          mkdir -p www
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='android' \
+            --exclude='ios' \
+            --exclude='node_modules' \
+            --exclude='www' \
+            --exclude='assets' \
+            --exclude='package.json' \
+            --exclude='package-lock.json' \
+            --exclude='capacitor.config.json' \
+            --exclude='.gitignore' \
+            ./ ./www/
+          test -f www/index.html || (echo "::error::www/index.html missing after copy" && exit 1)
+          test -f www/app.js || (echo "::error::www/app.js missing after copy" && exit 1)
+          test -f www/db.js || (echo "::error::www/db.js missing after copy" && exit 1)
+          test -f www/styles.css || (echo "::error::www/styles.css missing after copy" && exit 1)
+
+      - name: Sync Capacitor iOS
+        run: npx cap sync ios
+
+      - name: Build (compile-only, unsigned)
+        working-directory: ios/App
+        run: |
+          xcodebuild build \
+            -project App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-log
+          path: ~/Library/Developer/Xcode/DerivedData/**/Logs/Build/*.xcactivitylog
+          if-no-files-found: ignore
