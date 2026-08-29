@@ -134,6 +134,20 @@ function fieldOrFallback(value) {
   return escapeHTML(value);
 }
 
+/* "الشارع" field: if the stored value is an http/https URL (e.g. a Google Maps
+   link), render it as a clickable link. Otherwise show it as plain text,
+   exactly as before. Never alters the stored value itself. */
+function streetFieldHTML(value) {
+  if (value === null || value === undefined || value === '') {
+    return '<span class="muted">غير متوفر</span>';
+  }
+  const str = value.toString().trim();
+  if (/^https?:\/\/\S+$/i.test(str)) {
+    return `<a href="${escapeHTML(str)}" target="_blank" rel="noopener noreferrer" class="location-link">${ICONS.location} فتح الموقع على Google Maps</a>`;
+  }
+  return escapeHTML(str);
+}
+
 /* Display-only cleanup: strips underscores/extra separators for user-facing
    labels (المرحلة / القطاع / الفصل). Never touches the underlying stored value. */
 function cleanLabel(value) {
@@ -539,7 +553,7 @@ async function renderProfile(idStr) {
         <dl class="info-grid">
           <div class="info-item"><dt>المدينة</dt><dd class="${member.city ? '' : 'muted'}">${fieldOrFallback(member.city)}</dd></div>
           <div class="info-item"><dt>الحي</dt><dd class="${member.neighborhood ? '' : 'muted'}">${fieldOrFallback(member.neighborhood)}</dd></div>
-          <div class="info-item full"><dt>الشارع</dt><dd class="${member.street ? '' : 'muted'}">${fieldOrFallback(member.street)}</dd></div>
+          <div class="info-item full"><dt>الشارع</dt><dd class="${member.street ? '' : 'muted'}">${streetFieldHTML(member.street)}</dd></div>
           <div class="info-item full">
             <dt>اللوكيشن الحالي</dt>
             <dd class="location-cell">
