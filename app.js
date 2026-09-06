@@ -349,10 +349,11 @@ async function renderHome() {
         <form id="homeSearchForm">
           <div class="search-box">
             ${ICONS.search}
-            <input type="text" id="homeSearchInput" placeholder="ابحث بالاسم... مثال: فادي" autocomplete="off" />
+            <input type="text" id="homeSearchInput" placeholder="ابحث بالاسم أو رقم الهاتف... مثال: فادي" autocomplete="off" />
           </div>
         </form>
         <p class="search-hint">ابحث في قاعدة بيانات الخدام والمخدومين كاملة (${total} اسم مسجَّل على هذا الجهاز)</p>
+        <div id="homeSearchResults"></div>
       </div>
 
       <div class="add-member-cta">
@@ -372,9 +373,20 @@ async function renderHome() {
     </div>
   `;
 
+  const homeSearchInput = document.getElementById('homeSearchInput');
+  const homeSearchResults = document.getElementById('homeSearchResults');
+
+  async function runHomeLiveSearch() {
+    const val = homeSearchInput.value.trim();
+    if (!val) { homeSearchResults.innerHTML = ''; return; }
+    const results = await MembersDB.searchAll(val);
+    homeSearchResults.innerHTML = renderMemberListOrEmpty(results, `لا يوجد أسماء مطابقة لـ "${escapeHTML(val)}"`);
+  }
+  homeSearchInput.addEventListener('input', debounce(runHomeLiveSearch, 200));
+
   document.getElementById('homeSearchForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    const q = document.getElementById('homeSearchInput').value.trim();
+    const q = homeSearchInput.value.trim();
     if (q) navigate(`/search?${qs({ q })}`);
   });
 }
@@ -385,7 +397,7 @@ async function renderHome() {
 async function renderSearch(params) {
   renderChrome(true);
   const q = params.q || '';
-  const results = q ? await MembersDB.searchByName(q) : [];
+  const results = q ? await MembersDB.searchAll(q) : [];
 
   APP_ROOT.innerHTML = `
     <div class="container">
@@ -393,19 +405,28 @@ async function renderSearch(params) {
         <form id="searchForm">
           <div class="search-box">
             ${ICONS.search}
-            <input type="text" id="searchInput" value="${escapeHTML(q)}" placeholder="ابحث بالاسم..." autocomplete="off" />
+            <input type="text" id="searchInput" value="${escapeHTML(q)}" placeholder="ابحث بالاسم أو رقم الهاتف..." autocomplete="off" />
           </div>
         </form>
       </div>
       <p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>نتائج البحث عن "${escapeHTML(q)}"</span></p>
-      ${renderMemberListOrEmpty(results, `لا يوجد أسماء مطابقة لـ "${escapeHTML(q)}"`)}
+      <div id="searchResultsContainer">${renderMemberListOrEmpty(results, `لا يوجد أسماء مطابقة لـ "${escapeHTML(q)}"`)}</div>
     </div>
   `;
 
+  const searchInput = document.getElementById('searchInput');
+  const searchResultsContainer = document.getElementById('searchResultsContainer');
+
+  async function runLiveSearch() {
+    const val = searchInput.value.trim();
+    const liveResults = val ? await MembersDB.searchAll(val) : [];
+    searchResultsContainer.innerHTML = renderMemberListOrEmpty(liveResults, `لا يوجد أسماء مطابقة لـ "${escapeHTML(val)}"`);
+  }
+  searchInput.addEventListener('input', debounce(runLiveSearch, 200));
+
   document.getElementById('searchForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    const val = document.getElementById('searchInput').value.trim();
-    navigate(`/search?${qs({ q: val })}`);
+    runLiveSearch();
   });
 }
 
