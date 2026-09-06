@@ -1129,7 +1129,6 @@ async function renderAdminPanel() {
   document.getElementById('importFile').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (!(await Admin.require())) { e.target.value = ''; return; }
     const mode = document.getElementById('importMode').value;
     try {
       const text = await file.text();
