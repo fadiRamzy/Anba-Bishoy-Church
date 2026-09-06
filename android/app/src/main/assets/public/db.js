@@ -150,6 +150,32 @@ const MembersDB = {
     return all.filter((m) => normalizeArabic(m.name || '').includes(norm));
   },
 
+  /* Real-time search across name, phone (partial/full digits), address
+     (city/neighborhood/street) and stage/sector/class. Case-insensitive and
+     Arabic-tolerant (via normalizeArabic). Always scans the FULL stored
+     dataset (getAll()), so records with duplicate phone numbers/addresses
+     are all returned — nothing is deduplicated or used as a lookup key. */
+  async searchAll(query) {
+    const raw = (query || '').toString().trim();
+    if (!raw) return [];
+    const all = await this.getAll();
+    const norm = normalizeArabic(raw);
+    const digits = raw.replace(/\D/g, '');
+    return all.filter((m) => {
+      if (norm && normalizeArabic(m.name || '').includes(norm)) return true;
+      if (digits) {
+        const p1 = (m.phone1 || '').toString().replace(/\D/g, '');
+        const p2 = (m.phone2 || '').toString().replace(/\D/g, '');
+        if ((p1 && p1.includes(digits)) || (p2 && p2.includes(digits))) return true;
+      }
+      if (norm) {
+        const otherFields = [m.city, m.neighborhood, m.street, m.stage, m.sector, m.class];
+        if (otherFields.some((f) => f && normalizeArabic(f.toString()).includes(norm))) return true;
+      }
+      return false;
+    });
+  },
+
   async filterBy(field, value) {
     const all = await this.getAll();
     return all.filter((m) => (m[field] || '') === value);
@@ -170,13 +196,29 @@ const MembersDB = {
     return JSON.stringify(all, null, 2);
   },
 
-  /* mode: 'merge' (put/overwrite by id) or 'replace' (clear then insert) */
+  /* mode: 'merge' (append, never overwriting existing records) or
+     'replace' (clear then insert).
+     Root cause of the old data-loss bug: separately exported JSON files
+     (one per class/stage) each restart their own "id" numbering from 1.
+     Since bulkPut() uses store.put(), which is an upsert keyed on "id",
+     importing a second file whose ids happened to overlap with an
+     already-stored file silently overwrote those existing records.
+     Fix: in merge mode, never reuse the "id" values from the incoming
+     file — assign each incoming record a fresh id continuing on from the
+     highest id already in the store, guaranteeing no existing record can
+     ever be overwritten. */
   async importJSON(jsonText, mode = 'merge') {
     const parsed = JSON.parse(jsonText);
     if (!Array.isArray(parsed)) throw new Error('الملف لا يحتوي على مصفوفة بيانات صحيحة');
-    if (mode === 'replace') await this.clearAll();
-    await this.bulkPut(parsed);
-    return parsed.length;
+    if (mode === 'replace') {
+      await this.clearAll();
+      await this.bulkPut(parsed);
+      return parsed.length;
+    }
+    let nextId = await this.nextId();
+    const remapped = parsed.map((m) => ({ ...m, id: nextId++ }));
+    await this.bulkPut(remapped);
+    return remapped.length;
   },
 };
 
