@@ -534,8 +534,8 @@ async function renderBirthdays() {
 
       <div class="birthday-hero">
         <h2 class="birthday-hero-title">أعياد ميلاد اليوم</h2>
-        <p class="birthday-verse">لِمِثْلِ هَؤُلَاءِ مَلَكُوتُ السَّمَاوَاتِ</p>
-        <p class="birthday-verse-ref">متى 19:14</p>
+        <p class="birthday-verse">بَارِكِي يَا نَفْسِي الرَّبَّ، وَلَا تَنْسَيْ كُلَّ حَسَنَاتِهِ.</p>
+        <p class="birthday-verse-ref">مزمور 103: 2</p>
         ${todaySectionHTML}
       </div>
 
@@ -681,9 +681,10 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
     probe.style.cssText = `position:fixed;visibility:hidden;left:-9999px;top:0;width:${nameColW}px;font-family:'Cairo',system-ui,sans-serif;font-size:10.5px;line-height:1.4;padding:5px 6px;box-sizing:border-box;word-break:break-word;`;
     document.body.appendChild(probe);
     cleanupEls.push(probe);
-    const measured = rows.map((r) => {
-      probe.textContent = r.name;
-      return { ...r, rowH: Math.max(MIN_ROW_H, probe.offsetHeight) };
+    const measured = rows.map((r, idx) => {
+      const serial = idx + 1;
+      probe.textContent = `${serial} - ${r.name}`;
+      return { ...r, serial, rowH: Math.max(MIN_ROW_H, probe.offsetHeight) };
     });
 
     /* Bin-pack rows into blocks that each fit within BLOCK_H. */
@@ -704,7 +705,7 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
       const th = COLS.map((c) => `<th style="width:${c.w * 100}%;border:1px solid #9AA7B2;background:#DCE6F1;color:#1F2A37;font-family:'Cairo',sans-serif;font-weight:700;font-size:10.5px;padding:4px 5px;">${escapeHTML(c.label)}</th>`).join('');
       const trs = blockRows.map((r) => `
         <tr>
-          <td style="border:1px solid #C7CDD3;padding:4px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;word-break:break-word;vertical-align:middle;">${escapeHTML(r.name)}</td>
+          <td style="border:1px solid #C7CDD3;padding:4px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;word-break:break-word;vertical-align:middle;">${r.serial} - ${escapeHTML(r.name)}</td>
           <td style="border:1px solid #C7CDD3;padding:4px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${r.monthNum}</td>
           <td style="border:1px solid #C7CDD3;padding:4px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${escapeHTML(r.className)}</td>
           <td style="border:1px solid #C7CDD3;padding:4px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${r.age !== null ? r.age + ' سنة' : '—'}</td>
@@ -715,13 +716,16 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
     function pageHTML(pageBlocks) {
       const blocksHTML = pageBlocks.map((b) => `<div style="width:${BLOCK_W}px;">${tableHTML(b)}</div>`).join(`<div style="width:${GUTTER}px;"></div>`);
       return `
-        <div style="width:${PAGE_W}px;height:${PAGE_H}px;background:#FFFDF8;box-sizing:border-box;padding:${MARGIN}px;direction:rtl;">
-          <div style="text-align:center;margin-bottom:10px;">
-            <div style="font-family:'Aref Ruqaa',serif;font-size:22px;color:#7C1F2C;font-weight:700;">أعياد الميلاد</div>
-            <div style="font-family:'Cairo',sans-serif;font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
-            <div style="font-family:'Cairo',sans-serif;font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
+        <div style="width:${PAGE_W}px;height:${PAGE_H}px;background:#FFFDF8;box-sizing:border-box;position:relative;overflow:hidden;">
+          <div style="position:absolute;inset:0;background-image:url('site-bg.jpg');background-size:cover;background-position:center;opacity:0.08;"></div>
+          <div style="position:relative;padding:${MARGIN}px;direction:rtl;">
+            <div style="text-align:center;margin-bottom:10px;">
+              <div style="font-family:'Aref Ruqaa',serif;font-size:22px;color:#7C1F2C;font-weight:700;">أعياد الميلاد</div>
+              <div style="font-family:'Cairo',sans-serif;font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
+              <div style="font-family:'Cairo',sans-serif;font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
+            </div>
+            <div style="display:flex;flex-direction:row;">${blocksHTML}</div>
           </div>
-          <div style="display:flex;flex-direction:row;">${blocksHTML}</div>
         </div>`;
     }
 
