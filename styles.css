@@ -758,3 +758,36 @@ main { min-height: 60vh; padding-bottom: 30px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* ==========================================================================
+   Birthdays feature (أعياد الميلاد) — additive only. Reuses existing
+   .member-list/.member-card/.section-title/.empty-state/.breadcrumbs
+   styles above as-is; no existing rule in this file was modified.
+   ========================================================================== */
+.birthday-hero {
+  background: var(--color-maroon-tint);
+  border: 1px solid var(--color-gold-light);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-bottom: 28px;
+  box-shadow: var(--shadow-soft);
+}
+.birthday-hero-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-gold-light);
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-weight: 700;
+  color: var(--color-maroon-dark);
+}
+.birthday-hero-date svg { width: 18px; height: 18px; color: var(--color-gold); }
+.birthday-group { margin-bottom: 22px; }
+.birthday-group-heading {
+  font-weight: 700;
+  color: var(--color-maroon);
+  font-size: .95rem;
+  margin: 0 0 10px;
+}

@@ -31,6 +31,7 @@ const ICONS = {
   users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H7a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.9M16 3.1a4 4 0 010 7.8"/></svg>',
   empty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
   cross: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M5 8h14"/><circle cx="12" cy="3" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="21" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="8" r="1" fill="currentColor" stroke="none"/></svg>',
+  cake: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7a2 2 0 012-2h12a2 2 0 012 2v7M2 21h20M4 14a3 3 0 013-3h10a3 3 0 013 3M9 9V6M12 9V6M15 9V6M9 6c0-.8.5-1.2.5-2S9 2.5 9 2M12 6c0-.8.5-1.2.5-2S12 2.5 12 2M15 6c0-.8.5-1.2.5-2S15 2.5 15 2"/></svg>',
 };
 
 /* ---------------------------------------------------------------------- */
@@ -306,6 +307,7 @@ async function router() {
   if (segments[0] === 'add') return renderForm(null);
   if (segments[0] === 'edit' && segments[1]) return renderForm(segments[1]);
   if (segments[0] === 'admin') return renderAdminPanel();
+  if (segments[0] === 'birthdays') return renderBirthdays();
   return renderHome(params);
 }
 
@@ -369,6 +371,10 @@ async function renderHome() {
             <span class="icon-wrap">${ICONS[s.icon]}</span>
             <span>${s.label}</span>
           </a>`).join('')}
+        <a href="#/birthdays" class="nav-card">
+          <span class="icon-wrap">${ICONS.cake}</span>
+          <span>أعياد الميلاد</span>
+        </a>
       </div>
     </div>
   `;
@@ -447,6 +453,104 @@ function memberCardHTML(m) {
         <span class="member-meta">${escapeHTML(metaParts.join(' · ') || '—')}</span>
       </span>
     </a>`;
+}
+
+/* Resolves a member's birth {month (0-11), day} using the same field
+   fallback chain as formatBirthDate(), for the Birthdays feature. Does not
+   duplicate age/formatting logic — those still go through computeAge()/
+   formatBirthDate() unchanged. Returns null when no valid date exists. */
+function getBirthMonthDay(member) {
+  if (member.birthDate) {
+    const d = new Date(member.birthDate);
+    if (!isNaN(d.getTime())) return { month: d.getMonth(), day: d.getDate() };
+  }
+  if (member.birthDay && member.birthMonth) {
+    const mIdx = Number(member.birthMonth) - 1;
+    const day = Number(member.birthDay);
+    if (mIdx >= 0 && mIdx < 12 && day >= 1 && day <= 31) return { month: mIdx, day };
+  }
+  return null;
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Birthdays (أعياد الميلاد)                                             */
+/* ---------------------------------------------------------------------- */
+async function renderBirthdays() {
+  renderChrome(true);
+  const all = await MembersDB.getAll();
+  const today = new Date();
+  const todayMonth = today.getMonth();
+  const todayDay = today.getDate();
+  const isLeapYear = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  // Feb 29 birthdays: on non-leap years there is no Feb 29 to match, so
+  // treat Feb 28 as their day so those birthdays are never skipped.
+  const todayStandsInForFeb29 = todayMonth === 1 && todayDay === 28 && !isLeapYear(today.getFullYear());
+
+  const withDates = [];
+  for (const m of all) {
+    const md = getBirthMonthDay(m);
+    if (md) withDates.push({ member: m, month: md.month, day: md.day });
+  }
+
+  const isTodayBirthday = (x) =>
+    (x.month === todayMonth && x.day === todayDay) ||
+    (todayStandsInForFeb29 && x.month === 1 && x.day === 29);
+
+  const todaysBirthdays = withDates.filter(isTodayBirthday);
+  const upcomingThisMonth = withDates
+    .filter((x) => x.month === todayMonth && x.day > todayDay && !isTodayBirthday(x))
+    .sort((a, b) => a.day - b.day);
+
+  const upcomingGroups = [];
+  for (const item of upcomingThisMonth) {
+    const lastGroup = upcomingGroups[upcomingGroups.length - 1];
+    if (lastGroup && lastGroup.day === item.day) lastGroup.items.push(item);
+    else upcomingGroups.push({ day: item.day, items: [item] });
+  }
+
+  function birthdayCardHTML(m) {
+    const dob = formatBirthDate(m) || '—';
+    const age = computeAge(m);
+    const meta = age !== null ? `${dob} — ${age} سنة` : dob;
+    return `
+      <a href="#/member/${m.id}" class="member-card">
+        <span class="member-avatar">${escapeHTML(initials(m.name))}</span>
+        <span class="member-info">
+          <span class="member-name">${escapeHTML(m.name)}</span>
+          <span class="member-meta">${escapeHTML(meta)}</span>
+        </span>
+      </a>`;
+  }
+
+  const monthLabel = ARABIC_MONTHS[todayMonth];
+  const todayLabel = `${today.getDate()} ${monthLabel}`;
+
+  const todaySectionHTML = todaysBirthdays.length
+    ? `<div class="member-list">${todaysBirthdays.map((x) => birthdayCardHTML(x.member)).join('')}</div>`
+    : `<div class="empty-state"><p>لا توجد أعياد ميلاد اليوم</p></div>`;
+
+  const upcomingSectionHTML = upcomingGroups.length
+    ? upcomingGroups.map((g) => `
+        <div class="birthday-group">
+          <h4 class="birthday-group-heading">${g.day} ${monthLabel}</h4>
+          <div class="member-list">${g.items.map((x) => birthdayCardHTML(x.member)).join('')}</div>
+        </div>`).join('')
+    : `<div class="empty-state"><p>لا توجد أعياد ميلاد قادمة باقي هذا الشهر</p></div>`;
+
+  APP_ROOT.innerHTML = `
+    <div class="container">
+      <p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>أعياد الميلاد</span></p>
+
+      <div class="birthday-hero">
+        <span class="birthday-hero-date">${ICONS.cake}<span>${todayLabel}</span></span>
+        <h2 class="section-title" style="margin-top:14px;">أعياد الميلاد اليوم</h2>
+        ${todaySectionHTML}
+      </div>
+
+      <h2 class="section-title" style="margin-top:32px;">أعياد الميلاد القادمة في ${monthLabel}</h2>
+      ${upcomingSectionHTML}
+    </div>
+  `;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1062,6 +1166,19 @@ async function renderAdminPanel() {
             <option value="replace">استبدال كل البيانات الحالية</option>
           </select>
         </div>
+
+        <hr style="margin:18px 0;border:none;border-top:1px solid var(--color-border, #e5e0d8);" />
+
+        <h4 style="margin:0 0 6px;">طلب نشر ملف لكل المستخدمين</h4>
+        <p>هذا مختلف عن الاستيراد أعلاه: الملف هنا لا يُحفظ على جهازك، بل يُجهَّز كطلب نشر يوافَق عليه من GitHub ليصبح متاحًا لكل زوار الموقع.</p>
+        <div class="admin-actions">
+          <label class="btn btn-outline" for="publishFile" style="cursor:pointer;">${ICONS.upload}<span>اختيار ملف للنشر</span></label>
+          <input type="file" id="publishFile" accept="application/json" style="display:none;" />
+        </div>
+        <p id="publishStatus" class="section-sub" style="margin-top:8px;"></p>
+        <div class="admin-actions">
+          <button id="publishRequestBtn" class="btn btn-gold" style="display:none;">طلب نشر</button>
+        </div>
       </div>
 
       <div class="admin-panel" style="border-color:var(--color-danger);">
@@ -1100,6 +1217,66 @@ async function renderAdminPanel() {
       showToast('الملف غير صالح: ' + err.message, 'danger');
     }
     e.target.value = '';
+  });
+
+  /* ---- Publish Request (شارك الملف مع كل المستخدمين عبر GitHub) ----
+     No GitHub token/secret ever touches this code. The button only
+     (1) validates the file locally, then (2) hands the admin a ready-to
+     paste base64 payload and opens GitHub's own "Run workflow" page for
+     the publish-data.yml workflow, where the admin — already signed in to
+     GitHub with their own permissions — triggers the real, server-side
+     validation + commit. See .github/workflows/publish-data.yml. */
+  const PUBLISH_REPO = 'fadiRamzy/Anba-Bishoy-Church';
+  const PUBLISH_WORKFLOW_URL = `https://github.com/${PUBLISH_REPO}/actions/workflows/publish-data.yml`;
+  let pendingPublish = null; // { filename, base64 }
+
+  const publishStatusEl = document.getElementById('publishStatus');
+  const publishBtn = document.getElementById('publishRequestBtn');
+
+  function setPublishStatus(text, isError) {
+    publishStatusEl.textContent = text;
+    publishStatusEl.style.color = isError ? 'var(--color-danger, #A6362C)' : '';
+  }
+
+  document.getElementById('publishFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    pendingPublish = null;
+    publishBtn.style.display = 'none';
+    if (!file) { setPublishStatus(''); return; }
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (!Array.isArray(parsed)) throw new Error('يجب أن يكون الملف عبارة عن قائمة (array) من السجلات');
+      if (parsed.length === 0) throw new Error('الملف لا يحتوي على أي سجلات');
+      for (let i = 0; i < parsed.length; i++) {
+        const rec = parsed[i];
+        if (!rec || typeof rec !== 'object' || Array.isArray(rec) || typeof rec.name !== 'string' || !rec.name.trim()) {
+          throw new Error(`السجل رقم ${i + 1} لا يحتوي على حقل "name" صالح`);
+        }
+      }
+      pendingPublish = { filename: file.name, base64: btoa(unescape(encodeURIComponent(text))) };
+      setPublishStatus(`${file.name} — ${parsed.length} سجل — جاهز للنشر`);
+      publishBtn.style.display = '';
+    } catch (err) {
+      setPublishStatus('الملف غير صالح: ' + err.message, true);
+    }
+  });
+
+  publishBtn.addEventListener('click', async () => {
+    if (!pendingPublish) return;
+    if (!(await Admin.require())) return;
+    setPublishStatus('جاري تجهيز طلب النشر...');
+    try {
+      try { await navigator.clipboard.writeText(pendingPublish.base64); } catch (_) { /* clipboard may be unavailable; not fatal */ }
+      window.open(PUBLISH_WORKFLOW_URL, '_blank', 'noopener');
+      setPublishStatus(
+        `تم تجهيز طلب النشر لملف "${pendingPublish.filename}" (تم نسخ محتوى الملف المُرمّز). ` +
+        `أكمل النشر من صفحة GitHub Actions التي فُتحت في تبويب جديد: اضغط "Run workflow"، ` +
+        `الصق اسم الملف والمحتوى المنسوخ، ثم شغّل الطلب. النتيجة النهائية (تم النشر / تم الرفض) تظهر هناك.`
+      );
+    } catch (err) {
+      setPublishStatus('تعذر تجهيز طلب النشر: ' + err.message, true);
+    }
   });
 
   document.getElementById('wipeBtn').addEventListener('click', async () => {
