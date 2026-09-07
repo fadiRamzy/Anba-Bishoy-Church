@@ -797,6 +797,15 @@ main { min-height: 60vh; padding-bottom: 30px; }
 .birthday-hero .member-list,
 .birthday-hero .empty-state { text-align: start; }
 
+/* Long two-word Arabic names need more horizontal room than the default
+   260px card grid gives them before they're forced to wrap. Widening the
+   minimum card width here (birthday lists only) gives the name enough
+   space to stay on one line whenever reasonably possible. */
+.birthday-hero .member-list,
+.birthday-month-panel .member-list {
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
 .birthday-month-panel { font-family: var(--font-body); }
 .birthday-filter-row {
   display: flex;

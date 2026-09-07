@@ -668,10 +668,10 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
     const HEAD_ROW_H = 22;
     const MIN_ROW_H = 20;
     const COLS = [
-      { key: 'name', label: 'اسم المخدوم', w: 0.47 },
-      { key: 'monthNum', label: 'الشهر', w: 0.13 },
-      { key: 'className', label: 'الفصل', w: 0.22 },
-      { key: 'age', label: 'السن', w: 0.18 },
+      { key: 'name', label: 'اسم المخدوم', w: 0.58 },
+      { key: 'monthNum', label: 'الشهر', w: 0.10 },
+      { key: 'className', label: 'الفصل', w: 0.17 },
+      { key: 'age', label: 'السن', w: 0.15 },
     ];
     const nameColW = BLOCK_W * COLS[0].w - 12;
     const classColW = BLOCK_W * COLS[2].w - 12;
@@ -1387,19 +1387,6 @@ async function renderAdminPanel() {
             <option value="replace">استبدال كل البيانات الحالية</option>
           </select>
         </div>
-
-        <hr style="margin:18px 0;border:none;border-top:1px solid var(--color-border, #e5e0d8);" />
-
-        <h4 style="margin:0 0 6px;">طلب نشر ملف لكل المستخدمين</h4>
-        <p>هذا مختلف عن الاستيراد أعلاه: الملف هنا لا يُحفظ على جهازك، بل يُجهَّز كطلب نشر يوافَق عليه من GitHub ليصبح متاحًا لكل زوار الموقع.</p>
-        <div class="admin-actions">
-          <label class="btn btn-outline" for="publishFile" style="cursor:pointer;">${ICONS.upload}<span>اختيار ملف للنشر</span></label>
-          <input type="file" id="publishFile" accept="application/json" style="display:none;" />
-        </div>
-        <p id="publishStatus" class="section-sub" style="margin-top:8px;"></p>
-        <div class="admin-actions">
-          <button id="publishRequestBtn" class="btn btn-gold" style="display:none;">طلب نشر</button>
-        </div>
       </div>
 
       <div class="admin-panel" style="border-color:var(--color-danger);">
@@ -1438,66 +1425,6 @@ async function renderAdminPanel() {
       showToast('الملف غير صالح: ' + err.message, 'danger');
     }
     e.target.value = '';
-  });
-
-  /* ---- Publish Request (شارك الملف مع كل المستخدمين عبر GitHub) ----
-     No GitHub token/secret ever touches this code. The button only
-     (1) validates the file locally, then (2) hands the admin a ready-to
-     paste base64 payload and opens GitHub's own "Run workflow" page for
-     the publish-data.yml workflow, where the admin — already signed in to
-     GitHub with their own permissions — triggers the real, server-side
-     validation + commit. See .github/workflows/publish-data.yml. */
-  const PUBLISH_REPO = 'fadiRamzy/Anba-Bishoy-Church';
-  const PUBLISH_WORKFLOW_URL = `https://github.com/${PUBLISH_REPO}/actions/workflows/publish-data.yml`;
-  let pendingPublish = null; // { filename, base64 }
-
-  const publishStatusEl = document.getElementById('publishStatus');
-  const publishBtn = document.getElementById('publishRequestBtn');
-
-  function setPublishStatus(text, isError) {
-    publishStatusEl.textContent = text;
-    publishStatusEl.style.color = isError ? 'var(--color-danger, #A6362C)' : '';
-  }
-
-  document.getElementById('publishFile').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    pendingPublish = null;
-    publishBtn.style.display = 'none';
-    if (!file) { setPublishStatus(''); return; }
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      if (!Array.isArray(parsed)) throw new Error('يجب أن يكون الملف عبارة عن قائمة (array) من السجلات');
-      if (parsed.length === 0) throw new Error('الملف لا يحتوي على أي سجلات');
-      for (let i = 0; i < parsed.length; i++) {
-        const rec = parsed[i];
-        if (!rec || typeof rec !== 'object' || Array.isArray(rec) || typeof rec.name !== 'string' || !rec.name.trim()) {
-          throw new Error(`السجل رقم ${i + 1} لا يحتوي على حقل "name" صالح`);
-        }
-      }
-      pendingPublish = { filename: file.name, base64: btoa(unescape(encodeURIComponent(text))) };
-      setPublishStatus(`${file.name} — ${parsed.length} سجل — جاهز للنشر`);
-      publishBtn.style.display = '';
-    } catch (err) {
-      setPublishStatus('الملف غير صالح: ' + err.message, true);
-    }
-  });
-
-  publishBtn.addEventListener('click', async () => {
-    if (!pendingPublish) return;
-    if (!(await Admin.require())) return;
-    setPublishStatus('جاري تجهيز طلب النشر...');
-    try {
-      try { await navigator.clipboard.writeText(pendingPublish.base64); } catch (_) { /* clipboard may be unavailable; not fatal */ }
-      window.open(PUBLISH_WORKFLOW_URL, '_blank', 'noopener');
-      setPublishStatus(
-        `تم تجهيز طلب النشر لملف "${pendingPublish.filename}" (تم نسخ محتوى الملف المُرمّز). ` +
-        `أكمل النشر من صفحة GitHub Actions التي فُتحت في تبويب جديد: اضغط "Run workflow"، ` +
-        `الصق اسم الملف والمحتوى المنسوخ، ثم شغّل الطلب. النتيجة النهائية (تم النشر / تم الرفض) تظهر هناك.`
-      );
-    } catch (err) {
-      setPublishStatus('تعذر تجهيز طلب النشر: ' + err.message, true);
-    }
   });
 
   document.getElementById('wipeBtn').addEventListener('click', async () => {
