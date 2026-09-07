@@ -666,17 +666,17 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
     const HEADER_H = 96;
     const BLOCK_W = (PAGE_W - MARGIN * 2 - GUTTER) / 2;
     const BLOCK_H = PAGE_H - HEADER_H - MARGIN * 2;
-    const HEAD_ROW_H = 22;
+    const HEAD_ROW_H = 24;
     const MIN_ROW_H = 20;
     const COLS = [
-      { key: 'name', label: 'اسم المخدوم', w: 0.58 },
+      { key: 'name', label: 'اسم المخدوم', w: 0.55 },
       { key: 'monthNum', label: 'الشهر', w: 0.13 },
-      { key: 'className', label: 'الفصل', w: 0.14 },
+      { key: 'className', label: 'الفصل', w: 0.17 },
       { key: 'age', label: 'السن', w: 0.15 },
     ];
-    const nameColW = BLOCK_W * COLS[0].w - 12;
-    const classColW = BLOCK_W * COLS[2].w - 12;
-    const ageColW = BLOCK_W * COLS[3].w - 12;
+    const nameColW = BLOCK_W * COLS[0].w - 2;
+    const classColW = BLOCK_W * COLS[2].w - 2;
+    const ageColW = BLOCK_W * COLS[3].w - 2;
 
     /* Measure wrapped height per row across every column that could wrap
        (name, class, age) so no row is ever split across a block/page
@@ -714,13 +714,13 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
     if (current.length) blocks.push(current);
 
     function tableHTML(blockRows) {
-      const th = COLS.map((c) => `<th style="width:${c.w * 100}%;border:1px solid #9AA7B2;background:#DCE6F1;color:#1F2A37;font-family:'Cairo',sans-serif;font-weight:700;font-size:10.5px;padding:4px 5px;">${escapeHTML(c.label)}</th>`).join('');
+      const th = COLS.map((c) => `<th style="width:${c.w * 100}%;border:1px solid #9AA7B2;background:#DCE6F1;color:#1F2A37;font-family:'Cairo',sans-serif;font-weight:700;font-size:10.5px;padding:5px 6px;text-align:center;vertical-align:middle;">${escapeHTML(c.label)}</th>`).join('');
       const trs = blockRows.map((r) => `
         <tr>
-          <td style="border:1px solid #C7CDD3;padding:4px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;word-break:break-word;vertical-align:middle;">${r.serial} - ${escapeHTML(r.name)}</td>
-          <td style="border:1px solid #C7CDD3;padding:4px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${r.monthNum}</td>
-          <td style="border:1px solid #C7CDD3;padding:4px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${escapeHTML(r.className)}</td>
-          <td style="border:1px solid #C7CDD3;padding:4px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${r.age !== null ? r.age + ' سنة' : '—'}</td>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;word-break:break-word;text-align:right;vertical-align:middle;">${r.serial} - ${escapeHTML(r.name)}</td>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${r.monthNum}</td>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${escapeHTML(r.className)}</td>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${r.age !== null ? r.age + ' سنة' : '—'}</td>
         </tr>`).join('');
       return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
     }
