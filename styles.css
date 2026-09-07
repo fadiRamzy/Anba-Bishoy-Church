@@ -829,3 +829,4 @@ main { min-height: 60vh; padding-bottom: 30px; }
 .birthday-card { align-items: flex-start; }
 .birthday-card .member-avatar { margin-top: 2px; }
 .birthday-card .member-meta { white-space: normal; }
+.birthday-card .member-meta-line { display: block; }

@@ -501,13 +501,14 @@ async function renderBirthdays() {
   function birthdayCardHTML(m) {
     const dob = formatBirthDate(m) || '—';
     const age = computeAge(m);
-    const meta = age !== null ? `${dob} — ${age} سنة` : dob;
+    const metaLines = [`عيد الميلاد: ${dob}`];
+    if (age !== null) metaLines.push(`السن: ${age} سنة`);
     return `
       <a href="#/member/${m.id}" class="member-card birthday-card">
         <span class="member-avatar">${escapeHTML(initials(m.name))}</span>
         <span class="member-info">
           <span class="member-name">${escapeHTML(m.name)}</span>
-          <span class="member-meta">${escapeHTML(meta)}</span>
+          <span class="member-meta">${metaLines.map((l) => `<span class="member-meta-line">${escapeHTML(l)}</span>`).join('')}</span>
         </span>
       </a>`;
   }
@@ -669,8 +670,8 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
     const MIN_ROW_H = 20;
     const COLS = [
       { key: 'name', label: 'اسم المخدوم', w: 0.58 },
-      { key: 'monthNum', label: 'الشهر', w: 0.10 },
-      { key: 'className', label: 'الفصل', w: 0.17 },
+      { key: 'monthNum', label: 'الشهر', w: 0.13 },
+      { key: 'className', label: 'الفصل', w: 0.14 },
       { key: 'age', label: 'السن', w: 0.15 },
     ];
     const nameColW = BLOCK_W * COLS[0].w - 12;
