@@ -545,6 +545,9 @@ async function renderBirthdays() {
           <select id="birthdayMonthSelect" class="btn btn-outline birthday-month-select">
             ${ARABIC_MONTHS.map((name, idx) => `<option value="${idx}"${idx === todayMonth ? ' selected' : ''}>${name}</option>`).join('')}
           </select>
+          <button type="button" id="birthdayPdfBtn" class="btn btn-outline birthday-month-select">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-inline-end:4px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>تنزيل PDF
+          </button>
         </div>
         <h2 class="birthday-hero-title" style="text-align:start;">أعياد الميلاد في <span id="birthdayMonthLabel">${ARABIC_MONTHS[todayMonth]}</span></h2>
         <div id="birthdayMonthList">${monthListHTML(todayMonth)}</div>
@@ -560,6 +563,165 @@ async function renderBirthdays() {
     monthLabelEl.textContent = ARABIC_MONTHS[idx];
     monthListEl.innerHTML = monthListHTML(idx);
   });
+
+  const pdfBtn = document.getElementById('birthdayPdfBtn');
+  pdfBtn.addEventListener('click', () => {
+    downloadBirthdaysPDF(Number(monthSelect.value), withDates);
+  });
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Birthdays PDF export ("تنزيل PDF")                                    */
+/*  Renders an offscreen page mimicking the official template (two        */
+/*  side-by-side tables per page, same 4 columns) then rasterizes each    */
+/*  page with html2canvas and assembles a PDF with jsPDF. Everything is   */
+/*  generated locally on-device; nothing is uploaded anywhere.            */
+/* ---------------------------------------------------------------------- */
+let _pdfLibsPromise = null;
+function _loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve();
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('تعذر تحميل مكتبة إنشاء PDF'));
+    document.head.appendChild(s);
+  });
+}
+function _loadPdfLibs() {
+  if (!_pdfLibsPromise) {
+    _pdfLibsPromise = Promise.all([
+      _loadScriptOnce('https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js'),
+      _loadScriptOnce('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'),
+    ]).catch((err) => { _pdfLibsPromise = null; throw err; });
+  }
+  return _pdfLibsPromise;
+}
+
+async function downloadBirthdaysPDF(monthIdx, withDates) {
+  const btn = document.getElementById('birthdayPdfBtn');
+  const rows = withDates
+    .filter((x) => x.month === monthIdx)
+    .sort((a, b) => a.day - b.day)
+    .map((x) => ({
+      name: x.member.name || '',
+      monthNum: monthIdx + 1,
+      className: cleanLabel(x.member.class) || '—',
+      age: computeAge(x.member),
+    }));
+
+  if (!rows.length) {
+    showToast('لا توجد أعياد ميلاد في هذا الشهر لتصديرها', 'error');
+    return;
+  }
+
+  const originalLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = 'جاري التجهيز...';
+
+  const cleanupEls = [];
+  try {
+    await _loadPdfLibs();
+    const { jsPDF } = window.jspdf;
+
+    /* Page geometry in pt (1pt == 1px in the offscreen build; html2canvas
+       rasterizes it and jsPDF maps that raster onto a real A4 pt page). */
+    const PAGE_W = 595, PAGE_H = 842;
+    const MARGIN = 26;
+    const GUTTER = 14;
+    const HEADER_H = 96;
+    const BLOCK_W = (PAGE_W - MARGIN * 2 - GUTTER) / 2;
+    const BLOCK_H = PAGE_H - HEADER_H - MARGIN * 2;
+    const HEAD_ROW_H = 22;
+    const MIN_ROW_H = 20;
+    const COLS = [
+      { key: 'name', label: 'اسم المخدوم', w: 0.40 },
+      { key: 'monthNum', label: 'الشهر', w: 0.15 },
+      { key: 'className', label: 'الفصل', w: 0.25 },
+      { key: 'age', label: 'السن', w: 0.20 },
+    ];
+    const nameColW = BLOCK_W * COLS[0].w - 12;
+
+    /* Measure wrapped-name height per row (only the name column wraps) so
+       no row is ever split across a block/page boundary. */
+    const probe = document.createElement('div');
+    probe.style.cssText = `position:fixed;visibility:hidden;left:-9999px;top:0;width:${nameColW}px;font-family:'Cairo',system-ui,sans-serif;font-size:10.5px;line-height:1.4;padding:5px 6px;box-sizing:border-box;word-break:break-word;`;
+    document.body.appendChild(probe);
+    cleanupEls.push(probe);
+    const measured = rows.map((r) => {
+      probe.textContent = r.name;
+      return { ...r, rowH: Math.max(MIN_ROW_H, probe.offsetHeight) };
+    });
+
+    /* Bin-pack rows into blocks that each fit within BLOCK_H. */
+    const blocks = [];
+    let current = [], currentH = HEAD_ROW_H;
+    for (const r of measured) {
+      if (currentH + r.rowH > BLOCK_H && current.length) {
+        blocks.push(current);
+        current = [];
+        currentH = HEAD_ROW_H;
+      }
+      current.push(r);
+      currentH += r.rowH;
+    }
+    if (current.length) blocks.push(current);
+
+    function tableHTML(blockRows) {
+      const th = COLS.map((c) => `<th style="width:${c.w * 100}%;border:1px solid #9AA7B2;background:#DCE6F1;color:#1F2A37;font-family:'Cairo',sans-serif;font-weight:700;font-size:10.5px;padding:4px 5px;">${escapeHTML(c.label)}</th>`).join('');
+      const trs = blockRows.map((r) => `
+        <tr>
+          <td style="border:1px solid #C7CDD3;padding:4px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;word-break:break-word;vertical-align:middle;">${escapeHTML(r.name)}</td>
+          <td style="border:1px solid #C7CDD3;padding:4px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${r.monthNum}</td>
+          <td style="border:1px solid #C7CDD3;padding:4px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${escapeHTML(r.className)}</td>
+          <td style="border:1px solid #C7CDD3;padding:4px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${r.age !== null ? r.age + ' سنة' : '—'}</td>
+        </tr>`).join('');
+      return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
+    }
+
+    function pageHTML(pageBlocks) {
+      const blocksHTML = pageBlocks.map((b) => `<div style="width:${BLOCK_W}px;">${tableHTML(b)}</div>`).join(`<div style="width:${GUTTER}px;"></div>`);
+      return `
+        <div style="width:${PAGE_W}px;height:${PAGE_H}px;background:#FFFDF8;box-sizing:border-box;padding:${MARGIN}px;direction:rtl;">
+          <div style="text-align:center;margin-bottom:10px;">
+            <div style="font-family:'Aref Ruqaa',serif;font-size:22px;color:#7C1F2C;font-weight:700;">أعياد الميلاد</div>
+            <div style="font-family:'Cairo',sans-serif;font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
+            <div style="font-family:'Cairo',sans-serif;font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
+          </div>
+          <div style="display:flex;flex-direction:row;">${blocksHTML}</div>
+        </div>`;
+    }
+
+    const pages = [];
+    for (let i = 0; i < blocks.length; i += 2) {
+      pages.push(blocks.slice(i, i + 2));
+    }
+
+    const stage = document.createElement('div');
+    stage.style.cssText = 'position:fixed;left:-99999px;top:0;';
+    document.body.appendChild(stage);
+    cleanupEls.push(stage);
+
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+    for (let i = 0; i < pages.length; i++) {
+      stage.innerHTML = pageHTML(pages[i]);
+      const pageEl = stage.firstElementChild;
+      // eslint-disable-next-line no-await-in-loop
+      const canvas = await window.html2canvas(pageEl, { scale: 2, backgroundColor: '#FFFDF8', useCORS: true });
+      const imgData = canvas.toDataURL('image/png');
+      if (i > 0) pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, 0, PAGE_W, PAGE_H);
+    }
+
+    pdf.save(`اعياد_الميلاد_${ARABIC_MONTHS[monthIdx]}.pdf`);
+  } catch (err) {
+    console.error(err);
+    showToast('حدث خطأ أثناء إنشاء ملف PDF', 'error');
+  } finally {
+    cleanupEls.forEach((el) => el.remove());
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
+  }
 }
 
 /* ---------------------------------------------------------------------- */
