@@ -35,6 +35,32 @@ const ICONS = {
 };
 
 /* ---------------------------------------------------------------------- */
+/*  Header branding: verse shown differs by top-level section.            */
+/*  "home" = دليل الخدمات (the original site, unchanged).                  */
+/*  "landing" / "visitation" = the new platform-level pages.              */
+/* ---------------------------------------------------------------------- */
+const BRAND_VERSES = {
+  home: {
+    text: 'ثُمَّ قَالَ بُولُسُ لِبَرْنَابَا: لِنَرْجِعْ وَنَفْتَقِدْ إِخْوَتَنَا فِي كُلِّ مَدِينَةٍ نَادَيْنَا فِيهَا بِكَلِمَةِ الرَّبِّ كَيْفَ هُمْ.',
+    ref: 'أَعْمَالُ الرُّسُلِ ١٥ : ٣٦',
+  },
+  landing: {
+    text: '«مَنْ مِنْكُمْ إِنْ كَانَ لَهُ مِئَةُ خَرُوفٍ، وَأَضَاعَ وَاحِدًا مِنْهَا، أَلَا يَتْرُكُ التِّسْعَةَ وَالتِّسْعِينَ فِي الْبَرِّيَّةِ، وَيَذْهَبُ لِأَجْلِ الضَّالِّ حَتَّى يَجِدَهُ؟»',
+    ref: 'لوقا 15: 4',
+  },
+};
+
+function applyHeaderChrome(section) {
+  const verse = BRAND_VERSES[section] || BRAND_VERSES.home;
+  const verseEl = document.getElementById('brandVerse');
+  const refEl = document.getElementById('brandVerseRef');
+  if (verseEl) verseEl.textContent = verse.text;
+  if (refEl) refEl.textContent = verse.ref;
+  const footer = document.getElementById('siteFooter');
+  if (footer) footer.style.display = (section === 'home') ? '' : 'none';
+}
+
+/* ---------------------------------------------------------------------- */
 /*  Field metadata                                                        */
 /* ---------------------------------------------------------------------- */
 const FIELD_LABELS = {
@@ -272,7 +298,7 @@ function renderAdminButton() {
 function renderChrome(showBack, backHash) {
   const nav = document.getElementById('topNav');
   nav.innerHTML = `
-    <span>${showBack ? `<a href="#${backHash || '/'}" class="back-link">${ICONS.back}<span>رجوع للرئيسية</span></a>` : ''}</span>
+    <span>${showBack ? `<a href="#${backHash || '/home'}" class="back-link">${ICONS.back}<span>رجوع للرئيسية</span></a>` : ''}</span>
     <button id="adminToggle" class="admin-toggle" type="button"></button>
   `;
   document.getElementById('adminToggle').addEventListener('click', async () => {
@@ -300,7 +326,15 @@ async function router() {
   }
   lastRouterPath = currentPath;
 
-  if (segments.length === 0) return renderHome(params);
+  // Platform-level main landing page (the two big service buttons).
+  if (segments.length === 0) { applyHeaderChrome('landing'); return renderLanding(); }
+  // "خدمات الافتقاد" — placeholder section for now.
+  if (segments[0] === 'visitation') { applyHeaderChrome('visitation'); return renderVisitation(); }
+
+  // "دليل الخدمات" — the original, existing website, unchanged, now living
+  // under the /home (and its existing sub-routes) instead of the bare root.
+  applyHeaderChrome('home');
+  if (segments[0] === 'home') return renderHome(params);
   if (segments[0] === 'search') return renderSearch(params);
   if (segments[0] === 'browse' && segments[1]) return renderBrowse(segments[1], segments[2], params);
   if (segments[0] === 'member' && segments[1]) return renderProfile(segments[1]);
@@ -308,7 +342,8 @@ async function router() {
   if (segments[0] === 'edit' && segments[1]) return renderForm(segments[1]);
   if (segments[0] === 'admin') return renderAdminPanel();
   if (segments[0] === 'birthdays') return renderBirthdays();
-  return renderHome(params);
+  applyHeaderChrome('landing');
+  return renderLanding();
 }
 
 window.addEventListener('hashchange', router);
@@ -340,10 +375,56 @@ if (isAndroidWebView()) {
 }
 
 /* ---------------------------------------------------------------------- */
+/*  Main platform landing page — entry point of the whole site now.       */
+/*  Shows the available services as large cards. For this step there are  */
+/*  only two: the existing "دليل الخدمات" site, and a placeholder for      */
+/*  "خدمات الافتقاد".                                                      */
+/* ---------------------------------------------------------------------- */
+async function renderLanding() {
+  document.getElementById('topNav').innerHTML = '';
+  APP_ROOT.innerHTML = `
+    <div class="container">
+      <div class="cross-divider">${ICONS.cross}</div>
+      <div class="landing-grid">
+        <a href="#/home" class="landing-card">
+          <span class="icon-wrap">${ICONS.notes}</span>
+          <span class="landing-card-title">دليل الخدمات</span>
+        </a>
+        <a href="#/visitation" class="landing-card">
+          <span class="icon-wrap">${ICONS.church}</span>
+          <span class="landing-card-title">خدمات الافتقاد</span>
+        </a>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Visitation services — placeholder only for this step. The full        */
+/*  functionality (family registration, search, reports...) will be added  */
+/*  in a future step.                                                      */
+/* ---------------------------------------------------------------------- */
+async function renderVisitation() {
+  document.getElementById('topNav').innerHTML = `
+    <span><a href="#/" class="back-link">${ICONS.back}<span>رجوع للصفحة الرئيسية</span></a></span>
+    <span></span>
+  `;
+  APP_ROOT.innerHTML = `
+    <div class="container">
+      <p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>خدمات الافتقاد</span></p>
+      <div class="placeholder-panel">
+        <h2 class="section-title">خدمات الافتقاد</h2>
+        <p class="section-sub">هذا القسم قيد الإعداد حاليًا، وسيتم تفعيله قريبًا بمشيئة الرب.</p>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------------------------------------------------------------------- */
 /*  Home view                                                              */
 /* ---------------------------------------------------------------------- */
 async function renderHome() {
-  renderChrome(false);
+  renderChrome(true, '/');
   const total = await MembersDB.count();
   APP_ROOT.innerHTML = `
     <div class="container">
@@ -415,7 +496,7 @@ async function renderSearch(params) {
           </div>
         </form>
       </div>
-      <p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>نتائج البحث عن "${escapeHTML(q)}"</span></p>
+      <p class="breadcrumbs"><a href="#/home">الرئيسية</a><span class="sep">/</span><span>نتائج البحث عن "${escapeHTML(q)}"</span></p>
       <div id="searchResultsContainer">${renderMemberListOrEmpty(results, `لا يوجد أسماء مطابقة لـ "${escapeHTML(q)}"`)}</div>
     </div>
   `;
@@ -531,7 +612,7 @@ async function renderBirthdays() {
 
   APP_ROOT.innerHTML = `
     <div class="container">
-      <p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>أعياد الميلاد</span></p>
+      <p class="breadcrumbs"><a href="#/home">الرئيسية</a><span class="sep">/</span><span>أعياد الميلاد</span></p>
 
       <div class="birthday-hero">
         <h2 class="birthday-hero-title">أعياد ميلاد اليوم</h2>
@@ -782,7 +863,7 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
 async function renderBrowse(key, valueRaw, params) {
   renderChrome(true);
   const section = NAV_SECTIONS.find((s) => s.key === key);
-  if (!section) return navigate('/');
+  if (!section) return navigate('/home');
   const value = valueRaw ? decodeURIComponent(valueRaw) : null;
 
   if (!value) {
@@ -790,7 +871,7 @@ async function renderBrowse(key, valueRaw, params) {
     const all = await MembersDB.getAll();
     APP_ROOT.innerHTML = `
       <div class="container">
-        <p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>${section.label}</span></p>
+        <p class="breadcrumbs"><a href="#/home">الرئيسية</a><span class="sep">/</span><span>${section.label}</span></p>
         <h2 class="section-title">اختر ${section.label}</h2>
         <p class="section-sub">القيم معروضة تلقائيًا من البيانات الحالية</p>
         ${values.length ? `<div class="member-list">${values.map((v) => {
@@ -834,7 +915,7 @@ async function renderBrowse(key, valueRaw, params) {
   APP_ROOT.innerHTML = `
     <div class="container">
       <p class="breadcrumbs">
-        <a href="#/">الرئيسية</a><span class="sep">/</span>
+        <a href="#/home">الرئيسية</a><span class="sep">/</span>
         <a href="#/browse/${key}">${section.label}</a><span class="sep">/</span>
         <span>${escapeHTML(valueLabel)}</span>
       </p>
@@ -870,7 +951,7 @@ async function renderProfile(idStr) {
 
   APP_ROOT.innerHTML = `
     <div class="container">
-      <p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>الملف الشخصي</span></p>
+      <p class="breadcrumbs"><a href="#/home">الرئيسية</a><span class="sep">/</span><span>الملف الشخصي</span></p>
 
       <div class="profile-header">
         <span class="profile-avatar">${escapeHTML(initials(member.name))}</span>
@@ -946,7 +1027,7 @@ async function renderProfile(idStr) {
     if (!confirm(`هل تريد حذف "${member.name}" نهائيًا من قاعدة البيانات؟`)) return;
     await MembersDB.remove(member.id);
     showToast('تم الحذف', 'success');
-    navigate('/');
+    navigate('/home');
   });
 
   const addLocationBtn = document.getElementById('addLocationBtn');
@@ -1082,17 +1163,17 @@ async function renderForm(idStr) {
 
   if (isEdit && !Admin.isUnlocked()) {
     const ok = await Admin.require();
-    if (!ok) return navigate(idStr ? `/member/${idStr}` : '/');
+    if (!ok) return navigate(idStr ? `/member/${idStr}` : '/home');
   }
 
   const existing = isEdit ? await MembersDB.getById(idStr) : null;
-  if (isEdit && !existing) return navigate('/');
+  if (isEdit && !existing) return navigate('/home');
 
   const v = normalizeLegacyStageSectorClass(existing || {});
 
   APP_ROOT.innerHTML = `
     <div class="container">
-      <p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>${isEdit ? 'تعديل بيانات' : 'إضافة اسم'}</span></p>
+      <p class="breadcrumbs"><a href="#/home">الرئيسية</a><span class="sep">/</span><span>${isEdit ? 'تعديل بيانات' : 'إضافة اسم'}</span></p>
       <h2 class="section-title">${isEdit ? 'تعديل بيانات: ' + escapeHTML(v.name || '') : 'إضافة اسم جديد'}</h2>
       <p class="section-sub">الحقول المطلوبة معلّم عليها بعلامة *</p>
 
@@ -1366,7 +1447,7 @@ async function renderAdminPanel() {
 
   APP_ROOT.innerHTML = `
     <div class="container">
-      <p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>إدارة البيانات</span></p>
+      <p class="breadcrumbs"><a href="#/home">الرئيسية</a><span class="sep">/</span><span>إدارة البيانات</span></p>
       <h2 class="section-title">إدارة البيانات</h2>
       <p class="section-sub">البيانات محفوظة داخل هذا المتصفح فقط على هذا الجهاز (${total} اسم). استخدم التصدير والاستيراد لنقل البيانات بين الأجهزة.</p>
 
@@ -1434,7 +1515,7 @@ async function renderAdminPanel() {
     if (!confirm('متأكد إنك عايز تمسح كل البيانات المخزنة على هذا الجهاز؟ يفضّل تصدير نسخة احتياطية الأول.')) return;
     await MembersDB.clearAll();
     showToast('تم حذف كل البيانات', 'success');
-    navigate('/');
+    navigate('/home');
   });
 }
 
