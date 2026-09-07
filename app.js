@@ -497,23 +497,13 @@ async function renderBirthdays() {
     (todayStandsInForFeb29 && x.month === 1 && x.day === 29);
 
   const todaysBirthdays = withDates.filter(isTodayBirthday);
-  const upcomingThisMonth = withDates
-    .filter((x) => x.month === todayMonth && x.day > todayDay && !isTodayBirthday(x))
-    .sort((a, b) => a.day - b.day);
-
-  const upcomingGroups = [];
-  for (const item of upcomingThisMonth) {
-    const lastGroup = upcomingGroups[upcomingGroups.length - 1];
-    if (lastGroup && lastGroup.day === item.day) lastGroup.items.push(item);
-    else upcomingGroups.push({ day: item.day, items: [item] });
-  }
 
   function birthdayCardHTML(m) {
     const dob = formatBirthDate(m) || '—';
     const age = computeAge(m);
     const meta = age !== null ? `${dob} — ${age} سنة` : dob;
     return `
-      <a href="#/member/${m.id}" class="member-card">
+      <a href="#/member/${m.id}" class="member-card birthday-card">
         <span class="member-avatar">${escapeHTML(initials(m.name))}</span>
         <span class="member-info">
           <span class="member-name">${escapeHTML(m.name)}</span>
@@ -522,35 +512,54 @@ async function renderBirthdays() {
       </a>`;
   }
 
-  const monthLabel = ARABIC_MONTHS[todayMonth];
-  const todayLabel = `${today.getDate()} ${monthLabel}`;
-
   const todaySectionHTML = todaysBirthdays.length
     ? `<div class="member-list">${todaysBirthdays.map((x) => birthdayCardHTML(x.member)).join('')}</div>`
     : `<div class="empty-state"><p>لا توجد أعياد ميلاد اليوم</p></div>`;
 
-  const upcomingSectionHTML = upcomingGroups.length
-    ? upcomingGroups.map((g) => `
-        <div class="birthday-group">
-          <h4 class="birthday-group-heading">${g.day} ${monthLabel}</h4>
-          <div class="member-list">${g.items.map((x) => birthdayCardHTML(x.member)).join('')}</div>
-        </div>`).join('')
-    : `<div class="empty-state"><p>لا توجد أعياد ميلاد قادمة باقي هذا الشهر</p></div>`;
+  /* Renders the ONE continuous chronological list (no day-by-day grouping)
+     for a given month index (0-11). */
+  function monthListHTML(monthIdx) {
+    const monthMembers = withDates
+      .filter((x) => x.month === monthIdx)
+      .sort((a, b) => a.day - b.day);
+    if (!monthMembers.length) {
+      return `<div class="empty-state"><p>لا توجد أعياد ميلاد في هذا الشهر</p></div>`;
+    }
+    return `<div class="member-list">${monthMembers.map((x) => birthdayCardHTML(x.member)).join('')}</div>`;
+  }
 
   APP_ROOT.innerHTML = `
     <div class="container">
       <p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>أعياد الميلاد</span></p>
 
       <div class="birthday-hero">
-        <span class="birthday-hero-date">${ICONS.cake}<span>${todayLabel}</span></span>
-        <h2 class="section-title" style="margin-top:14px;">أعياد الميلاد اليوم</h2>
+        <h2 class="birthday-hero-title">أعياد ميلاد اليوم</h2>
+        <p class="birthday-verse">لِمِثْلِ هَؤُلَاءِ مَلَكُوتُ السَّمَاوَاتِ</p>
+        <p class="birthday-verse-ref">متى 19:14</p>
         ${todaySectionHTML}
       </div>
 
-      <h2 class="section-title" style="margin-top:32px;">أعياد الميلاد القادمة في ${monthLabel}</h2>
-      ${upcomingSectionHTML}
+      <div class="birthday-month-panel">
+        <div class="birthday-filter-row">
+          <label for="birthdayMonthSelect" class="birthday-filter-label">فلتر الشهر</label>
+          <select id="birthdayMonthSelect" class="btn btn-outline birthday-month-select">
+            ${ARABIC_MONTHS.map((name, idx) => `<option value="${idx}"${idx === todayMonth ? ' selected' : ''}>${name}</option>`).join('')}
+          </select>
+        </div>
+        <h2 class="birthday-hero-title" style="text-align:start;">أعياد الميلاد في <span id="birthdayMonthLabel">${ARABIC_MONTHS[todayMonth]}</span></h2>
+        <div id="birthdayMonthList">${monthListHTML(todayMonth)}</div>
+      </div>
     </div>
   `;
+
+  const monthSelect = document.getElementById('birthdayMonthSelect');
+  const monthLabelEl = document.getElementById('birthdayMonthLabel');
+  const monthListEl = document.getElementById('birthdayMonthList');
+  monthSelect.addEventListener('change', () => {
+    const idx = Number(monthSelect.value);
+    monthLabelEl.textContent = ARABIC_MONTHS[idx];
+    monthListEl.innerHTML = monthListHTML(idx);
+  });
 }
 
 /* ---------------------------------------------------------------------- */

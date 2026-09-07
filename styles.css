@@ -315,7 +315,7 @@ button {
    ========================================================================== */
 .nav-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 14px;
   margin: 10px 0 34px;
 }
@@ -761,33 +761,62 @@ main { min-height: 60vh; padding-bottom: 30px; }
 
 /* ==========================================================================
    Birthdays feature (أعياد الميلاد) — additive only. Reuses existing
-   .member-list/.member-card/.section-title/.empty-state/.breadcrumbs
-   styles above as-is; no existing rule in this file was modified.
+   .member-list/.member-card/.empty-state/.breadcrumbs styles above as-is;
+   no existing rule in this file was modified.
    ========================================================================== */
 .birthday-hero {
   background: var(--color-maroon-tint);
   border: 1px solid var(--color-gold-light);
   border-radius: var(--radius-md);
-  padding: 20px;
+  padding: 24px 20px;
   margin-bottom: 28px;
   box-shadow: var(--shadow-soft);
+  text-align: center;
+  font-family: var(--font-body);
 }
-.birthday-hero-date {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-gold-light);
-  border-radius: 999px;
-  padding: 6px 16px;
-  font-weight: 700;
+.birthday-hero-title {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
   color: var(--color-maroon-dark);
-}
-.birthday-hero-date svg { width: 18px; height: 18px; color: var(--color-gold); }
-.birthday-group { margin-bottom: 22px; }
-.birthday-group-heading {
-  font-weight: 700;
-  color: var(--color-maroon);
-  font-size: .95rem;
   margin: 0 0 10px;
 }
+.birthday-verse {
+  font-family: var(--font-body);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-maroon);
+  margin: 0 0 4px;
+  line-height: 1.7;
+}
+.birthday-verse-ref {
+  font-family: var(--font-body);
+  font-size: .85rem;
+  color: var(--color-ink-soft);
+  margin: 0 0 18px;
+}
+.birthday-hero .member-list,
+.birthday-hero .empty-state { text-align: start; }
+
+.birthday-month-panel { font-family: var(--font-body); }
+.birthday-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.birthday-filter-label { font-weight: 700; color: var(--color-ink-soft); font-size: .9rem; }
+.birthday-month-select { cursor: pointer; }
+
+/* Long names (e.g. "فيلوباتير أنطونيوس") must wrap fully instead of being
+   clipped with an ellipsis, unlike the default .member-name used elsewhere
+   in the app (search results, browse lists), which is left unchanged. */
+.birthday-card .member-name {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.35;
+}
+.birthday-card { align-items: flex-start; }
+.birthday-card .member-avatar { margin-top: 2px; }
+.birthday-card .member-meta { white-space: normal; }
