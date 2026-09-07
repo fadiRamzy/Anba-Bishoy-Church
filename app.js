@@ -48,6 +48,15 @@ const BRAND_VERSES = {
     text: '«إِنْ كَانَ لِإِنْسَانٍ مِئَةُ خَرُوفٍ، وَضَلَّ وَاحِدٌ مِنْهَا، أَفَلَا يَتْرُكُ التِّسْعَةَ وَالتِّسْعِينَ عَلَى الْجِبَالِ، وَيَذْهَبُ يَطْلُبُ الضَّالَّ؟»',
     ref: 'مَتَّى ١٨: ١٢',
   },
+  visitation: {
+    text: '«إِلَهُ السَّمَاءِ هُوَ يُعْطِينَا النَّجَاحَ، وَنَحْنُ عَبِيدُهُ نَقُومُ وَنَبْنِي»',
+    ref: 'نَحَمْيَا ٢: ٢٠',
+  },
+};
+
+const BRAND_TAGLINES = {
+  home: 'دليل الخدام لمتابعة الافتقاد',
+  landing: 'دليل خدمات الكنيسة',
 };
 
 function applyHeaderChrome(section) {
@@ -56,6 +65,8 @@ function applyHeaderChrome(section) {
   const refEl = document.getElementById('brandVerseRef');
   if (verseEl) verseEl.textContent = verse.text;
   if (refEl) refEl.textContent = verse.ref;
+  const taglineEl = document.getElementById('brandTagline');
+  if (taglineEl) taglineEl.textContent = BRAND_TAGLINES[section] || BRAND_TAGLINES.home;
   const footer = document.getElementById('siteFooter');
   if (footer) footer.style.display = (section === 'home') ? '' : 'none';
   document.body.setAttribute('data-section', section);
@@ -390,13 +401,10 @@ async function renderLanding() {
         <a href="#/home" class="landing-card">
           <span class="icon-wrap">${ICONS.notes}</span>
           <span class="landing-card-title">دليل الخدمات</span>
-          <p class="landing-card-desc">دليل خدمات الكنيسة</p>
         </a>
         <a href="#/visitation" class="landing-card">
           <span class="icon-wrap">${ICONS.church}</span>
           <span class="landing-card-title">خدمات الافتقاد</span>
-          <p class="landing-card-verse">«إِلَهُ السَّمَاءِ هُوَ يُعْطِينَا النَّجَاحَ، وَنَحْنُ عَبِيدُهُ نَقُومُ وَنَبْنِي»</p>
-          <p class="landing-card-verse-ref">نَحَمْيَا ٢: ٢٠</p>
         </a>
       </div>
     </div>
