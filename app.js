@@ -577,22 +577,55 @@ async function renderBirthdays() {
 /*  page with html2canvas and assembles a PDF with jsPDF. Everything is   */
 /*  generated locally on-device; nothing is uploaded anywhere.            */
 /* ---------------------------------------------------------------------- */
+/* jsPDF/html2canvas are vendored locally under ./vendor so PDF export keeps
+   working with no internet connection (this app is otherwise fully
+   offline/local-only). A CDN copy is tried only as a fallback, in case the
+   vendor files are ever missing from a deployment. */
 let _pdfLibsPromise = null;
 function _loadScriptOnce(src) {
   return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) return resolve();
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+      if (existing.dataset.loaded === '1') return resolve();
+      existing.addEventListener('load', () => resolve());
+      existing.addEventListener('error', () => reject(new Error(`تعذر تحميل الملف: ${src}`)));
+      return;
+    }
     const s = document.createElement('script');
     s.src = src;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error('تعذر تحميل مكتبة إنشاء PDF'));
+    s.onload = () => { s.dataset.loaded = '1'; resolve(); };
+    s.onerror = () => reject(new Error(`تعذر تحميل الملف: ${src}`));
     document.head.appendChild(s);
   });
+}
+async function _loadLibWithFallback(localSrc, cdnSrc, globalCheck) {
+  try {
+    await _loadScriptOnce(localSrc);
+    if (globalCheck()) return;
+    throw new Error(`الملف ${localSrc} تم تحميله لكنه لا يحتوي على المكتبة المتوقعة`);
+  } catch (localErr) {
+    try {
+      await _loadScriptOnce(cdnSrc);
+      if (globalCheck()) return;
+      throw new Error(`الملف ${cdnSrc} تم تحميله لكنه لا يحتوي على المكتبة المتوقعة`);
+    } catch (cdnErr) {
+      throw new Error(`فشل تحميل مكتبة PDF محليًا (${localErr.message}) وعبر الإنترنت (${cdnErr.message})`);
+    }
+  }
 }
 function _loadPdfLibs() {
   if (!_pdfLibsPromise) {
     _pdfLibsPromise = Promise.all([
-      _loadScriptOnce('https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js'),
-      _loadScriptOnce('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'),
+      _loadLibWithFallback(
+        'vendor/jspdf.umd.min.js',
+        'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js',
+        () => !!(window.jspdf && window.jspdf.jsPDF)
+      ),
+      _loadLibWithFallback(
+        'vendor/html2canvas.min.js',
+        'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
+        () => typeof window.html2canvas === 'function'
+      ),
     ]).catch((err) => { _pdfLibsPromise = null; throw err; });
   }
   return _pdfLibsPromise;
@@ -715,7 +748,9 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
 
     pdf.save(`اعياد_الميلاد_${ARABIC_MONTHS[monthIdx]}.pdf`);
   } catch (err) {
-    console.error(err);
+    // Full error kept in the console for diagnosis; the toast stays a
+    // short, friendly Arabic message for end users.
+    console.error('PDF generation failed:', err);
     showToast('حدث خطأ أثناء إنشاء ملف PDF', 'error');
   } finally {
     cleanupEls.forEach((el) => el.remove());
