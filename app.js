@@ -45,8 +45,8 @@ const BRAND_VERSES = {
     ref: 'أَعْمَالُ الرُّسُلِ ١٥ : ٣٦',
   },
   landing: {
-    text: '«مَنْ مِنْكُمْ إِنْ كَانَ لَهُ مِئَةُ خَرُوفٍ، وَأَضَاعَ وَاحِدًا مِنْهَا، أَلَا يَتْرُكُ التِّسْعَةَ وَالتِّسْعِينَ فِي الْبَرِّيَّةِ، وَيَذْهَبُ لِأَجْلِ الضَّالِّ حَتَّى يَجِدَهُ؟»',
-    ref: 'لوقا 15: 4',
+    text: '«إِنْ كَانَ لِإِنْسَانٍ مِئَةُ خَرُوفٍ، وَضَلَّ وَاحِدٌ مِنْهَا، أَفَلَا يَتْرُكُ التِّسْعَةَ وَالتِّسْعِينَ عَلَى الْجِبَالِ، وَيَذْهَبُ يَطْلُبُ الضَّالَّ؟»',
+    ref: 'مَتَّى ١٨: ١٢',
   },
 };
 
@@ -58,6 +58,7 @@ function applyHeaderChrome(section) {
   if (refEl) refEl.textContent = verse.ref;
   const footer = document.getElementById('siteFooter');
   if (footer) footer.style.display = (section === 'home') ? '' : 'none';
+  document.body.setAttribute('data-section', section);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -389,10 +390,13 @@ async function renderLanding() {
         <a href="#/home" class="landing-card">
           <span class="icon-wrap">${ICONS.notes}</span>
           <span class="landing-card-title">دليل الخدمات</span>
+          <p class="landing-card-desc">دليل خدمات الكنيسة</p>
         </a>
         <a href="#/visitation" class="landing-card">
           <span class="icon-wrap">${ICONS.church}</span>
           <span class="landing-card-title">خدمات الافتقاد</span>
+          <p class="landing-card-verse">«إِلَهُ السَّمَاءِ هُوَ يُعْطِينَا النَّجَاحَ، وَنَحْنُ عَبِيدُهُ نَقُومُ وَنَبْنِي»</p>
+          <p class="landing-card-verse-ref">نَحَمْيَا ٢: ٢٠</p>
         </a>
       </div>
     </div>

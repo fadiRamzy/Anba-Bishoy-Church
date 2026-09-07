@@ -394,6 +394,32 @@ button {
   font-size: 1.3rem;
   color: var(--color-maroon-dark);
 }
+.landing-card-desc {
+  margin: -6px 0 0;
+  color: var(--color-ink-soft);
+  font-size: .85rem;
+  line-height: 1.5;
+}
+.landing-card-verse {
+  font-family: var(--font-display);
+  margin: -6px 0 0;
+  color: var(--color-ink);
+  font-size: .95rem;
+  line-height: 1.6;
+}
+.landing-card-verse-ref {
+  margin: 0;
+  font-size: .72rem;
+  color: var(--color-gold);
+  font-weight: 700;
+}
+
+/* Landing page only: the header verse is longer here, so it gets more room
+   to sit on one line where the screen allows it. Scoped to data-section so
+   the existing دليل الخدمات header (verse + reference) is untouched. */
+body[data-section="landing"] .brand-verse {
+  max-width: 900px;
+}
 
 .placeholder-panel {
   background: var(--color-surface);
