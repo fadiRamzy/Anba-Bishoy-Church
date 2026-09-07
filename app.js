@@ -714,15 +714,16 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
     if (current.length) blocks.push(current);
 
     function tableHTML(blockRows) {
-      const th = COLS.map((c) => `<th style="width:${c.w * 100}%;border:1px solid #9AA7B2;background:#DCE6F1;color:#1F2A37;font-family:'Cairo',sans-serif;font-weight:700;font-size:10.5px;padding:5px 6px;text-align:center;vertical-align:middle;">${escapeHTML(c.label)}</th>`).join('');
+      const colgroup = COLS.map((c) => `<col style="width:${c.w * 100}%;">`).join('');
+      const th = COLS.map((c) => `<th style="border:1px solid #9AA7B2;background:#DCE6F1;color:#1F2A37;font-family:'Cairo',sans-serif;font-weight:700;font-size:10.5px;line-height:1.35;padding:5px 6px;text-align:center;vertical-align:middle;">${escapeHTML(c.label)}</th>`).join('');
       const trs = blockRows.map((r) => `
         <tr>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;word-break:break-word;text-align:right;vertical-align:middle;">${r.serial} - ${escapeHTML(r.name)}</td>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${r.monthNum}</td>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${escapeHTML(r.className)}</td>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${r.age !== null ? r.age + ' سنة' : '—'}</td>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;word-break:break-word;text-align:right;vertical-align:middle;">${r.serial} - ${escapeHTML(r.name)}</td>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${r.monthNum}</td>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${escapeHTML(r.className)}</td>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${r.age !== null ? r.age + ' سنة' : '—'}</td>
         </tr>`).join('');
-      return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
+      return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><colgroup>${colgroup}</colgroup><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
     }
 
     function pageHTML(pageBlocks) {
