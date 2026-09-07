@@ -668,23 +668,34 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
     const HEAD_ROW_H = 22;
     const MIN_ROW_H = 20;
     const COLS = [
-      { key: 'name', label: 'اسم المخدوم', w: 0.40 },
-      { key: 'monthNum', label: 'الشهر', w: 0.15 },
-      { key: 'className', label: 'الفصل', w: 0.25 },
-      { key: 'age', label: 'السن', w: 0.20 },
+      { key: 'name', label: 'اسم المخدوم', w: 0.47 },
+      { key: 'monthNum', label: 'الشهر', w: 0.13 },
+      { key: 'className', label: 'الفصل', w: 0.22 },
+      { key: 'age', label: 'السن', w: 0.18 },
     ];
     const nameColW = BLOCK_W * COLS[0].w - 12;
+    const classColW = BLOCK_W * COLS[2].w - 12;
+    const ageColW = BLOCK_W * COLS[3].w - 12;
 
-    /* Measure wrapped-name height per row (only the name column wraps) so
-       no row is ever split across a block/page boundary. */
+    /* Measure wrapped height per row across every column that could wrap
+       (name, class, age) so no row is ever split across a block/page
+       boundary and no column can silently overflow into the next row. */
     const probe = document.createElement('div');
-    probe.style.cssText = `position:fixed;visibility:hidden;left:-9999px;top:0;width:${nameColW}px;font-family:'Cairo',system-ui,sans-serif;font-size:10.5px;line-height:1.4;padding:5px 6px;box-sizing:border-box;word-break:break-word;`;
+    probe.style.cssText = `position:fixed;visibility:hidden;left:-9999px;top:0;font-family:'Cairo',system-ui,sans-serif;font-size:10.5px;line-height:1.4;padding:5px 6px;box-sizing:border-box;word-break:break-word;`;
     document.body.appendChild(probe);
     cleanupEls.push(probe);
+    function measureH(text, width) {
+      probe.style.width = `${width}px`;
+      probe.textContent = text;
+      return probe.offsetHeight;
+    }
     const measured = rows.map((r, idx) => {
       const serial = idx + 1;
-      probe.textContent = `${serial} - ${r.name}`;
-      return { ...r, serial, rowH: Math.max(MIN_ROW_H, probe.offsetHeight) };
+      const nameH = measureH(`${serial} - ${r.name}`, nameColW);
+      const classH = measureH(r.className, classColW);
+      const ageText = r.age !== null ? `${r.age} سنة` : '—';
+      const ageH = measureH(ageText, ageColW);
+      return { ...r, serial, rowH: Math.max(MIN_ROW_H, nameH, classH, ageH) };
     });
 
     /* Bin-pack rows into blocks that each fit within BLOCK_H. */
