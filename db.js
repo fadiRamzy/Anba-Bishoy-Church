@@ -324,9 +324,58 @@ const VisitationDB = {
       return false;
     });
   },
-};
 
-/* ---------------------------- settings store --------------------------- */
+  async bulkPut(families) {
+    const store = await tx(STORE_VISITATION, 'readwrite');
+    return new Promise((resolve, reject) => {
+      let remaining = families.length;
+      if (remaining === 0) return resolve(0);
+      families.forEach((f) => {
+        const req = store.put(f);
+        req.onsuccess = () => {
+          remaining -= 1;
+          if (remaining === 0) resolve(families.length);
+        };
+        req.onerror = () => reject(req.error);
+      });
+    });
+  },
+
+  async clearAll() {
+    const store = await tx(STORE_VISITATION, 'readwrite');
+    return new Promise((resolve, reject) => {
+      const req = store.clear();
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  /* Exports the full Visitation store (every field, including the complete
+     visitationDates history — not just the latest date) as JSON. Entirely
+     separate from MembersDB.exportJSON()/the "دليل الخدمات" export. */
+  async exportJSON() {
+    const all = await this.getAll();
+    return JSON.stringify(all, null, 2);
+  },
+
+  /* mode: 'merge' (append, never overwriting existing records — incoming
+     records get fresh ids continuing on from the highest id already in the
+     store, same fix as MembersDB.importJSON) or 'replace' (clear then
+     insert). Only ever touches STORE_VISITATION. */
+  async importJSON(jsonText, mode = 'merge') {
+    const parsed = JSON.parse(jsonText);
+    if (!Array.isArray(parsed)) throw new Error('الملف لا يحتوي على مصفوفة بيانات صحيحة');
+    if (mode === 'replace') {
+      await this.clearAll();
+      await this.bulkPut(parsed);
+      return parsed.length;
+    }
+    let nextId = await this.nextId();
+    const remapped = parsed.map((f) => ({ ...f, id: nextId++ }));
+    await this.bulkPut(remapped);
+    return remapped.length;
+  },
+};
 
 const SettingsDB = {
   async get(key) {

@@ -398,6 +398,7 @@ async function router() {
     if (segments[1] === 'member' && segments[2]) return renderVisitationProfile(segments[2]);
     if (segments[1] === 'families') return renderVisitationFamilies(params);
     if (segments[1] === 'guide') return renderVisitationGuide();
+    if (segments[1] === 'data') return renderVisitationDataManagement();
     return renderVisitationHome(params);
   }
 
@@ -681,6 +682,7 @@ async function renderVisitationHome() {
         <a href="#/visitation/add" class="btn btn-primary">${ICONS.plus}<span>إضافة أسرة</span></a>
         <a href="#/visitation/families" class="btn btn-outline">${ICONS.users}<span>الأسر</span></a>
         <a href="#/visitation/guide" class="btn btn-outline">${ICONS.calendar}<span>دليل الافتقاد</span></a>
+        <a href="#/visitation/data" class="btn btn-outline">${ICONS.download}<span>إدارة بيانات الافتقاد</span></a>
       </div>
     </div>
   `;
@@ -887,6 +889,72 @@ async function renderVisitationGuide() {
       </div>
     </div>
   `;
+}
+
+/* #/visitation/data — "إدارة بيانات الافتقاد": export/import for the
+   Visitation store only. Completely separate from renderAdminPanel()'s
+   "إدارة البيانات" (which manages MembersDB/"دليل الخدمات") — different
+   store, different route, different backup file, never mixed together. */
+async function renderVisitationDataManagement() {
+  renderVisitationChrome('/visitation', 'رجوع لخدمات الافتقاد');
+  const total = await VisitationDB.count();
+
+  APP_ROOT.innerHTML = `
+    <div class="container">
+      <p class="breadcrumbs"><a href="#/visitation">خدمات الافتقاد</a><span class="sep">/</span><span>إدارة بيانات الافتقاد</span></p>
+      <h2 class="section-title">إدارة بيانات الافتقاد</h2>
+      <p class="section-sub">تخص بيانات "خدمات الافتقاد" فقط، منفصلة تمامًا عن بيانات "دليل الخدمات" (${total} أسرة مسجّلة على هذا الجهاز).</p>
+
+      <div class="admin-panel">
+        <h3>${ICONS.download.replace('width="19"', 'width="17"')} تصدير بيانات الافتقاد</h3>
+        <p>يحمّل ملف JSON يحتوي على كل أسر الافتقاد المسجلة على هذا الجهاز، بما في ذلك تاريخ الافتقاد الكامل لكل أسرة. شارك هذا الملف مع خادم آخر لنقل البيانات.</p>
+        <div class="admin-actions">
+          <button id="visitationExportBtn" class="btn btn-gold">${ICONS.download}<span>تنزيل بيانات الافتقاد</span></button>
+        </div>
+      </div>
+
+      <div class="admin-panel">
+        <h3>${ICONS.upload} استيراد بيانات الافتقاد</h3>
+        <p>ارفع ملف بيانات افتقاد تم تصديره سابقًا من هذا التطبيق (من خادم آخر مثلًا) لإضافة أسره إلى هذا الجهاز.</p>
+        <div class="admin-actions">
+          <label class="btn btn-outline" for="visitationImportFile" style="cursor:pointer;">${ICONS.upload}<span>اختيار ملف</span></label>
+          <input type="file" id="visitationImportFile" accept="application/json" style="display:none;" />
+          <select id="visitationImportMode" class="btn btn-outline" style="padding:11px 14px;">
+            <option value="merge">دمج مع بيانات الافتقاد الحالية</option>
+            <option value="replace">استبدال كل بيانات الافتقاد الحالية</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('visitationExportBtn').addEventListener('click', async () => {
+    const json = await VisitationDB.exportJSON();
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `visitation-backup-${stamp}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('تم تنزيل بيانات الافتقاد', 'success');
+  });
+
+  document.getElementById('visitationImportFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const mode = document.getElementById('visitationImportMode').value;
+    try {
+      const text = await file.text();
+      const count = await VisitationDB.importJSON(text, mode);
+      showToast(`تم استيراد ${count} أسرة بنجاح`, 'success');
+      router();
+    } catch (err) {
+      showToast('الملف غير صالح: ' + err.message, 'danger');
+    }
+    e.target.value = '';
+  });
 }
 
 /* #/visitation/add and #/visitation/edit/:id */
