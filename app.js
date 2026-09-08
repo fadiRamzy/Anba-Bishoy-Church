@@ -484,7 +484,7 @@ function renderVisitationChrome(backHash, backLabel) {
     <span><a href="#${backHash}" class="back-link">${ICONS.back}<span>${escapeHTML(backLabel)}</span></a></span>
     <span>
       <button type="button" class="visitation-reminder-btn" id="visitationReminderBtn">
-        ${ICONS.bell}<span>افتكر مخدومك</span>
+        ${ICONS.bell}<span>اُرعَ خرافي</span>
         <span class="reminder-badge" id="visitationReminderBadge" hidden>0</span>
       </button>
     </span>
@@ -529,12 +529,17 @@ async function getVisitationReminders() {
 function visitationReminderRowHTML(item) {
   const addressParts = [item.family.neighborhood, item.family.street].filter(Boolean);
   const address = addressParts.join(' - ');
+  const firstName = (item.family.name || '').trim().split(/\s+/)[0] || item.family.name;
+  const elapsedLine = item.latest
+    ? `<div class="reminder-date-elapsed">لم يتم افتقاد ${escapeHTML(firstName)} منذ ${formatElapsedSince(item.latest)}</div>`
+    : '';
   return `
-    <div class="reminder-row">
+    <a class="reminder-row" href="#/visitation/member/${item.family.id}">
       <div class="reminder-name">${escapeHTML(item.family.name)}</div>
       <div class="reminder-address ${address ? '' : 'muted'}">${address ? escapeHTML(address) : 'العنوان غير مسجل'}</div>
       <div class="reminder-date">تاريخ آخر افتقاد: ${item.latest ? formatDMY(item.latest) : 'لا يوجد افتقاد مسجل بعد'}</div>
-    </div>`;
+      ${elapsedLine}
+    </a>`;
 }
 
 function openVisitationReminderPanel(anchorBtn, reminders) {
@@ -543,7 +548,7 @@ function openVisitationReminderPanel(anchorBtn, reminders) {
   panel.className = 'reminder-panel';
   panel.innerHTML = `
     <div class="reminder-panel-header">
-      <h3>افتكر مخدومك</h3>
+      <h3>اُرعَ خرافي</h3>
       <button type="button" class="reminder-panel-close" aria-label="إغلاق">&times;</button>
     </div>
     <div class="reminder-panel-body">
@@ -652,7 +657,7 @@ function visitationCardHTML(f) {
   const addressPart = [f.neighborhood, f.street].filter(Boolean).join(' ');
   const line2 = [f.job, addressPart].filter(Boolean).join(' - ');
   return `
-    <a href="#/visitation/member/${f.id}" class="member-card">
+    <a href="#/visitation/member/${f.id}" class="member-card visitation-card">
       <span class="member-avatar">${escapeHTML(initials(f.name))}</span>
       <span class="member-info">
         <span class="member-name">${escapeHTML(f.name)}</span>
@@ -886,7 +891,7 @@ function guideCardHTML(item) {
   const line2 = [f.job, addressPart].filter(Boolean).join(' - ');
   const firstName = (f.name || '').trim().split(/\s+/)[0] || f.name;
   return `
-    <a href="#/visitation/member/${f.id}" class="member-card">
+    <a href="#/visitation/member/${f.id}" class="member-card visitation-card">
       <span class="member-avatar">${escapeHTML(initials(f.name))}</span>
       <span class="member-info">
         <span class="member-name">${escapeHTML(f.name)}</span>

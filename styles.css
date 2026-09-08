@@ -883,13 +883,19 @@ label[for="importFile"] svg { width: 11px; height: 11px; }
 .reminder-panel-close:hover { color: var(--color-maroon); }
 .reminder-panel-body { padding: 6px 16px 14px; }
 .reminder-row {
+  display: block;
   padding: 10px 0;
   border-bottom: 1px solid var(--color-line);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
 }
 .reminder-row:last-child { border-bottom: none; }
+.reminder-row:hover .reminder-name { color: var(--color-maroon); }
 .reminder-name { font-weight: 700; color: var(--color-ink); }
 .reminder-address { font-size: .85rem; color: var(--color-ink-soft); margin-top: 2px; }
 .reminder-date { font-size: .8rem; color: var(--color-maroon); margin-top: 3px; }
+.reminder-date-elapsed { font-size: .8rem; color: var(--color-ink-soft); margin-top: 2px; }
 .reminder-panel-body .empty-state { padding: 20px 0; }
 
 /* ==========================================================================
@@ -1031,3 +1037,19 @@ main { min-height: 60vh; padding-bottom: 30px; }
 .birthday-card .member-avatar { margin-top: 2px; }
 .birthday-card .member-meta { white-space: normal; }
 .birthday-card .member-meta-line { display: block; }
+
+/* Visitation cards (change 1) — long names/jobs/addresses must wrap fully
+   inside the card instead of being clipped with an ellipsis, same approach
+   as .birthday-card above. Scoped to .visitation-card only so the main
+   دليل الخدمات lists/browse pages keep their existing ellipsis behavior. */
+.visitation-card { align-items: flex-start; }
+.visitation-card .member-avatar { margin-top: 2px; }
+.visitation-card .member-name,
+.visitation-card .member-meta,
+.visitation-card .member-meta-visit {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: break-word;
+  line-height: 1.35;
+}
