@@ -32,6 +32,7 @@ const ICONS = {
   empty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
   cross: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M5 8h14"/><circle cx="12" cy="3" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="21" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="8" r="1" fill="currentColor" stroke="none"/></svg>',
   cake: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7a2 2 0 012-2h12a2 2 0 012 2v7M2 21h20M4 14a3 3 0 013-3h10a3 3 0 013 3M9 9V6M12 9V6M15 9V6M9 6c0-.8.5-1.2.5-2S9 2.5 9 2M12 6c0-.8.5-1.2.5-2S12 2.5 12 2M15 6c0-.8.5-1.2.5-2S15 2.5 15 2"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>',
 };
 
 /* ---------------------------------------------------------------------- */
@@ -302,10 +303,21 @@ function openPinModal({ title, message, confirmLabel, onSubmit, onCancel }) {
 const VISITATION_PIN_HASH = 'eb5af8ab99b55cda453f70e6a92c7b327bd8f76f49ff6a81c18ade4c26690057';
 
 const VisitationAuth = {
-  unlockedKey: 'visitation_unlocked',
+  // Stores only today's date string (e.g. "2026-09-08") — never the
+  // password itself. Authentication is valid for that calendar day only;
+  // once the local date changes, isUnlocked() stops matching and the
+  // password is requested again.
+  unlockedKey: 'visitation_unlocked_date',
+
+  todayStr() {
+    const d = new Date();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${mm}-${dd}`;
+  },
 
   isUnlocked() {
-    return sessionStorage.getItem(this.unlockedKey) === '1';
+    return localStorage.getItem(this.unlockedKey) === this.todayStr();
   },
 
   require() {
@@ -318,7 +330,7 @@ const VisitationAuth = {
         onSubmit: async (pin, close) => {
           const hash = await sha256Hex(pin || '');
           if (hash !== VISITATION_PIN_HASH) return 'كلمة المرور غير صحيحة';
-          sessionStorage.setItem(this.unlockedKey, '1');
+          localStorage.setItem(this.unlockedKey, this.todayStr());
           close();
           resolve(true);
         },
@@ -461,13 +473,133 @@ async function renderLanding() {
 /*  site's components/styling/database patterns wherever possible.        */
 /* ---------------------------------------------------------------------- */
 function renderVisitationChrome(backHash, backLabel) {
+  // Close any reminder panel left open from a previous visitation page.
+  const openPanel = document.getElementById('visitationReminderPanel');
+  if (openPanel) openPanel.remove();
+
   document.getElementById('topNav').innerHTML = `
     <span><a href="#${backHash}" class="back-link">${ICONS.back}<span>${escapeHTML(backLabel)}</span></a></span>
-    <span></span>
+    <span>
+      <button type="button" class="visitation-reminder-btn" id="visitationReminderBtn">
+        ${ICONS.bell}<span>افتكر مخدومك</span>
+        <span class="reminder-badge" id="visitationReminderBadge" hidden>0</span>
+      </button>
+    </span>
   `;
+  setupVisitationReminderButton();
+}
+
+/* ---------------------------------------------------------------------- */
+/*  "افتكر مخدومك" — in-page reminder of people overdue for visitation.    */
+/*  Visible only on #/visitation pages (rendered inside renderVisitationChrome). */
+/* ---------------------------------------------------------------------- */
+// Families with no visitation in this many days (or never visited) are
+// considered to currently "require visitation attention".
+const VISITATION_REMINDER_THRESHOLD_DAYS = 30;
+
+async function getVisitationReminders() {
+  const all = await VisitationDB.getAll();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const withGap = all.map((f) => {
+    const dates = Array.isArray(f.visitationDates) ? f.visitationDates.slice().sort((a, b) => b.localeCompare(a)) : [];
+    const latest = dates[0] || null;
+    let days;
+    if (latest) {
+      const ld = new Date(`${latest}T00:00:00`);
+      days = Math.floor((today - ld) / 86400000);
+    } else {
+      days = Infinity; // never visited — most urgent
+    }
+    return { family: f, latest, days };
+  });
+
+  return withGap
+    .filter((x) => x.days >= VISITATION_REMINDER_THRESHOLD_DAYS)
+    .sort((a, b) => {
+      if (a.days === b.days) return 0;
+      return a.days > b.days ? -1 : 1; // longest-overdue first
+    });
+}
+
+function visitationReminderRowHTML(item) {
+  const addressParts = [item.family.neighborhood, item.family.street].filter(Boolean);
+  const address = addressParts.join(' - ');
+  return `
+    <div class="reminder-row">
+      <div class="reminder-name">${escapeHTML(item.family.name)}</div>
+      <div class="reminder-address ${address ? '' : 'muted'}">${address ? escapeHTML(address) : 'العنوان غير مسجل'}</div>
+      <div class="reminder-date">تاريخ آخر افتقاد: ${item.latest ? formatDMY(item.latest) : 'لا يوجد افتقاد مسجل بعد'}</div>
+    </div>`;
+}
+
+function openVisitationReminderPanel(anchorBtn, reminders) {
+  const panel = document.createElement('div');
+  panel.id = 'visitationReminderPanel';
+  panel.className = 'reminder-panel';
+  panel.innerHTML = `
+    <div class="reminder-panel-header">
+      <h3>افتكر مخدومك</h3>
+      <button type="button" class="reminder-panel-close" aria-label="إغلاق">&times;</button>
+    </div>
+    <div class="reminder-panel-body">
+      ${reminders.length ? reminders.map(visitationReminderRowHTML).join('') : `<div class="empty-state">${ICONS.empty}<p>لا يوجد مخدومين محتاجين افتقاد حاليًا</p></div>`}
+    </div>
+  `;
+  document.body.appendChild(panel);
+
+  const rect = anchorBtn.getBoundingClientRect();
+  panel.style.top = `${rect.bottom + window.scrollY + 8}px`;
+  panel.style.right = `${window.innerWidth - rect.right}px`;
+
+  const close = () => panel.remove();
+  panel.querySelector('.reminder-panel-close').addEventListener('click', close);
+  setTimeout(() => {
+    document.addEventListener('click', function onDocClick(e) {
+      if (!panel.isConnected) { document.removeEventListener('click', onDocClick); return; }
+      if (!panel.contains(e.target) && !anchorBtn.contains(e.target)) {
+        close();
+        document.removeEventListener('click', onDocClick);
+      }
+    });
+  }, 0);
+}
+
+async function setupVisitationReminderButton() {
+  const btn = document.getElementById('visitationReminderBtn');
+  const badge = document.getElementById('visitationReminderBadge');
+  if (!btn) return;
+
+  const reminders = await getVisitationReminders();
+  if (!btn.isConnected) return; // page navigated away while we were reading the DB
+  if (reminders.length) {
+    badge.textContent = String(reminders.length);
+    badge.hidden = false;
+  } else {
+    badge.hidden = true;
+  }
+
+  btn.addEventListener('click', () => {
+    const existing = document.getElementById('visitationReminderPanel');
+    if (existing) { existing.remove(); return; }
+    openVisitationReminderPanel(btn, reminders);
+  });
 }
 
 const MARITAL_STATUS_OPTIONS = ['أعزب', 'متزوج/متزوجة', 'أرمل/أرملة'];
+
+/* Visitation "إضافة أسرة" — الخدمة dropdown options (change 1). */
+const VISITATION_SERVICE_OPTIONS = [
+  'مدارس الأحد',
+  'إعدادي',
+  'ثانوي',
+  'جامعة',
+  'خريجين',
+  'الاجتماع العام',
+  'اجتماع الكرمة المثمرة',
+  'اجتماع الصلاة',
+];
 
 /* 'YYYY-MM-DD' -> 'DD/MM/YYYY', string-based (no Date object) so the
    displayed day never shifts due to timezone conversion. */
@@ -634,7 +766,8 @@ async function renderVisitationForm(idStr) {
 
           ${textFieldHTML({ field: 'job', label: 'الوظيفة' }, v.job)}
           ${textFieldHTML({ field: 'confessionFather', label: 'أب الاعتراف' }, v.confessionFather)}
-          ${textFieldHTML({ field: 'service', label: 'الخدمة' }, v.service)}
+          ${selectFieldHTML({ field: 'service', label: 'الخدمة' }, v.service, VISITATION_SERVICE_OPTIONS)}
+          ${textFieldHTML({ field: 'serviceOther', label: 'خدمة أخرى' }, v.serviceOther)}
 
           <div class="field">
             <label for="f_birthDate">تاريخ الميلاد</label>
@@ -765,6 +898,7 @@ async function renderVisitationForm(idStr) {
       job: document.getElementById('f_job').value.trim() || null,
       confessionFather: document.getElementById('f_confessionFather').value.trim() || null,
       service: document.getElementById('f_service').value.trim() || null,
+      serviceOther: document.getElementById('f_serviceOther').value.trim() || null,
       birthDate: document.getElementById('f_birthDate').value || null,
       birthDay: null, birthMonth: null, birthYear: null,
       age: document.getElementById('f_age').value ? Number(document.getElementById('f_age').value) : null,
@@ -851,6 +985,7 @@ async function renderVisitationProfile(idStr) {
           <div class="info-item"><dt>الوظيفة</dt><dd class="${fam.job ? '' : 'muted'}">${fieldOrFallback(fam.job)}</dd></div>
           <div class="info-item"><dt>أب الاعتراف</dt><dd class="${fam.confessionFather ? '' : 'muted'}">${fieldOrFallback(fam.confessionFather)}</dd></div>
           <div class="info-item"><dt>الخدمة</dt><dd class="${fam.service ? '' : 'muted'}">${fieldOrFallback(fam.service)}</dd></div>
+          ${fam.serviceOther ? `<div class="info-item"><dt>خدمة أخرى</dt><dd>${escapeHTML(fam.serviceOther)}</dd></div>` : ''}
         </dl>
       </div>
 

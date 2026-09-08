@@ -764,6 +764,99 @@ label[for="importFile"] svg { width: 11px; height: 11px; }
 }
 
 /* ==========================================================================
+   Visitation reminder — "افتكر مخدومك"
+   ========================================================================== */
+.visitation-reminder-btn {
+  position: relative;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  color: var(--color-ink-soft);
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-size: .85rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  box-shadow: var(--shadow-soft);
+  transition: box-shadow .18s ease, border-color .18s ease, color .18s ease, transform .12s ease;
+}
+.visitation-reminder-btn svg { width: 16px; height: 16px; }
+.visitation-reminder-btn:hover {
+  border-color: var(--color-gold-light);
+  color: var(--color-maroon-dark);
+  box-shadow: var(--shadow-lift);
+}
+.visitation-reminder-btn:active { transform: scale(0.97); }
+
+.reminder-badge {
+  position: absolute;
+  top: -6px;
+  inset-inline-start: -6px;
+  background: var(--color-danger);
+  color: #fff;
+  font-size: .7rem;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--color-surface);
+}
+
+.reminder-panel {
+  position: fixed;
+  z-index: 60;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lift);
+}
+.reminder-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-line);
+  position: sticky;
+  top: 0;
+  background: var(--color-surface);
+}
+.reminder-panel-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--color-maroon-dark);
+}
+.reminder-panel-close {
+  border: none;
+  background: none;
+  font-size: 1.3rem;
+  line-height: 1;
+  color: var(--color-ink-soft);
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.reminder-panel-close:hover { color: var(--color-maroon); }
+.reminder-panel-body { padding: 6px 16px 14px; }
+.reminder-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-line);
+}
+.reminder-row:last-child { border-bottom: none; }
+.reminder-name { font-weight: 700; color: var(--color-ink); }
+.reminder-address { font-size: .85rem; color: var(--color-ink-soft); margin-top: 2px; }
+.reminder-date { font-size: .8rem; color: var(--color-maroon); margin-top: 3px; }
+.reminder-panel-body .empty-state { padding: 20px 0; }
+
+/* ==========================================================================
    Toast
    ========================================================================== */
 .toast {
