@@ -319,6 +319,34 @@ button {
   margin: 26px 0;
 }
 
+/* Group "الأسر" + "دليل الافتقاد" on their own row directly under
+   "إضافة أسرة", and push "إدارة بيانات الافتقاد" down to its own
+   visually separated row at the bottom. CSS-only re-layout — DOM order
+   in app.js is unchanged, flex-basis:100% simply forces the line breaks. */
+.visitation-home-actions > a:first-child {
+  flex-basis: 100%;
+}
+/* "الأسر" + "دليل الافتقاد": adopt the same non-transparent card
+   background/border already used by دليل الخدمات's nav-card / landing-card
+   buttons, instead of the transparent .btn-outline look. */
+.visitation-home-actions > a:nth-child(2),
+.visitation-home-actions > a:nth-child(3) {
+  background: var(--color-surface);
+  border-color: var(--color-line);
+  box-shadow: var(--shadow-soft);
+}
+.visitation-home-actions > a:nth-child(2):hover,
+.visitation-home-actions > a:nth-child(3):hover {
+  border-color: var(--color-gold);
+}
+.visitation-home-actions > a:last-child {
+  flex-basis: 100%;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-line);
+  justify-content: center;
+}
+
 /* #/visitation/families filter row */
 .filter-bar {
   display: grid;
@@ -1045,11 +1073,19 @@ main { min-height: 60vh; padding-bottom: 30px; }
 .visitation-card { align-items: flex-start; }
 .visitation-card .member-avatar { margin-top: 2px; }
 .visitation-card .member-name,
-.visitation-card .member-meta,
+.visitation-card .member-job,
+.visitation-card .member-address,
 .visitation-card .member-meta-visit {
+  display: block;
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
   overflow-wrap: break-word;
   line-height: 1.35;
+}
+.visitation-card .member-job,
+.visitation-card .member-address {
+  color: var(--color-ink-soft);
+  font-size: .82rem;
+  margin-top: 2px;
 }

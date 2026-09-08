@@ -654,14 +654,14 @@ function openDateModal({ title, message, confirmLabel }) {
 
 function visitationCardHTML(f) {
   const latest = latestVisitationDate(f);
-  const addressPart = [f.neighborhood, f.street].filter(Boolean).join(' ');
-  const line2 = [f.job, addressPart].filter(Boolean).join(' - ');
+  const addressPart = [f.neighborhood, f.street].filter(Boolean).join(' - ');
   return `
     <a href="#/visitation/member/${f.id}" class="member-card visitation-card">
       <span class="member-avatar">${escapeHTML(initials(f.name))}</span>
       <span class="member-info">
         <span class="member-name">${escapeHTML(f.name)}</span>
-        <span class="member-meta">${escapeHTML(line2 || '—')}</span>
+        ${f.job ? `<span class="member-job">${escapeHTML(f.job)}</span>` : ''}
+        ${addressPart ? `<span class="member-address">${escapeHTML(addressPart)}</span>` : ''}
         <span class="member-meta-visit">تاريخ آخر افتقاد - ${latest ? formatDMY(latest) : 'لم يتم الافتقاد بعد'}</span>
       </span>
     </a>`;
@@ -887,15 +887,15 @@ function latestVisitationDate(f) {
 
 function guideCardHTML(item) {
   const f = item.family;
-  const addressPart = [f.neighborhood, f.street].filter(Boolean).join(' ');
-  const line2 = [f.job, addressPart].filter(Boolean).join(' - ');
+  const addressPart = [f.neighborhood, f.street].filter(Boolean).join(' - ');
   const firstName = (f.name || '').trim().split(/\s+/)[0] || f.name;
   return `
     <a href="#/visitation/member/${f.id}" class="member-card visitation-card">
       <span class="member-avatar">${escapeHTML(initials(f.name))}</span>
       <span class="member-info">
         <span class="member-name">${escapeHTML(f.name)}</span>
-        <span class="member-meta">${escapeHTML(line2 || '—')}</span>
+        ${f.job ? `<span class="member-job">${escapeHTML(f.job)}</span>` : ''}
+        ${addressPart ? `<span class="member-address">${escapeHTML(addressPart)}</span>` : ''}
         <span class="member-meta-visit">لم يتم افتقاد ${escapeHTML(firstName)} منذ ${item.elapsedText}</span>
       </span>
     </a>`;
