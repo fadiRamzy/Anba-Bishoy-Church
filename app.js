@@ -991,6 +991,82 @@ async function renderVisitationDataManagement() {
   });
 }
 
+/* Husband/wife/children sub-fields (شخص الزوج/الزوجة + الأبناء) — new
+   fields on the existing "إضافة أسرة" form. Small self-contained helpers,
+   kept local to the visitation form/profile so nothing shared is touched. */
+function visitationSpouseFieldsHTML(prefix, s) {
+  s = s || {};
+  return `
+    <div class="field">
+      <label for="f_${prefix}_name">الاسم</label>
+      <input type="text" id="f_${prefix}_name" value="${escapeHTML(s.name || '')}" />
+    </div>
+    <div class="field">
+      <label for="f_${prefix}_job">الوظيفة</label>
+      <input type="text" id="f_${prefix}_job" value="${escapeHTML(s.job || '')}" />
+    </div>
+    <div class="field">
+      <label for="f_${prefix}_phone">رقم الهاتف</label>
+      <input type="tel" id="f_${prefix}_phone" value="${escapeHTML(s.phone || '')}" />
+    </div>
+    <div class="field">
+      <label for="f_${prefix}_confessionFather">أب الاعتراف</label>
+      <input type="text" id="f_${prefix}_confessionFather" value="${escapeHTML(s.confessionFather || '')}" />
+    </div>
+    ${selectFieldHTML({ field: `${prefix}_service`, label: 'الخدمة' }, s.service, VISITATION_SERVICE_OPTIONS)}
+    <div class="field">
+      <label for="f_${prefix}_serviceOther">خدمة أخرى</label>
+      <input type="text" id="f_${prefix}_serviceOther" value="${escapeHTML(s.serviceOther || '')}" />
+    </div>
+    <div class="field">
+      <label for="f_${prefix}_birthDate">تاريخ الميلاد</label>
+      <input type="date" id="f_${prefix}_birthDate" value="${s.birthDate || ''}" />
+    </div>
+    <div class="field">
+      <label for="f_${prefix}_age">السن (لو التاريخ غير متاح)</label>
+      <input type="number" min="0" max="130" id="f_${prefix}_age" value="${s.age ?? ''}" />
+    </div>
+    <div class="field">
+      <label for="f_${prefix}_educationStage">المرحلة التعليمية</label>
+      <input type="text" id="f_${prefix}_educationStage" value="${escapeHTML(s.educationStage || '')}" />
+    </div>
+    <div class="field full">
+      <label for="f_${prefix}_notes">ملاحظات</label>
+      <textarea id="f_${prefix}_notes">${escapeHTML(s.notes || '')}</textarea>
+    </div>`;
+}
+
+function visitationChildRowHTML(child) {
+  const type = (child && child.type === 'ابنة') ? 'ابنة' : 'ابن';
+  return `
+    <div class="child-row">
+      <select class="child-type-select">
+        <option value="ابن" ${type === 'ابن' ? 'selected' : ''}>ابن</option>
+        <option value="ابنة" ${type === 'ابنة' ? 'selected' : ''}>ابنة</option>
+      </select>
+      <input type="text" class="child-name-input" placeholder="اسم الابن/الابنة" value="${escapeHTML((child && child.name) || '')}" />
+      <button type="button" class="btn btn-outline btn-sm remove-child-btn" aria-label="حذف">${ICONS.trash}</button>
+    </div>`;
+}
+
+function wireBirthDateAgeSync(birthId, ageId) {
+  const birthInput = document.getElementById(birthId);
+  const ageInput = document.getElementById(ageId);
+  if (!birthInput || !ageInput) return;
+  function sync() {
+    if (birthInput.value) {
+      const computed = computeAge({ birthDate: birthInput.value });
+      if (computed !== null) ageInput.value = computed;
+      ageInput.readOnly = true;
+    } else {
+      ageInput.readOnly = false;
+    }
+  }
+  birthInput.addEventListener('input', sync);
+  birthInput.addEventListener('change', sync);
+  sync();
+}
+
 /* #/visitation/add and #/visitation/edit/:id */
 async function renderVisitationForm(idStr) {
   const isEdit = !!idStr;
@@ -1017,12 +1093,37 @@ async function renderVisitationForm(idStr) {
             <div class="field-error"></div>
           </div>
 
+          ${selectFieldHTML({ field: 'maritalStatus', label: 'الحالة الاجتماعية' }, v.maritalStatus, MARITAL_STATUS_OPTIONS)}
+
+          <div class="field full" id="eduStageWrap" hidden>
+            <label for="f_educationStage">المرحلة التعليمية</label>
+            <input type="text" id="f_educationStage" value="${escapeHTML(v.educationStage || '')}" />
+          </div>
+
+          <div class="field full" id="spouseSectionsWrap" hidden>
+            <div class="subform-section">
+              <h4>بيانات الزوج</h4>
+              <div class="subform-grid">
+                ${visitationSpouseFieldsHTML('h', v.husband)}
+              </div>
+            </div>
+            <div class="subform-section">
+              <h4>بيانات الزوجة</h4>
+              <div class="subform-grid">
+                ${visitationSpouseFieldsHTML('w', v.wife)}
+              </div>
+            </div>
+            <div class="subform-section">
+              <h4>الأبناء (<span id="childrenCountLabel">${(v.children || []).length}</span>)</h4>
+              <div id="childrenList">${(v.children || []).map(visitationChildRowHTML).join('')}</div>
+              <button type="button" class="btn btn-outline btn-sm" id="addChildBtn">${ICONS.plus}<span>إضافة ابن/ابنة</span></button>
+            </div>
+          </div>
+
           <div class="field full">
             <label for="f_spouseName">اسم الزوج/الزوجة</label>
             <input type="text" id="f_spouseName" value="${escapeHTML(v.spouseName || '')}" />
           </div>
-
-          ${selectFieldHTML({ field: 'maritalStatus', label: 'الحالة الاجتماعية' }, v.maritalStatus, MARITAL_STATUS_OPTIONS)}
 
           <div class="field">
             <label for="f_phone1">رقم الموبايل</label>
@@ -1120,20 +1221,40 @@ async function renderVisitationForm(idStr) {
     );
   });
 
-  const birthDateInput = document.getElementById('f_birthDate');
-  const ageInput = document.getElementById('f_age');
-  function syncAgeFromBirthDate() {
-    if (birthDateInput.value) {
-      const computed = computeAge({ birthDate: birthDateInput.value });
-      if (computed !== null) ageInput.value = computed;
-      ageInput.readOnly = true;
-    } else {
-      ageInput.readOnly = false;
-    }
+  wireBirthDateAgeSync('f_birthDate', 'f_age');
+  wireBirthDateAgeSync('f_h_birthDate', 'f_h_age');
+  wireBirthDateAgeSync('f_w_birthDate', 'f_w_age');
+
+  /* أعزب / متزوج / أرمل conditional sections (Part 1). */
+  const maritalStatusSelect = document.getElementById('f_maritalStatus');
+  const eduStageWrap = document.getElementById('eduStageWrap');
+  const spouseSectionsWrap = document.getElementById('spouseSectionsWrap');
+  function updateMaritalConditionalSections() {
+    const status = maritalStatusSelect.value;
+    eduStageWrap.hidden = status !== 'أعزب';
+    spouseSectionsWrap.hidden = !(status === 'متزوج/متزوجة' || status === 'أرمل/أرملة');
   }
-  birthDateInput.addEventListener('input', syncAgeFromBirthDate);
-  birthDateInput.addEventListener('change', syncAgeFromBirthDate);
-  syncAgeFromBirthDate();
+  maritalStatusSelect.addEventListener('change', updateMaritalConditionalSections);
+  updateMaritalConditionalSections();
+
+  /* الأبناء — simple dynamic add/remove list. */
+  const childrenList = document.getElementById('childrenList');
+  const childrenCountLabel = document.getElementById('childrenCountLabel');
+  function refreshChildrenCount() {
+    childrenCountLabel.textContent = String(childrenList.children.length);
+  }
+  document.getElementById('addChildBtn').addEventListener('click', () => {
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = visitationChildRowHTML(null);
+    childrenList.appendChild(wrapper.firstElementChild);
+    refreshChildrenCount();
+  });
+  childrenList.addEventListener('click', (e) => {
+    const btn = e.target.closest('.remove-child-btn');
+    if (!btn) return;
+    btn.closest('.child-row').remove();
+    refreshChildrenCount();
+  });
 
   const dupBox = document.getElementById('dupWarning');
   async function checkDuplicates() {
@@ -1170,11 +1291,59 @@ async function renderVisitationForm(idStr) {
     const newDateVal = document.getElementById('f_visitDate').value;
     if (newDateVal && !existingDates.includes(newDateVal)) existingDates.push(newDateVal);
 
+    const maritalStatusVal = document.getElementById('f_maritalStatus').value.trim() || null;
+    const isSingle = maritalStatusVal === 'أعزب';
+    const isMarriedOrWidowed = maritalStatusVal === 'متزوج/متزوجة' || maritalStatusVal === 'أرمل/أرملة';
+
+    const educationStage = isSingle ? (document.getElementById('f_educationStage').value.trim() || null) : null;
+
+    function readSpouseBlock(prefix) {
+      const get = (id) => document.getElementById(id);
+      const name = get(`f_${prefix}_name`).value.trim();
+      const job = get(`f_${prefix}_job`).value.trim();
+      const phone = get(`f_${prefix}_phone`).value.trim();
+      const confessionFather = get(`f_${prefix}_confessionFather`).value.trim();
+      const service = get(`f_${prefix}_service`).value.trim();
+      const serviceOther = get(`f_${prefix}_serviceOther`).value.trim();
+      const birthDate = get(`f_${prefix}_birthDate`).value;
+      const age = get(`f_${prefix}_age`).value;
+      const eduStage = get(`f_${prefix}_educationStage`).value.trim();
+      const notes = get(`f_${prefix}_notes`).value.trim();
+      const hasAny = name || job || phone || confessionFather || service || serviceOther || birthDate || age || eduStage || notes;
+      if (!hasAny) return null;
+      return {
+        name: name || null,
+        job: job || null,
+        phone: phone || null,
+        confessionFather: confessionFather || null,
+        service: service || null,
+        serviceOther: serviceOther || null,
+        birthDate: birthDate || null,
+        age: age ? Number(age) : null,
+        educationStage: eduStage || null,
+        notes: notes || null,
+      };
+    }
+    const husband = isMarriedOrWidowed ? readSpouseBlock('h') : null;
+    const wife = isMarriedOrWidowed ? readSpouseBlock('w') : null;
+    const children = isMarriedOrWidowed
+      ? Array.from(document.querySelectorAll('#childrenList .child-row'))
+          .map((row) => ({
+            type: row.querySelector('.child-type-select').value,
+            name: row.querySelector('.child-name-input').value.trim(),
+          }))
+          .filter((c) => c.name)
+      : [];
+
     const record = {
       id: isEdit ? v.id : await VisitationDB.nextId(),
       name: nameField.value.trim(),
       spouseName: document.getElementById('f_spouseName').value.trim() || null,
-      maritalStatus: document.getElementById('f_maritalStatus').value.trim() || null,
+      maritalStatus: maritalStatusVal,
+      educationStage,
+      husband,
+      wife,
+      children,
       phone1: document.getElementById('f_phone1').value.trim() || null,
       phone2: document.getElementById('f_phone2').value.trim() || null,
       city: document.getElementById('f_city').value.trim() || null,
@@ -1204,6 +1373,38 @@ async function renderVisitationForm(idStr) {
     showToast(isEdit ? 'تم حفظ التعديلات' : 'تم إضافة الأسرة بنجاح', 'success');
     navigate(`/visitation/member/${record.id}`);
   });
+}
+
+/* Profile display for the husband/wife/children sub-fields (Part 1). */
+function spouseInfoSectionHTML(title, s) {
+  const age = computeAge(s);
+  const birth = formatBirthDate(s);
+  return `
+    <div class="info-section">
+      <h3>${ICONS.church} ${title}</h3>
+      <dl class="info-grid">
+        <div class="info-item"><dt>الاسم</dt><dd class="${s.name ? '' : 'muted'}">${fieldOrFallback(s.name)}</dd></div>
+        <div class="info-item"><dt>الوظيفة</dt><dd class="${s.job ? '' : 'muted'}">${fieldOrFallback(s.job)}</dd></div>
+        <div class="info-item"><dt>رقم الهاتف</dt><dd>${phoneLinkHTML(s.phone)}</dd></div>
+        <div class="info-item"><dt>أب الاعتراف</dt><dd class="${s.confessionFather ? '' : 'muted'}">${fieldOrFallback(s.confessionFather)}</dd></div>
+        <div class="info-item"><dt>الخدمة</dt><dd class="${s.service ? '' : 'muted'}">${fieldOrFallback(s.service)}</dd></div>
+        ${s.serviceOther ? `<div class="info-item"><dt>خدمة أخرى</dt><dd>${escapeHTML(s.serviceOther)}</dd></div>` : ''}
+        <div class="info-item"><dt>تاريخ الميلاد</dt><dd class="${birth ? '' : 'muted'}">${birth || 'غير متوفر'}</dd></div>
+        <div class="info-item"><dt>السن</dt><dd class="${age !== null ? '' : 'muted'}">${age !== null ? age + ' سنة' : 'غير متوفر'}</dd></div>
+        <div class="info-item"><dt>المرحلة التعليمية</dt><dd class="${s.educationStage ? '' : 'muted'}">${fieldOrFallback(s.educationStage)}</dd></div>
+        ${s.notes ? `<div class="info-item full"><dt>ملاحظات</dt><dd>${escapeHTML(s.notes)}</dd></div>` : ''}
+      </dl>
+    </div>`;
+}
+
+function childrenInfoSectionHTML(children) {
+  return `
+    <div class="info-section">
+      <h3>${ICONS.notes} الأبناء (${children.length})</h3>
+      <ul class="children-list">
+        ${children.map((c, i) => `<li>${i + 1}. ${escapeHTML(c.type)} — ${escapeHTML(c.name)}</li>`).join('')}
+      </ul>
+    </div>`;
 }
 
 /* #/visitation/member/:id */
@@ -1274,6 +1475,16 @@ async function renderVisitationProfile(idStr) {
           ${fam.serviceOther ? `<div class="info-item"><dt>خدمة أخرى</dt><dd>${escapeHTML(fam.serviceOther)}</dd></div>` : ''}
         </dl>
       </div>
+
+      ${fam.maritalStatus === 'أعزب' && fam.educationStage ? `
+      <div class="info-section">
+        <h3>${ICONS.notes} المرحلة التعليمية</h3>
+        <dl class="info-grid"><div class="info-item full"><dd>${escapeHTML(fam.educationStage)}</dd></div></dl>
+      </div>` : ''}
+
+      ${fam.husband ? spouseInfoSectionHTML('بيانات الزوج', fam.husband) : ''}
+      ${fam.wife ? spouseInfoSectionHTML('بيانات الزوجة', fam.wife) : ''}
+      ${Array.isArray(fam.children) && fam.children.length ? childrenInfoSectionHTML(fam.children) : ''}
 
       <div class="info-section">
         <h3>${ICONS.calendar} بيانات الميلاد</h3>

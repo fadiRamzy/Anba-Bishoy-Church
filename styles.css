@@ -310,41 +310,46 @@ button {
   text-align: center;
 }
 
-/* #/visitation main page action row: إضافة أسرة / الأسر / دليل الافتقاد */
+/* #/visitation main page action row: إضافة أسرة / الأسر / دليل الافتقاد /
+   إدارة بيانات الافتقاد. CSS Grid (no DOM change) so "إضافة أسرة" sits on
+   its own row, "الأسر" + "دليل الافتقاد" are grouped on the row under it,
+   and "إدارة بيانات الافتقاد" is pushed to its own separated row at the
+   bottom — each button keeping its own natural (auto) width via
+   justify-self, same as the دليل الخدمات buttons, instead of stretching
+   to fill the row (which is what made them look too large). */
 .visitation-home-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, auto);
   justify-content: center;
   gap: 12px;
   margin: 26px 0;
 }
-
-/* Group "الأسر" + "دليل الافتقاد" on their own row directly under
-   "إضافة أسرة", and push "إدارة بيانات الافتقاد" down to its own
-   visually separated row at the bottom. CSS-only re-layout — DOM order
-   in app.js is unchanged, flex-basis:100% simply forces the line breaks. */
 .visitation-home-actions > a:first-child {
-  flex-basis: 100%;
+  grid-column: 1 / -1;
+  justify-self: center;
 }
 /* "الأسر" + "دليل الافتقاد": adopt the same non-transparent card
    background/border already used by دليل الخدمات's nav-card / landing-card
-   buttons, instead of the transparent .btn-outline look. */
+   buttons, instead of the transparent .btn-outline look, and a slightly
+   larger size than before. */
 .visitation-home-actions > a:nth-child(2),
 .visitation-home-actions > a:nth-child(3) {
   background: var(--color-surface);
   border-color: var(--color-line);
   box-shadow: var(--shadow-soft);
+  padding: 15px 26px;
+  font-size: 1.02rem;
 }
 .visitation-home-actions > a:nth-child(2):hover,
 .visitation-home-actions > a:nth-child(3):hover {
   border-color: var(--color-gold);
 }
 .visitation-home-actions > a:last-child {
-  flex-basis: 100%;
+  grid-column: 1 / -1;
+  justify-self: center;
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--color-line);
-  justify-content: center;
 }
 
 /* #/visitation/families filter row */
@@ -734,6 +739,57 @@ body[data-section="visitation"] .brand-verse {
   background: #fff;
 }
 .field textarea { resize: vertical; min-height: 80px; }
+
+/* بيانات الزوج / بيانات الزوجة / الأبناء — sub-sections inside the
+   "إضافة أسرة" form, shown conditionally based on الحالة الاجتماعية. */
+.subform-section {
+  border: 1.5px dashed var(--color-line);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.subform-section:last-child { margin-bottom: 0; }
+.subform-section h4 {
+  margin: 0 0 12px;
+  font-size: .92rem;
+  color: var(--color-maroon);
+}
+.subform-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px 16px;
+}
+.child-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.child-row select,
+.child-row input {
+  border: 1.5px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: .95rem;
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+.child-row .child-type-select { flex: 0 0 100px; }
+.child-row .child-name-input { flex: 1; }
+.children-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 600;
+  font-size: .96rem;
+}
+@media (max-width: 640px) {
+  .subform-grid { grid-template-columns: 1fr; }
+}
 .field-error {
   color: var(--color-danger);
   font-size: .78rem;
