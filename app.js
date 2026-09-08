@@ -1209,7 +1209,7 @@ async function renderVisitationForm(idStr) {
                 ${visitationSpouseFieldsHTML('w', v.wife, 'wife')}
               </div>
             </div>
-            <div class="subform-section">
+            <div class="subform-section" id="childrenSection" hidden>
               <h4>الأبناء (<span id="childrenCountLabel">${(v.children || []).length}</span>)</h4>
               <div id="childrenList">${(v.children || []).map(visitationChildRowHTML).join('')}</div>
               <button type="button" class="btn btn-outline btn-sm" id="addChildBtn">${ICONS.plus}<span>إضافة ابن/ابنة</span></button>
@@ -1284,6 +1284,7 @@ async function renderVisitationForm(idStr) {
   const spouseSectionsWrap = document.getElementById('spouseSectionsWrap');
   const husbandSection = document.getElementById('husbandSection');
   const wifeSection = document.getElementById('wifeSection');
+  const childrenSection = document.getElementById('childrenSection');
   function updateMaritalConditionalSections() {
     const status = maritalStatusSelect.value;
     const spouseKind = visitationSpouseSectionFor(status); // 'husband' | 'wife' | null
@@ -1291,6 +1292,7 @@ async function renderVisitationForm(idStr) {
     spouseSectionsWrap.hidden = !spouseKind;
     husbandSection.hidden = spouseKind !== 'husband';
     wifeSection.hidden = spouseKind !== 'wife';
+    childrenSection.hidden = !spouseKind;
   }
   maritalStatusSelect.addEventListener('change', updateMaritalConditionalSections);
   updateMaritalConditionalSections();
