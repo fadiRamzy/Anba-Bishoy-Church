@@ -595,7 +595,14 @@ async function setupVisitationReminderButton() {
   });
 }
 
-const MARITAL_STATUS_OPTIONS = ['أعزب', 'متزوج/متزوجة', 'أرمل/أرملة'];
+const MARITAL_STATUS_OPTIONS = ['أعزب', 'متزوج', 'متزوجة', 'أرمل', 'أرملة'];
+
+/* الحالة الاجتماعية -> which spouse section (if any) to show. */
+function visitationSpouseSectionFor(status) {
+  if (status === 'متزوج' || status === 'أرمل') return 'wife';
+  if (status === 'متزوجة' || status === 'أرملة') return 'husband';
+  return null;
+}
 
 /* Visitation "إضافة أسرة" — الخدمة dropdown options (change 1). */
 const VISITATION_SERVICE_OPTIONS = [
@@ -1101,13 +1108,13 @@ async function renderVisitationForm(idStr) {
           </div>
 
           <div class="field full" id="spouseSectionsWrap" hidden>
-            <div class="subform-section">
+            <div class="subform-section" id="husbandSection" hidden>
               <h4>بيانات الزوج</h4>
               <div class="subform-grid">
                 ${visitationSpouseFieldsHTML('h', v.husband)}
               </div>
             </div>
-            <div class="subform-section">
+            <div class="subform-section" id="wifeSection" hidden>
               <h4>بيانات الزوجة</h4>
               <div class="subform-grid">
                 ${visitationSpouseFieldsHTML('w', v.wife)}
@@ -1118,11 +1125,6 @@ async function renderVisitationForm(idStr) {
               <div id="childrenList">${(v.children || []).map(visitationChildRowHTML).join('')}</div>
               <button type="button" class="btn btn-outline btn-sm" id="addChildBtn">${ICONS.plus}<span>إضافة ابن/ابنة</span></button>
             </div>
-          </div>
-
-          <div class="field full">
-            <label for="f_spouseName">اسم الزوج/الزوجة</label>
-            <input type="text" id="f_spouseName" value="${escapeHTML(v.spouseName || '')}" />
           </div>
 
           <div class="field">
@@ -1225,14 +1227,19 @@ async function renderVisitationForm(idStr) {
   wireBirthDateAgeSync('f_h_birthDate', 'f_h_age');
   wireBirthDateAgeSync('f_w_birthDate', 'f_w_age');
 
-  /* أعزب / متزوج / أرمل conditional sections (Part 1). */
+  /* أعزب / متزوج / متزوجة / أرمل / أرملة conditional sections. */
   const maritalStatusSelect = document.getElementById('f_maritalStatus');
   const eduStageWrap = document.getElementById('eduStageWrap');
   const spouseSectionsWrap = document.getElementById('spouseSectionsWrap');
+  const husbandSection = document.getElementById('husbandSection');
+  const wifeSection = document.getElementById('wifeSection');
   function updateMaritalConditionalSections() {
     const status = maritalStatusSelect.value;
+    const spouseKind = visitationSpouseSectionFor(status); // 'husband' | 'wife' | null
     eduStageWrap.hidden = status !== 'أعزب';
-    spouseSectionsWrap.hidden = !(status === 'متزوج/متزوجة' || status === 'أرمل/أرملة');
+    spouseSectionsWrap.hidden = !spouseKind;
+    husbandSection.hidden = spouseKind !== 'husband';
+    wifeSection.hidden = spouseKind !== 'wife';
   }
   maritalStatusSelect.addEventListener('change', updateMaritalConditionalSections);
   updateMaritalConditionalSections();
@@ -1293,7 +1300,7 @@ async function renderVisitationForm(idStr) {
 
     const maritalStatusVal = document.getElementById('f_maritalStatus').value.trim() || null;
     const isSingle = maritalStatusVal === 'أعزب';
-    const isMarriedOrWidowed = maritalStatusVal === 'متزوج/متزوجة' || maritalStatusVal === 'أرمل/أرملة';
+    const spouseKind = visitationSpouseSectionFor(maritalStatusVal); // 'husband' | 'wife' | null
 
     const educationStage = isSingle ? (document.getElementById('f_educationStage').value.trim() || null) : null;
 
@@ -1324,9 +1331,9 @@ async function renderVisitationForm(idStr) {
         notes: notes || null,
       };
     }
-    const husband = isMarriedOrWidowed ? readSpouseBlock('h') : null;
-    const wife = isMarriedOrWidowed ? readSpouseBlock('w') : null;
-    const children = isMarriedOrWidowed
+    const husband = spouseKind === 'husband' ? readSpouseBlock('h') : null;
+    const wife = spouseKind === 'wife' ? readSpouseBlock('w') : null;
+    const children = spouseKind
       ? Array.from(document.querySelectorAll('#childrenList .child-row'))
           .map((row) => ({
             type: row.querySelector('.child-type-select').value,
@@ -1338,7 +1345,6 @@ async function renderVisitationForm(idStr) {
     const record = {
       id: isEdit ? v.id : await VisitationDB.nextId(),
       name: nameField.value.trim(),
-      spouseName: document.getElementById('f_spouseName').value.trim() || null,
       maritalStatus: maritalStatusVal,
       educationStage,
       husband,
@@ -1467,7 +1473,6 @@ async function renderVisitationProfile(idStr) {
       <div class="info-section">
         <h3>${ICONS.church} بيانات الأسرة</h3>
         <dl class="info-grid">
-          <div class="info-item"><dt>اسم الزوج/الزوجة</dt><dd class="${fam.spouseName ? '' : 'muted'}">${fieldOrFallback(fam.spouseName)}</dd></div>
           <div class="info-item"><dt>الحالة الاجتماعية</dt><dd class="${fam.maritalStatus ? '' : 'muted'}">${fieldOrFallback(fam.maritalStatus)}</dd></div>
           <div class="info-item"><dt>الوظيفة</dt><dd class="${fam.job ? '' : 'muted'}">${fieldOrFallback(fam.job)}</dd></div>
           <div class="info-item"><dt>أب الاعتراف</dt><dd class="${fam.confessionFather ? '' : 'muted'}">${fieldOrFallback(fam.confessionFather)}</dd></div>
