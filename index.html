@@ -40,5 +40,15 @@
 
 <script src="db.js?v=3"></script>
 <script src="app.js?v=7"></script>
+<script>
+  // Offline support: register the service worker so the app's own files
+  // (HTML/CSS/JS) keep working with no internet connection. IndexedDB data
+  // already works offline on its own; this only caches the app shell.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js').catch(() => {});
+    });
+  }
+</script>
 </body>
 </html>

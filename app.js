@@ -966,6 +966,14 @@ async function renderVisitationDataManagement() {
           </select>
         </div>
       </div>
+
+      <div class="admin-panel">
+        <h3>${ICONS.trash} حذف جميع بيانات الافتقاد</h3>
+        <p>يحذف كل أسر "خدمات الافتقاد" المسجلة على هذا الجهاز فقط. لا يؤثر إطلاقًا على بيانات "دليل الخدمات". يفضّل تصدير نسخة احتياطية قبل الحذف.</p>
+        <div class="admin-actions">
+          <button id="visitationWipeBtn" class="btn btn-danger">${ICONS.trash}<span>حذف جميع البيانات</span></button>
+        </div>
+      </div>
     </div>
   `;
 
@@ -995,6 +1003,13 @@ async function renderVisitationDataManagement() {
       showToast('الملف غير صالح: ' + err.message, 'danger');
     }
     e.target.value = '';
+  });
+
+  document.getElementById('visitationWipeBtn').addEventListener('click', async () => {
+    if (!confirm('هل أنت متأكد من حذف جميع بيانات خدمات الافتقاد؟ هذا الإجراء لا يؤثر على بيانات دليل الخدمات، ولا يمكن التراجع عنه.')) return;
+    await VisitationDB.clearAll();
+    showToast('تم حذف جميع بيانات خدمات الافتقاد', 'success');
+    router();
   });
 }
 
