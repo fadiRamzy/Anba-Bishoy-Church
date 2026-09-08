@@ -396,6 +396,8 @@ async function router() {
     if (segments[1] === 'add') return renderVisitationForm(null);
     if (segments[1] === 'edit' && segments[2]) return renderVisitationForm(segments[2]);
     if (segments[1] === 'member' && segments[2]) return renderVisitationProfile(segments[2]);
+    if (segments[1] === 'families') return renderVisitationFamilies(params);
+    if (segments[1] === 'guide') return renderVisitationGuide();
     return renderVisitationHome(params);
   }
 
@@ -645,13 +647,16 @@ function openDateModal({ title, message, confirmLabel }) {
 }
 
 function visitationCardHTML(f) {
-  const metaParts = [f.job, f.neighborhood || f.city].filter(Boolean);
+  const latest = latestVisitationDate(f);
+  const addressPart = [f.neighborhood, f.street].filter(Boolean).join(' ');
+  const line2 = [f.job, addressPart].filter(Boolean).join(' - ');
   return `
     <a href="#/visitation/member/${f.id}" class="member-card">
       <span class="member-avatar">${escapeHTML(initials(f.name))}</span>
       <span class="member-info">
         <span class="member-name">${escapeHTML(f.name)}</span>
-        <span class="member-meta">${escapeHTML(metaParts.join(' · ') || '—')}</span>
+        <span class="member-meta">${escapeHTML(line2 || '—')}</span>
+        <span class="member-meta-visit">تاريخ آخر افتقاد - ${latest ? formatDMY(latest) : 'لم يتم الافتقاد بعد'}</span>
       </span>
     </a>`;
 }
@@ -661,15 +666,63 @@ function renderVisitationListOrEmpty(list, emptyMessage) {
   return `<div class="member-list">${list.map(visitationCardHTML).join('')}</div>`;
 }
 
-/* #/visitation — search box + "إضافة أسرة" + family list. */
+/* #/visitation — "إضافة أسرة" / "الأسر" / "دليل الافتقاد" entry buttons only.
+   The full registered list now lives on #/visitation/families (change 2). */
 async function renderVisitationHome() {
   renderVisitationChrome('/', 'رجوع للصفحة الرئيسية');
   const total = await VisitationDB.count();
-  const all = await VisitationDB.getAll();
 
   APP_ROOT.innerHTML = `
     <div class="container">
       <p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>خدمات الافتقاد</span></p>
+      <p class="search-hint" style="margin:18px 4px 0;">${total} أسرة مسجّلة على هذا الجهاز</p>
+
+      <div class="visitation-home-actions">
+        <a href="#/visitation/add" class="btn btn-primary">${ICONS.plus}<span>إضافة أسرة</span></a>
+        <a href="#/visitation/families" class="btn btn-outline">${ICONS.users}<span>الأسر</span></a>
+        <a href="#/visitation/guide" class="btn btn-outline">${ICONS.calendar}<span>دليل الافتقاد</span></a>
+      </div>
+    </div>
+  `;
+}
+
+/* #/visitation/families — complete registered list with search + filters
+   (change 2). Reads straight from VisitationDB; no separate data store. */
+function uniqueSortedValues(values) {
+  const set = new Set(values.filter(Boolean).map((v) => v.toString().trim()).filter(Boolean));
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'ar'));
+}
+
+function plainOptionsHTML(values, selected) {
+  return values.map((v) => `<option value="${escapeHTML(v)}" ${v === selected ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('');
+}
+
+function familyMatchesFilters(f, filters) {
+  if (filters.neighborhood && (f.neighborhood || '') !== filters.neighborhood) return false;
+  if (filters.job && (f.job || '') !== filters.job) return false;
+  if (filters.service && (f.service || '') !== filters.service) return false;
+  if (filters.confessionFather && (f.confessionFather || '') !== filters.confessionFather) return false;
+  if (filters.birthMonth) {
+    const parts = (f.birthDate || '').split('-');
+    const month = parts.length === 3 ? Number(parts[1]) : null;
+    if (month !== Number(filters.birthMonth)) return false;
+  }
+  return true;
+}
+
+async function renderVisitationFamilies() {
+  renderVisitationChrome('/visitation', 'رجوع لخدمات الافتقاد');
+  const all = await VisitationDB.getAll();
+
+  const neighborhoods = uniqueSortedValues(all.map((f) => f.neighborhood));
+  const jobs = uniqueSortedValues(all.map((f) => f.job));
+  const services = uniqueSortedValues(all.map((f) => f.service));
+  const confessionFathers = uniqueSortedValues(all.map((f) => f.confessionFather));
+
+  APP_ROOT.innerHTML = `
+    <div class="container">
+      <p class="breadcrumbs"><a href="#/visitation">خدمات الافتقاد</a><span class="sep">/</span><span>الأسر</span></p>
+      <h2 class="section-title">الأسر</h2>
 
       <div class="search-panel">
         <form id="visitationSearchForm">
@@ -678,31 +731,162 @@ async function renderVisitationHome() {
             <input type="text" id="visitationSearchInput" placeholder="ابحث بالاسم، الموبايل، الوظيفة، المدينة، الحي، الشارع..." autocomplete="off" />
           </div>
         </form>
-        <p class="search-hint">ابحث في بيانات الأسر (${total} أسرة مسجّلة على هذا الجهاز)</p>
+        <p class="search-hint" id="visitationResultsHint">${all.length} أسرة مسجّلة على هذا الجهاز</p>
       </div>
 
-      <div class="add-member-cta">
-        <a href="#/visitation/add" class="btn btn-primary">${ICONS.plus}<span>إضافة أسرة</span></a>
+      <div class="filter-bar">
+        <div class="field">
+          <label for="filterNeighborhood">الحي</label>
+          <select id="filterNeighborhood"><option value="">الكل</option>${plainOptionsHTML(neighborhoods)}</select>
+        </div>
+        <div class="field">
+          <label for="filterJob">الوظيفة</label>
+          <select id="filterJob"><option value="">الكل</option>${plainOptionsHTML(jobs)}</select>
+        </div>
+        <div class="field">
+          <label for="filterService">الخدمة</label>
+          <select id="filterService"><option value="">الكل</option>${plainOptionsHTML(services)}</select>
+        </div>
+        <div class="field">
+          <label for="filterConfessionFather">أب الاعتراف</label>
+          <select id="filterConfessionFather"><option value="">الكل</option>${plainOptionsHTML(confessionFathers)}</select>
+        </div>
+        <div class="field">
+          <label for="filterBirthMonth">شهر الميلاد</label>
+          <select id="filterBirthMonth"><option value="">الكل</option>${ARABIC_MONTHS.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('')}</select>
+        </div>
+        <div class="field filter-clear-field">
+          <label>&nbsp;</label>
+          <button type="button" class="btn btn-outline btn-sm" id="clearFiltersBtn">مسح الفلاتر</button>
+        </div>
       </div>
 
-      <div id="visitationResults">${renderVisitationListOrEmpty(all, 'لا توجد أسر مسجلة بعد')}</div>
+      <div id="visitationResults"></div>
     </div>
   `;
 
   const searchInput = document.getElementById('visitationSearchInput');
   const resultsBox = document.getElementById('visitationResults');
+  const hintEl = document.getElementById('visitationResultsHint');
+  const filterEls = {
+    neighborhood: document.getElementById('filterNeighborhood'),
+    job: document.getElementById('filterJob'),
+    service: document.getElementById('filterService'),
+    confessionFather: document.getElementById('filterConfessionFather'),
+    birthMonth: document.getElementById('filterBirthMonth'),
+  };
 
-  async function runVisitationSearch() {
-    const val = searchInput.value.trim();
-    const results = val ? await VisitationDB.searchAll(val) : await VisitationDB.getAll();
-    const emptyMsg = val ? `لا توجد أسر مطابقة لـ "${escapeHTML(val)}"` : 'لا توجد أسر مسجلة بعد';
-    resultsBox.innerHTML = renderVisitationListOrEmpty(results, emptyMsg);
+  async function refresh() {
+    const query = searchInput.value.trim();
+    const base = query ? await VisitationDB.searchAll(query) : all;
+    const filters = {
+      neighborhood: filterEls.neighborhood.value,
+      job: filterEls.job.value,
+      service: filterEls.service.value,
+      confessionFather: filterEls.confessionFather.value,
+      birthMonth: filterEls.birthMonth.value,
+    };
+    const filtered = base.filter((f) => familyMatchesFilters(f, filters));
+    const anyFilterActive = query || Object.values(filters).some(Boolean);
+    const emptyMsg = anyFilterActive ? 'لا توجد أسر مطابقة لهذا البحث/الفلاتر' : 'لا توجد أسر مسجلة بعد';
+    resultsBox.innerHTML = renderVisitationListOrEmpty(filtered, emptyMsg);
+    hintEl.textContent = anyFilterActive ? `${filtered.length} من ${all.length} أسرة` : `${all.length} أسرة مسجّلة على هذا الجهاز`;
   }
-  searchInput.addEventListener('input', debounce(runVisitationSearch, 200));
+
+  searchInput.addEventListener('input', debounce(refresh, 200));
   document.getElementById('visitationSearchForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    runVisitationSearch();
+    refresh();
   });
+  Object.values(filterEls).forEach((el) => el.addEventListener('change', refresh));
+  document.getElementById('clearFiltersBtn').addEventListener('click', () => {
+    searchInput.value = '';
+    Object.values(filterEls).forEach((el) => { el.value = ''; });
+    refresh();
+  });
+
+  refresh();
+}
+
+/* #/visitation/guide — "دليل الافتقاد" (change 3): only people with at least
+   one visitation date, sorted longest-overdue first, with a dynamically
+   computed (never stored) elapsed-time string. */
+function arabicUnitPhrase(n, singular, dual, plural) {
+  if (n === 1) return singular;
+  if (n === 2) return dual;
+  if (n >= 3 && n <= 10) return `${n} ${plural}`;
+  return `${n} ${singular}`;
+}
+
+function formatElapsedSince(isoDateStr) {
+  const start = new Date(`${isoDateStr}T00:00:00`);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const totalDays = Math.floor((now - start) / 86400000);
+  if (totalDays <= 0) return 'اليوم';
+
+  let years = now.getFullYear() - start.getFullYear();
+  let months = now.getMonth() - start.getMonth();
+  let days = now.getDate() - start.getDate();
+  if (days < 0) {
+    months -= 1;
+    days += new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+  }
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  const parts = [];
+  if (years > 0) parts.push(arabicUnitPhrase(years, 'سنة', 'سنتين', 'سنوات'));
+  if (months > 0) parts.push(arabicUnitPhrase(months, 'شهر', 'شهرين', 'أشهر'));
+  if (days > 0 || parts.length === 0) parts.push(arabicUnitPhrase(days, 'يوم', 'يومين', 'أيام'));
+  return parts.join(' و ');
+}
+
+function latestVisitationDate(f) {
+  const dates = Array.isArray(f.visitationDates) ? f.visitationDates.slice().sort((a, b) => b.localeCompare(a)) : [];
+  return dates[0] || null;
+}
+
+function guideCardHTML(item) {
+  const f = item.family;
+  const addressPart = [f.neighborhood, f.street].filter(Boolean).join(' ');
+  const line2 = [f.job, addressPart].filter(Boolean).join(' - ');
+  const firstName = (f.name || '').trim().split(/\s+/)[0] || f.name;
+  return `
+    <a href="#/visitation/member/${f.id}" class="member-card">
+      <span class="member-avatar">${escapeHTML(initials(f.name))}</span>
+      <span class="member-info">
+        <span class="member-name">${escapeHTML(f.name)}</span>
+        <span class="member-meta">${escapeHTML(line2 || '—')}</span>
+        <span class="member-meta-visit">لم يتم افتقاد ${escapeHTML(firstName)} منذ ${item.elapsedText}</span>
+      </span>
+    </a>`;
+}
+
+async function renderVisitationGuide() {
+  renderVisitationChrome('/visitation', 'رجوع لخدمات الافتقاد');
+  const all = await VisitationDB.getAll();
+
+  const withLatest = all
+    .map((f) => ({ family: f, latest: latestVisitationDate(f) }))
+    .filter((x) => x.latest); // only people with at least one visitation date
+
+  withLatest.sort((a, b) => a.latest.localeCompare(b.latest)); // oldest last-visit first = longest overdue first
+
+  const items = withLatest.map((x) => ({ ...x, elapsedText: formatElapsedSince(x.latest) }));
+
+  APP_ROOT.innerHTML = `
+    <div class="container">
+      <p class="breadcrumbs"><a href="#/visitation">خدمات الافتقاد</a><span class="sep">/</span><span>دليل الافتقاد</span></p>
+      <h2 class="section-title">دليل الافتقاد</h2>
+      <p class="section-sub">الأسر مرتبة من الأطول غيابًا عن الافتقاد إلى الأحدث افتقادًا</p>
+      <div id="visitationGuideResults">
+        ${items.length ? `<div class="member-list">${items.map(guideCardHTML).join('')}</div>` : `<div class="empty-state">${ICONS.empty}<p>لا توجد أسر لها تاريخ افتقاد مسجل بعد</p></div>`}
+      </div>
+    </div>
+  `;
 }
 
 /* #/visitation/add and #/visitation/edit/:id */

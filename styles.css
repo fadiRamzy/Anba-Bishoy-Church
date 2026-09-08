@@ -310,6 +310,42 @@ button {
   text-align: center;
 }
 
+/* #/visitation main page action row: إضافة أسرة / الأسر / دليل الافتقاد */
+.visitation-home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin: 26px 0;
+}
+
+/* #/visitation/families filter row */
+.filter-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px 18px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  padding: 20px 22px;
+  margin: 0 0 22px;
+}
+.filter-clear-field { justify-content: flex-end; }
+.filter-clear-field .btn { width: 100%; }
+
+/* Third line on visitation cards (change 1) — latest visitation date /
+   elapsed-time reminder text. */
+.member-meta-visit {
+  display: block;
+  color: var(--color-maroon);
+  font-size: .8rem;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ==========================================================================
    Nav cards (القطاع / الحي / الرحلة / المدينة)
    ========================================================================== */
