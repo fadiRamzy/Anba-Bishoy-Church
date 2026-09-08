@@ -57,6 +57,7 @@ const BRAND_VERSES = {
 const BRAND_TAGLINES = {
   home: 'دليل الخدام لمتابعة الافتقاد',
   landing: 'دليل خدمات الكنيسة',
+  visitation: 'دليل الكاهن لمتابعة الافتقاد',
 };
 
 function applyHeaderChrome(section) {
@@ -294,6 +295,39 @@ function openPinModal({ title, message, confirmLabel, onSubmit, onCancel }) {
   setTimeout(() => input.focus(), 30);
 }
 
+/* ---------------------------------------------------------------------- */
+/*  خدمات الافتقاد — entry password gate (separate from Admin's PIN).      */
+/*  Reuses the exact same openPinModal() pattern as Admin above.          */
+/* ---------------------------------------------------------------------- */
+const VISITATION_PIN_HASH = 'eb5af8ab99b55cda453f70e6a92c7b327bd8f76f49ff6a81c18ade4c26690057';
+
+const VisitationAuth = {
+  unlockedKey: 'visitation_unlocked',
+
+  isUnlocked() {
+    return sessionStorage.getItem(this.unlockedKey) === '1';
+  },
+
+  require() {
+    if (this.isUnlocked()) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      openPinModal({
+        title: 'خدمات الافتقاد',
+        message: 'من فضلك أدخل كلمة المرور للدخول إلى خدمات الافتقاد.',
+        confirmLabel: 'دخول',
+        onSubmit: async (pin, close) => {
+          const hash = await sha256Hex(pin || '');
+          if (hash !== VISITATION_PIN_HASH) return 'كلمة المرور غير صحيحة';
+          sessionStorage.setItem(this.unlockedKey, '1');
+          close();
+          resolve(true);
+        },
+        onCancel: () => resolve(false),
+      });
+    });
+  },
+};
+
 function renderAdminButton() {
   const btn = document.getElementById('adminToggle');
   if (!btn) return;
@@ -340,8 +374,18 @@ async function router() {
 
   // Platform-level main landing page (the two big service buttons).
   if (segments.length === 0) { applyHeaderChrome('landing'); return renderLanding(); }
-  // "خدمات الافتقاد" — placeholder section for now.
-  if (segments[0] === 'visitation') { applyHeaderChrome('visitation'); return renderVisitation(); }
+
+  // "خدمات الافتقاد" — password-gated before entering (see item 12).
+  if (segments[0] === 'visitation') {
+    const ok = await VisitationAuth.require();
+    if (!ok) { navigate('/'); return; }
+    applyHeaderChrome('visitation');
+    if (segments.length === 1) return renderVisitationHome(params);
+    if (segments[1] === 'add') return renderVisitationForm(null);
+    if (segments[1] === 'edit' && segments[2]) return renderVisitationForm(segments[2]);
+    if (segments[1] === 'member' && segments[2]) return renderVisitationProfile(segments[2]);
+    return renderVisitationHome(params);
+  }
 
   // "دليل الخدمات" — the original, existing website, unchanged, now living
   // under the /home (and its existing sub-routes) instead of the bare root.
@@ -412,24 +456,484 @@ async function renderLanding() {
 }
 
 /* ---------------------------------------------------------------------- */
-/*  Visitation services — placeholder only for this step. The full        */
-/*  functionality (family registration, search, reports...) will be added  */
-/*  in a future step.                                                      */
+/*  خدمات الافتقاد — Visitation Services                                   */
+/*  Separate data store (VisitationDB) and pages, reusing the existing     */
+/*  site's components/styling/database patterns wherever possible.        */
 /* ---------------------------------------------------------------------- */
-async function renderVisitation() {
+function renderVisitationChrome(backHash, backLabel) {
   document.getElementById('topNav').innerHTML = `
-    <span><a href="#/" class="back-link">${ICONS.back}<span>رجوع للصفحة الرئيسية</span></a></span>
+    <span><a href="#${backHash}" class="back-link">${ICONS.back}<span>${escapeHTML(backLabel)}</span></a></span>
     <span></span>
   `;
+}
+
+const MARITAL_STATUS_OPTIONS = ['أعزب', 'متزوج/متزوجة', 'أرمل/أرملة'];
+
+/* 'YYYY-MM-DD' -> 'DD/MM/YYYY', string-based (no Date object) so the
+   displayed day never shifts due to timezone conversion. */
+function formatDMY(isoDateStr) {
+  const parts = (isoDateStr || '').split('-');
+  if (parts.length !== 3) return isoDateStr || '';
+  const [y, m, d] = parts;
+  return `${d}/${m}/${y}`;
+}
+
+/* Small date-picker modal, reusing the exact same look/markup as
+   openPinModal() (same CSS classes) but with a date input. */
+function openDateModal({ title, message, confirmLabel }) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'pin-modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="pin-modal" role="dialog" aria-modal="true">
+        <h3>${escapeHTML(title)}</h3>
+        <p style="color:var(--color-ink-soft);font-size:.88rem;">${escapeHTML(message)}</p>
+        <input type="date" />
+        <div class="field-error" style="min-height:1.2em;"></div>
+        <div class="form-actions" style="justify-content:center;">
+          <button class="btn btn-outline btn-cancel">إلغاء</button>
+          <button class="btn btn-primary btn-confirm">${escapeHTML(confirmLabel)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    const input = backdrop.querySelector('input');
+    const errorEl = backdrop.querySelector('.field-error');
+    const close = () => backdrop.remove();
+    backdrop.querySelector('.btn-cancel').addEventListener('click', () => { close(); resolve(null); });
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) { close(); resolve(null); } });
+    const submit = () => {
+      if (!input.value) { errorEl.textContent = 'من فضلك اختر تاريخًا'; return; }
+      close();
+      resolve(input.value);
+    };
+    backdrop.querySelector('.btn-confirm').addEventListener('click', submit);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+    setTimeout(() => input.focus(), 30);
+  });
+}
+
+function visitationCardHTML(f) {
+  const metaParts = [f.job, f.neighborhood || f.city].filter(Boolean);
+  return `
+    <a href="#/visitation/member/${f.id}" class="member-card">
+      <span class="member-avatar">${escapeHTML(initials(f.name))}</span>
+      <span class="member-info">
+        <span class="member-name">${escapeHTML(f.name)}</span>
+        <span class="member-meta">${escapeHTML(metaParts.join(' · ') || '—')}</span>
+      </span>
+    </a>`;
+}
+
+function renderVisitationListOrEmpty(list, emptyMessage) {
+  if (!list.length) return `<div class="empty-state">${ICONS.empty}<p>${emptyMessage}</p></div>`;
+  return `<div class="member-list">${list.map(visitationCardHTML).join('')}</div>`;
+}
+
+/* #/visitation — search box + "إضافة أسرة" + family list. */
+async function renderVisitationHome() {
+  renderVisitationChrome('/', 'رجوع للصفحة الرئيسية');
+  const total = await VisitationDB.count();
+  const all = await VisitationDB.getAll();
+
   APP_ROOT.innerHTML = `
     <div class="container">
       <p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>خدمات الافتقاد</span></p>
-      <div class="placeholder-panel">
-        <h2 class="section-title">خدمات الافتقاد</h2>
-        <p class="section-sub">هذا القسم قيد الإعداد حاليًا، وسيتم تفعيله قريبًا بمشيئة الرب.</p>
+
+      <div class="search-panel">
+        <form id="visitationSearchForm">
+          <div class="search-box">
+            ${ICONS.search}
+            <input type="text" id="visitationSearchInput" placeholder="ابحث بالاسم، الموبايل، الوظيفة، المدينة، الحي، الشارع..." autocomplete="off" />
+          </div>
+        </form>
+        <p class="search-hint">ابحث في بيانات الأسر (${total} أسرة مسجّلة على هذا الجهاز)</p>
+      </div>
+
+      <div class="add-member-cta">
+        <a href="#/visitation/add" class="btn btn-primary">${ICONS.plus}<span>إضافة أسرة</span></a>
+      </div>
+
+      <div id="visitationResults">${renderVisitationListOrEmpty(all, 'لا توجد أسر مسجلة بعد')}</div>
+    </div>
+  `;
+
+  const searchInput = document.getElementById('visitationSearchInput');
+  const resultsBox = document.getElementById('visitationResults');
+
+  async function runVisitationSearch() {
+    const val = searchInput.value.trim();
+    const results = val ? await VisitationDB.searchAll(val) : await VisitationDB.getAll();
+    const emptyMsg = val ? `لا توجد أسر مطابقة لـ "${escapeHTML(val)}"` : 'لا توجد أسر مسجلة بعد';
+    resultsBox.innerHTML = renderVisitationListOrEmpty(results, emptyMsg);
+  }
+  searchInput.addEventListener('input', debounce(runVisitationSearch, 200));
+  document.getElementById('visitationSearchForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    runVisitationSearch();
+  });
+}
+
+/* #/visitation/add and #/visitation/edit/:id */
+async function renderVisitationForm(idStr) {
+  const isEdit = !!idStr;
+  renderVisitationChrome(isEdit ? `/visitation/member/${idStr}` : '/visitation', 'رجوع لخدمات الافتقاد');
+
+  const existing = isEdit ? await VisitationDB.getById(idStr) : null;
+  if (isEdit && !existing) return navigate('/visitation');
+
+  const v = existing || {};
+
+  APP_ROOT.innerHTML = `
+    <div class="container">
+      <p class="breadcrumbs"><a href="#/visitation">خدمات الافتقاد</a><span class="sep">/</span><span>${isEdit ? 'تعديل بيانات أسرة' : 'إضافة أسرة'}</span></p>
+      <h2 class="section-title">${isEdit ? 'تعديل بيانات: ' + escapeHTML(v.name || '') : 'إضافة أسرة جديدة'}</h2>
+      <p class="section-sub">الحقول المطلوبة معلّم عليها بعلامة *</p>
+
+      <div class="duplicate-warning" id="dupWarning"></div>
+
+      <form class="form-card" id="visitationForm" novalidate>
+        <div class="form-grid">
+          <div class="field full">
+            <label for="f_name">الاسم <span class="req">*</span></label>
+            <input type="text" id="f_name" name="name" required value="${escapeHTML(v.name || '')}" />
+            <div class="field-error"></div>
+          </div>
+
+          <div class="field full">
+            <label for="f_spouseName">اسم الزوج/الزوجة</label>
+            <input type="text" id="f_spouseName" value="${escapeHTML(v.spouseName || '')}" />
+          </div>
+
+          ${selectFieldHTML({ field: 'maritalStatus', label: 'الحالة الاجتماعية' }, v.maritalStatus, MARITAL_STATUS_OPTIONS)}
+
+          <div class="field">
+            <label for="f_phone1">رقم الموبايل</label>
+            <input type="tel" id="f_phone1" name="phone1" value="${escapeHTML(v.phone1 || '')}" />
+          </div>
+          <div class="field">
+            <label for="f_phone2">رقم الموبايل (2)</label>
+            <input type="tel" id="f_phone2" name="phone2" value="${escapeHTML(v.phone2 || '')}" />
+          </div>
+
+          ${selectFieldHTML({ field: 'city', label: 'المدينة' }, v.city, CITY_OPTIONS)}
+          ${selectFieldHTML({ field: 'neighborhood', label: 'الحي' }, v.neighborhood, NEIGHBORHOOD_OPTIONS)}
+
+          <div class="field full">
+            <label for="f_street">الشارع</label>
+            <input type="text" id="f_street" name="street" value="${escapeHTML(v.street || '')}" />
+          </div>
+
+          <div class="field full">
+            <label>اللوكيشن</label>
+            <div class="location-cell">
+              <span id="locationStatus">${v.locationLink ? `<a href="${escapeHTML(v.locationLink)}" target="_blank" rel="noopener noreferrer" class="location-link">${ICONS.location} عرض اللوكيشن على Google Maps</a>` : `<span class="muted">لم يتم تسجيل لوكيشن بعد</span>`}</span>
+              <button type="button" class="btn btn-outline btn-sm" id="addLocationBtn">${ICONS.location}<span>إضافة اللوكيشن</span></button>
+            </div>
+            <input type="hidden" id="f_locationLink" value="${escapeHTML(v.locationLink || '')}" />
+          </div>
+
+          ${textFieldHTML({ field: 'job', label: 'الوظيفة' }, v.job)}
+          ${textFieldHTML({ field: 'confessionFather', label: 'أب الاعتراف' }, v.confessionFather)}
+          ${textFieldHTML({ field: 'service', label: 'الخدمة' }, v.service)}
+
+          <div class="field">
+            <label for="f_birthDate">تاريخ الميلاد</label>
+            <input type="date" id="f_birthDate" name="birthDate" value="${v.birthDate || ''}" />
+          </div>
+          <div class="field">
+            <label for="f_age">السن (لو التاريخ غير متاح)</label>
+            <input type="number" min="0" max="130" id="f_age" name="age" value="${v.age ?? ''}" />
+          </div>
+
+          <div class="field">
+            <label for="f_visitDate">تواريخ الافتقاد (إضافة تاريخ جديد)</label>
+            <input type="date" id="f_visitDate" name="visitDate" />
+          </div>
+
+          <div class="field full">
+            <label for="f_notes">الملاحظات</label>
+            <textarea id="f_notes" name="notes">${escapeHTML(v.notes || '')}</textarea>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <a href="#${isEdit ? '/visitation/member/' + v.id : '/visitation'}" class="btn btn-outline">إلغاء</a>
+          <button type="submit" class="btn btn-primary">${isEdit ? 'حفظ التعديلات' : 'إضافة الأسرة'}</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const nameInput = document.getElementById('f_name');
+  const phone1Input = document.getElementById('f_phone1');
+
+  const addLocationBtn = document.getElementById('addLocationBtn');
+  const locationStatus = document.getElementById('locationStatus');
+  const locationField = document.getElementById('f_locationLink');
+  addLocationBtn.addEventListener('click', () => {
+    if (!('geolocation' in navigator)) {
+      showToast('المتصفح لا يدعم تحديد الموقع', 'error');
+      return;
+    }
+    const originalHTML = addLocationBtn.innerHTML;
+    addLocationBtn.disabled = true;
+    addLocationBtn.innerHTML = '<span>جارٍ تحديد الموقع...</span>';
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const link = `https://www.google.com/maps?q=${latitude},${longitude}`;
+        locationField.value = link;
+        locationStatus.innerHTML = `<a href="${escapeHTML(link)}" target="_blank" rel="noopener noreferrer" class="location-link">${ICONS.location} عرض اللوكيشن على Google Maps</a>`;
+        addLocationBtn.disabled = false;
+        addLocationBtn.innerHTML = originalHTML;
+        showToast('تم تحديد اللوكيشن بنجاح', 'success');
+      },
+      (err) => {
+        addLocationBtn.disabled = false;
+        addLocationBtn.innerHTML = originalHTML;
+        if (err.code === err.PERMISSION_DENIED) {
+          showToast('لازم تسمح بالوصول للموقع عشان تقدر تسجل اللوكيشن', 'error');
+        } else {
+          showToast('تعذر تحديد الموقع، حاول تاني', 'error');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  });
+
+  const birthDateInput = document.getElementById('f_birthDate');
+  const ageInput = document.getElementById('f_age');
+  function syncAgeFromBirthDate() {
+    if (birthDateInput.value) {
+      const computed = computeAge({ birthDate: birthDateInput.value });
+      if (computed !== null) ageInput.value = computed;
+      ageInput.readOnly = true;
+    } else {
+      ageInput.readOnly = false;
+    }
+  }
+  birthDateInput.addEventListener('input', syncAgeFromBirthDate);
+  birthDateInput.addEventListener('change', syncAgeFromBirthDate);
+  syncAgeFromBirthDate();
+
+  const dupBox = document.getElementById('dupWarning');
+  async function checkDuplicates() {
+    const name = nameInput.value.trim();
+    if (name.length < 2) { dupBox.classList.remove('show'); return; }
+    const matches = await VisitationDB.searchByName(name);
+    const relevant = matches.filter((m) => !isEdit || m.id !== v.id);
+    if (relevant.length) {
+      dupBox.innerHTML = `⚠️ يوجد بالفعل ${relevant.length} أسرة مشابهة في قاعدة البيانات: ` +
+        relevant.slice(0, 4).map((m) => escapeHTML(m.name)).join('، ') +
+        ' — تأكد إن الأسرة مش مسجلة قبل كده.';
+      dupBox.classList.add('show');
+    } else {
+      dupBox.classList.remove('show');
+    }
+  }
+  nameInput.addEventListener('input', debounce(checkDuplicates, 300));
+  phone1Input.addEventListener('input', debounce(checkDuplicates, 300));
+
+  document.getElementById('visitationForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nameField = document.getElementById('f_name');
+    const nameErr = nameField.parentElement.querySelector('.field-error');
+    if (!nameField.value.trim()) {
+      nameField.parentElement.classList.add('invalid');
+      nameErr.textContent = 'الاسم مطلوب';
+      nameField.focus();
+      return;
+    }
+    nameField.parentElement.classList.remove('invalid');
+    nameErr.textContent = '';
+
+    const existingDates = Array.isArray(v.visitationDates) ? v.visitationDates.slice() : [];
+    const newDateVal = document.getElementById('f_visitDate').value;
+    if (newDateVal && !existingDates.includes(newDateVal)) existingDates.push(newDateVal);
+
+    const record = {
+      id: isEdit ? v.id : await VisitationDB.nextId(),
+      name: nameField.value.trim(),
+      spouseName: document.getElementById('f_spouseName').value.trim() || null,
+      maritalStatus: document.getElementById('f_maritalStatus').value.trim() || null,
+      phone1: document.getElementById('f_phone1').value.trim() || null,
+      phone2: document.getElementById('f_phone2').value.trim() || null,
+      city: document.getElementById('f_city').value.trim() || null,
+      neighborhood: document.getElementById('f_neighborhood').value.trim() || null,
+      street: document.getElementById('f_street').value.trim() || null,
+      locationLink: document.getElementById('f_locationLink').value.trim() || v.locationLink || null,
+      job: document.getElementById('f_job').value.trim() || null,
+      confessionFather: document.getElementById('f_confessionFather').value.trim() || null,
+      service: document.getElementById('f_service').value.trim() || null,
+      birthDate: document.getElementById('f_birthDate').value || null,
+      birthDay: null, birthMonth: null, birthYear: null,
+      age: document.getElementById('f_age').value ? Number(document.getElementById('f_age').value) : null,
+      notes: document.getElementById('f_notes').value.trim() || null,
+      visitationDates: existingDates,
+    };
+    if (record.birthDate) {
+      const d = new Date(record.birthDate);
+      if (!isNaN(d.getTime())) {
+        record.birthDay = d.getDate();
+        record.birthMonth = d.getMonth() + 1;
+        record.birthYear = d.getFullYear();
+      }
+    }
+
+    await VisitationDB.put(record);
+    showToast(isEdit ? 'تم حفظ التعديلات' : 'تم إضافة الأسرة بنجاح', 'success');
+    navigate(`/visitation/member/${record.id}`);
+  });
+}
+
+/* #/visitation/member/:id */
+async function renderVisitationProfile(idStr) {
+  renderVisitationChrome('/visitation', 'رجوع لخدمات الافتقاد');
+  const fam = await VisitationDB.getById(idStr);
+  if (!fam) {
+    APP_ROOT.innerHTML = `<div class="container"><div class="empty-state">${ICONS.empty}<p>هذه الأسرة غير موجودة</p></div></div>`;
+    return;
+  }
+  const age = computeAge(fam);
+  const birth = formatBirthDate(fam);
+  const dates = Array.isArray(fam.visitationDates) ? fam.visitationDates.slice().sort((a, b) => b.localeCompare(a)) : [];
+  const latest = dates[0] || null;
+
+  APP_ROOT.innerHTML = `
+    <div class="container">
+      <p class="breadcrumbs"><a href="#/visitation">خدمات الافتقاد</a><span class="sep">/</span><span>الملف الشخصي</span></p>
+
+      <div class="profile-header">
+        <span class="profile-avatar">${escapeHTML(initials(fam.name))}</span>
+        <div>
+          <h1 class="profile-name">${escapeHTML(fam.name)}</h1>
+          <div class="profile-tags">
+            ${fam.job ? `<span class="tag">${escapeHTML(fam.job)}</span>` : ''}
+            ${fam.maritalStatus ? `<span class="tag">${escapeHTML(fam.maritalStatus)}</span>` : ''}
+            ${fam.neighborhood ? `<span class="tag">${escapeHTML(fam.neighborhood)}</span>` : ''}
+          </div>
+        </div>
+        <div class="profile-actions">
+          <button class="btn btn-outline btn-sm" id="editBtn">${ICONS.edit}<span>تعديل</span></button>
+          <button class="btn btn-danger btn-sm" id="deleteBtn">${ICONS.trash}<span>حذف</span></button>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <h3>${ICONS.phone} بيانات التواصل</h3>
+        <dl class="info-grid">
+          <div class="info-item"><dt>رقم الموبايل</dt><dd>${phoneLinkHTML(fam.phone1)}</dd></div>
+          <div class="info-item"><dt>رقم الموبايل (2)</dt><dd>${phoneLinkHTML(fam.phone2)}</dd></div>
+        </dl>
+      </div>
+
+      <div class="info-section">
+        <h3>${ICONS.location} العنوان</h3>
+        <dl class="info-grid">
+          <div class="info-item"><dt>المدينة</dt><dd class="${fam.city ? '' : 'muted'}">${fieldOrFallback(fam.city)}</dd></div>
+          <div class="info-item"><dt>الحي</dt><dd class="${fam.neighborhood ? '' : 'muted'}">${fieldOrFallback(fam.neighborhood)}</dd></div>
+          <div class="info-item full"><dt>الشارع</dt><dd class="${fam.street ? '' : 'muted'}">${streetFieldHTML(fam.street)}</dd></div>
+          <div class="info-item full">
+            <dt>اللوكيشن الحالي</dt>
+            <dd class="location-cell">
+              ${fam.locationLink ? `<a href="${escapeHTML(fam.locationLink)}" target="_blank" rel="noopener noreferrer" class="location-link">${ICONS.location} عرض اللوكيشن على Google Maps</a>` : `<span class="muted">لم يتم تسجيل لوكيشن بعد</span>`}
+              <button type="button" class="btn btn-outline btn-sm" id="addLocationBtn">${ICONS.location}<span>إضافة اللوكيشن</span></button>
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      <div class="info-section">
+        <h3>${ICONS.church} بيانات الأسرة</h3>
+        <dl class="info-grid">
+          <div class="info-item"><dt>اسم الزوج/الزوجة</dt><dd class="${fam.spouseName ? '' : 'muted'}">${fieldOrFallback(fam.spouseName)}</dd></div>
+          <div class="info-item"><dt>الحالة الاجتماعية</dt><dd class="${fam.maritalStatus ? '' : 'muted'}">${fieldOrFallback(fam.maritalStatus)}</dd></div>
+          <div class="info-item"><dt>الوظيفة</dt><dd class="${fam.job ? '' : 'muted'}">${fieldOrFallback(fam.job)}</dd></div>
+          <div class="info-item"><dt>أب الاعتراف</dt><dd class="${fam.confessionFather ? '' : 'muted'}">${fieldOrFallback(fam.confessionFather)}</dd></div>
+          <div class="info-item"><dt>الخدمة</dt><dd class="${fam.service ? '' : 'muted'}">${fieldOrFallback(fam.service)}</dd></div>
+        </dl>
+      </div>
+
+      <div class="info-section">
+        <h3>${ICONS.calendar} بيانات الميلاد</h3>
+        <dl class="info-grid">
+          <div class="info-item"><dt>تاريخ الميلاد</dt><dd class="${birth ? '' : 'muted'}">${birth || 'غير متوفر'}</dd></div>
+          <div class="info-item"><dt>السن</dt><dd class="${age !== null ? '' : 'muted'}">${age !== null ? age + ' سنة' : 'غير متوفر'}</dd></div>
+        </dl>
+      </div>
+
+      <div class="info-section">
+        <h3>${ICONS.calendar} تواريخ الافتقاد</h3>
+        <dl class="info-grid">
+          <div class="info-item full"><dt>آخر افتقاد</dt><dd class="${latest ? '' : 'muted'}">${latest ? formatDMY(latest) : 'لا يوجد افتقاد مسجل بعد'}</dd></div>
+        </dl>
+        ${dates.length ? `<ul class="visitation-history">${dates.map((d) => `<li>${formatDMY(d)}</li>`).join('')}</ul>` : ''}
+        <div class="form-actions" style="justify-content:flex-start;margin-top:10px;">
+          <button type="button" class="btn btn-outline btn-sm" id="addVisitDateBtn">${ICONS.calendar}<span>إضافة تاريخ افتقاد</span></button>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <h3>${ICONS.notes} ملاحظات إضافية</h3>
+        <dl class="info-grid">
+          <div class="info-item full"><dd class="${fam.notes ? '' : 'muted'}">${fieldOrFallback(fam.notes)}</dd></div>
+        </dl>
       </div>
     </div>
   `;
+
+  document.getElementById('editBtn').addEventListener('click', () => navigate(`/visitation/edit/${fam.id}`));
+  document.getElementById('deleteBtn').addEventListener('click', async () => {
+    if (!confirm(`هل تريد حذف "${fam.name}" نهائيًا من قاعدة البيانات؟`)) return;
+    await VisitationDB.remove(fam.id);
+    showToast('تم الحذف', 'success');
+    navigate('/visitation');
+  });
+
+  const addLocationBtn = document.getElementById('addLocationBtn');
+  addLocationBtn.addEventListener('click', () => {
+    if (!('geolocation' in navigator)) {
+      showToast('المتصفح لا يدعم تحديد الموقع', 'error');
+      return;
+    }
+    const originalHTML = addLocationBtn.innerHTML;
+    addLocationBtn.disabled = true;
+    addLocationBtn.innerHTML = '<span>جارٍ تحديد الموقع...</span>';
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        fam.locationLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
+        await VisitationDB.put(fam);
+        showToast('تم حفظ اللوكيشن بنجاح', 'success');
+        renderVisitationProfile(idStr);
+      },
+      (err) => {
+        addLocationBtn.disabled = false;
+        addLocationBtn.innerHTML = originalHTML;
+        if (err.code === err.PERMISSION_DENIED) {
+          showToast('لازم تسمح بالوصول للموقع عشان تقدر تسجل اللوكيشن', 'error');
+        } else {
+          showToast('تعذر تحديد الموقع، حاول تاني', 'error');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  });
+
+  document.getElementById('addVisitDateBtn').addEventListener('click', async () => {
+    const dateStr = await openDateModal({
+      title: 'إضافة تاريخ افتقاد',
+      message: 'اختر تاريخ الافتقاد. سيُضاف إلى السجل دون حذف التواريخ السابقة.',
+      confirmLabel: 'إضافة',
+    });
+    if (!dateStr) return;
+    const current = Array.isArray(fam.visitationDates) ? fam.visitationDates.slice() : [];
+    if (!current.includes(dateStr)) current.push(dateStr);
+    fam.visitationDates = current;
+    await VisitationDB.put(fam);
+    showToast('تم إضافة تاريخ الافتقاد', 'success');
+    renderVisitationProfile(idStr);
+  });
 }
 
 /* ---------------------------------------------------------------------- */

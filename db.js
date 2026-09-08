@@ -5,9 +5,10 @@
    ========================================================================== */
 
 const DB_NAME = 'churchMembersDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_MEMBERS = 'members';
 const STORE_SETTINGS = 'settings';
+const STORE_VISITATION = 'visitationFamilies';
 
 let dbInstance = null;
 
@@ -31,6 +32,15 @@ function openDatabase() {
 
       if (!db.objectStoreNames.contains(STORE_SETTINGS)) {
         db.createObjectStore(STORE_SETTINGS, { keyPath: 'key' });
+      }
+
+      // Visitation Services (خدمات الافتقاد): a separate store so the
+      // existing "members" data/schema is never touched.
+      if (!db.objectStoreNames.contains(STORE_VISITATION)) {
+        const vStore = db.createObjectStore(STORE_VISITATION, { keyPath: 'id' });
+        vStore.createIndex('name', 'name', { unique: false });
+        vStore.createIndex('city', 'city', { unique: false });
+        vStore.createIndex('neighborhood', 'neighborhood', { unique: false });
       }
     };
 
@@ -219,6 +229,100 @@ const MembersDB = {
     const remapped = parsed.map((m) => ({ ...m, id: nextId++ }));
     await this.bulkPut(remapped);
     return remapped.length;
+  },
+};
+
+/* ------------------------- visitation families CRUD --------------------- */
+/* Separate store from "members" — existing directory data/schema is never
+   touched. Mirrors MembersDB's patterns (getAll/getById/put/remove/search)
+   so the Visitation Services section reuses the same data-access shape. */
+
+const VisitationDB = {
+  async getAll() {
+    const store = await tx(STORE_VISITATION, 'readonly');
+    return new Promise((resolve, reject) => {
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async getById(id) {
+    const store = await tx(STORE_VISITATION, 'readonly');
+    return new Promise((resolve, reject) => {
+      const req = store.get(Number(id));
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async count() {
+    const store = await tx(STORE_VISITATION, 'readonly');
+    return new Promise((resolve, reject) => {
+      const req = store.count();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async nextId() {
+    const all = await this.getAll();
+    return all.reduce((max, m) => Math.max(max, Number(m.id) || 0), 0) + 1;
+  },
+
+  async put(family) {
+    const store = await tx(STORE_VISITATION, 'readwrite');
+    return new Promise((resolve, reject) => {
+      const req = store.put(family);
+      req.onsuccess = () => resolve(family);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async remove(id) {
+    const store = await tx(STORE_VISITATION, 'readwrite');
+    return new Promise((resolve, reject) => {
+      const req = store.delete(Number(id));
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  /* Case/spacing-tolerant Arabic-friendly substring search over name, for
+     the duplicate-warning check on the add/edit form (same pattern as
+     MembersDB.searchByName). */
+  async searchByName(query) {
+    const all = await this.getAll();
+    const norm = normalizeArabic(query);
+    if (!norm) return [];
+    return all.filter((f) => normalizeArabic(f.name || '').includes(norm));
+  },
+
+  /* Flexible/partial matching across name, spouse name, both mobile numbers
+     (digits-only), city, حي/neighborhood, street, job/profession, أب
+     الاعتراف, الخدمة and الحالة الاجتماعية. Case-insensitive and
+     Arabic-tolerant (via normalizeArabic), same behavior as
+     MembersDB.searchAll. */
+  async searchAll(query) {
+    const raw = (query || '').toString().trim();
+    if (!raw) return [];
+    const all = await this.getAll();
+    const norm = normalizeArabic(raw);
+    const digits = raw.replace(/\D/g, '');
+    return all.filter((f) => {
+      if (norm && normalizeArabic(f.name || '').includes(norm)) return true;
+      if (norm && normalizeArabic(f.spouseName || '').includes(norm)) return true;
+      if (digits) {
+        const p1 = (f.phone1 || '').toString().replace(/\D/g, '');
+        const p2 = (f.phone2 || '').toString().replace(/\D/g, '');
+        if ((p1 && p1.includes(digits)) || (p2 && p2.includes(digits))) return true;
+      }
+      if (norm) {
+        const otherFields = [f.city, f.neighborhood, f.street, f.job, f.confessionFather, f.service, f.maritalStatus];
+        if (otherFields.some((v) => v && normalizeArabic(v.toString()).includes(norm))) return true;
+      }
+      return false;
+    });
   },
 };
 

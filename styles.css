@@ -395,22 +395,26 @@ button {
   color: var(--color-maroon-dark);
 }
 
-/* Landing page only: the header verse is longer here, so it gets more room
-   to sit on one line where the screen allows it. Scoped to data-section so
-   the existing دليل الخدمات header (verse + reference) is untouched. */
-body[data-section="landing"] .brand-verse {
+/* Landing page and Visitation page: the header verse is longer here, so it
+   gets more room to sit on one line where the screen allows it. Scoped to
+   data-section so the existing دليل الخدمات header (verse + reference) is
+   untouched. */
+body[data-section="landing"] .brand-verse,
+body[data-section="visitation"] .brand-verse {
   max-width: 900px;
 }
 
-.placeholder-panel {
-  background: var(--color-surface);
-  border: 1px solid var(--color-line);
-  border-radius: var(--radius-lg);
-  padding: 40px 24px;
-  text-align: center;
-  max-width: 560px;
-  margin: 20px auto;
-  box-shadow: var(--shadow-soft);
+.visitation-history {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.visitation-history li {
+  color: var(--color-ink);
+  font-size: .92rem;
 }
 
 @media (max-width: 720px) {
