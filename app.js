@@ -667,8 +667,10 @@ function renderVisitationListOrEmpty(list, emptyMessage) {
   return `<div class="member-list">${list.map(visitationCardHTML).join('')}</div>`;
 }
 
-/* #/visitation — "إضافة أسرة" / "الأسر" / "دليل الافتقاد" entry buttons only.
-   The full registered list now lives on #/visitation/families (change 2). */
+/* #/visitation — search box + "إضافة أسرة" / "الأسر" / "دليل الافتقاد" /
+   "إدارة بيانات الافتقاد" entry buttons. The full registered list still
+   lives on #/visitation/families (with its own filters) — this page only
+   shows matches while the user is actively searching. */
 async function renderVisitationHome() {
   renderVisitationChrome('/', 'رجوع للصفحة الرئيسية');
   const total = await VisitationDB.count();
@@ -676,7 +678,16 @@ async function renderVisitationHome() {
   APP_ROOT.innerHTML = `
     <div class="container">
       <p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>خدمات الافتقاد</span></p>
-      <p class="search-hint" style="margin:18px 4px 0;">${total} أسرة مسجّلة على هذا الجهاز</p>
+
+      <div class="search-panel">
+        <form id="visitationHomeSearchForm">
+          <div class="search-box">
+            ${ICONS.search}
+            <input type="text" id="visitationHomeSearchInput" placeholder="ابحث بالاسم، الموبايل، الوظيفة، المدينة، الحي، الشارع..." autocomplete="off" />
+          </div>
+        </form>
+        <p class="search-hint">${total} أسرة مسجّلة على هذا الجهاز</p>
+      </div>
 
       <div class="visitation-home-actions">
         <a href="#/visitation/add" class="btn btn-primary">${ICONS.plus}<span>إضافة أسرة</span></a>
@@ -684,8 +695,26 @@ async function renderVisitationHome() {
         <a href="#/visitation/guide" class="btn btn-outline">${ICONS.calendar}<span>دليل الافتقاد</span></a>
         <a href="#/visitation/data" class="btn btn-outline">${ICONS.download}<span>إدارة بيانات الافتقاد</span></a>
       </div>
+
+      <div id="visitationHomeResults"></div>
     </div>
   `;
+
+  const searchInput = document.getElementById('visitationHomeSearchInput');
+  const resultsBox = document.getElementById('visitationHomeResults');
+
+  async function runHomeSearch() {
+    const val = searchInput.value.trim();
+    if (!val) { resultsBox.innerHTML = ''; return; } // no query -> no full-list dump
+    const results = await VisitationDB.searchAll(val);
+    const emptyMsg = `لا توجد أسر مطابقة لـ "${escapeHTML(val)}"`;
+    resultsBox.innerHTML = renderVisitationListOrEmpty(results, emptyMsg);
+  }
+  searchInput.addEventListener('input', debounce(runHomeSearch, 200));
+  document.getElementById('visitationHomeSearchForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    runHomeSearch();
+  });
 }
 
 /* #/visitation/families — complete registered list with search + filters
