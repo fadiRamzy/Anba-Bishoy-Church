@@ -1001,23 +1001,53 @@ async function renderVisitationDataManagement() {
 /* Husband/wife/children sub-fields (شخص الزوج/الزوجة + الأبناء) — new
    fields on the existing "إضافة أسرة" form. Small self-contained helpers,
    kept local to the visitation form/profile so nothing shared is touched. */
-function visitationSpouseFieldsHTML(prefix, s) {
+
+/* Field labels for each spouse section, so every label unambiguously names
+   which spouse it belongs to (never generic "الاسم"/"الوظيفة" regardless of
+   section) — "الخدمة" and "السن" stay unprefixed by design. */
+const SPOUSE_FIELD_LABELS = {
+  husband: {
+    title: 'بيانات الزوج',
+    name: 'اسم الزوج',
+    job: 'وظيفة الزوج',
+    phone: 'رقم هاتف الزوج',
+    confessionFather: 'أب اعتراف الزوج',
+    birthDate: 'تاريخ ميلاد الزوج',
+    age: 'السن (لو التاريخ غير متاح)',
+    educationStage: 'المرحلة التعليمية للزوج',
+    notes: 'ملاحظات الزوج',
+  },
+  wife: {
+    title: 'بيانات الزوجة',
+    name: 'اسم الزوجة',
+    job: 'وظيفة الزوجة',
+    phone: 'رقم هاتف الزوجة',
+    confessionFather: 'أب اعتراف الزوجة',
+    birthDate: 'تاريخ ميلاد الزوجة',
+    age: 'السن (لو التاريخ غير متاح)',
+    educationStage: 'المرحلة التعليمية للزوجة',
+    notes: 'ملاحظات الزوجة',
+  },
+};
+
+function visitationSpouseFieldsHTML(prefix, s, kind) {
   s = s || {};
+  const L = SPOUSE_FIELD_LABELS[kind] || SPOUSE_FIELD_LABELS.husband;
   return `
     <div class="field">
-      <label for="f_${prefix}_name">الاسم</label>
+      <label for="f_${prefix}_name">${L.name}</label>
       <input type="text" id="f_${prefix}_name" value="${escapeHTML(s.name || '')}" />
     </div>
     <div class="field">
-      <label for="f_${prefix}_job">الوظيفة</label>
+      <label for="f_${prefix}_job">${L.job}</label>
       <input type="text" id="f_${prefix}_job" value="${escapeHTML(s.job || '')}" />
     </div>
     <div class="field">
-      <label for="f_${prefix}_phone">رقم الهاتف</label>
+      <label for="f_${prefix}_phone">${L.phone}</label>
       <input type="tel" id="f_${prefix}_phone" value="${escapeHTML(s.phone || '')}" />
     </div>
     <div class="field">
-      <label for="f_${prefix}_confessionFather">أب الاعتراف</label>
+      <label for="f_${prefix}_confessionFather">${L.confessionFather}</label>
       <input type="text" id="f_${prefix}_confessionFather" value="${escapeHTML(s.confessionFather || '')}" />
     </div>
     ${selectFieldHTML({ field: `${prefix}_service`, label: 'الخدمة' }, s.service, VISITATION_SERVICE_OPTIONS)}
@@ -1026,19 +1056,19 @@ function visitationSpouseFieldsHTML(prefix, s) {
       <input type="text" id="f_${prefix}_serviceOther" value="${escapeHTML(s.serviceOther || '')}" />
     </div>
     <div class="field">
-      <label for="f_${prefix}_birthDate">تاريخ الميلاد</label>
+      <label for="f_${prefix}_birthDate">${L.birthDate}</label>
       <input type="date" id="f_${prefix}_birthDate" value="${s.birthDate || ''}" />
     </div>
     <div class="field">
-      <label for="f_${prefix}_age">السن (لو التاريخ غير متاح)</label>
+      <label for="f_${prefix}_age">${L.age}</label>
       <input type="number" min="0" max="130" id="f_${prefix}_age" value="${s.age ?? ''}" />
     </div>
     <div class="field">
-      <label for="f_${prefix}_educationStage">المرحلة التعليمية</label>
+      <label for="f_${prefix}_educationStage">${L.educationStage}</label>
       <input type="text" id="f_${prefix}_educationStage" value="${escapeHTML(s.educationStage || '')}" />
     </div>
     <div class="field full">
-      <label for="f_${prefix}_notes">ملاحظات</label>
+      <label for="f_${prefix}_notes">${L.notes}</label>
       <textarea id="f_${prefix}_notes">${escapeHTML(s.notes || '')}</textarea>
     </div>`;
 }
@@ -1102,30 +1132,7 @@ async function renderVisitationForm(idStr) {
 
           ${selectFieldHTML({ field: 'maritalStatus', label: 'الحالة الاجتماعية' }, v.maritalStatus, MARITAL_STATUS_OPTIONS)}
 
-          <div class="field full" id="eduStageWrap" hidden>
-            <label for="f_educationStage">المرحلة التعليمية</label>
-            <input type="text" id="f_educationStage" value="${escapeHTML(v.educationStage || '')}" />
-          </div>
-
-          <div class="field full" id="spouseSectionsWrap" hidden>
-            <div class="subform-section" id="husbandSection" hidden>
-              <h4>بيانات الزوج</h4>
-              <div class="subform-grid">
-                ${visitationSpouseFieldsHTML('h', v.husband)}
-              </div>
-            </div>
-            <div class="subform-section" id="wifeSection" hidden>
-              <h4>بيانات الزوجة</h4>
-              <div class="subform-grid">
-                ${visitationSpouseFieldsHTML('w', v.wife)}
-              </div>
-            </div>
-            <div class="subform-section">
-              <h4>الأبناء (<span id="childrenCountLabel">${(v.children || []).length}</span>)</h4>
-              <div id="childrenList">${(v.children || []).map(visitationChildRowHTML).join('')}</div>
-              <button type="button" class="btn btn-outline btn-sm" id="addChildBtn">${ICONS.plus}<span>إضافة ابن/ابنة</span></button>
-            </div>
-          </div>
+          <div class="form-section-divider full"><h4>البيانات الشخصية</h4></div>
 
           <div class="field">
             <label for="f_phone1">رقم الموبايل</label>
@@ -1135,6 +1142,27 @@ async function renderVisitationForm(idStr) {
             <label for="f_phone2">رقم الموبايل (2)</label>
             <input type="tel" id="f_phone2" name="phone2" value="${escapeHTML(v.phone2 || '')}" />
           </div>
+
+          <div class="field">
+            <label for="f_birthDate">تاريخ الميلاد</label>
+            <input type="date" id="f_birthDate" name="birthDate" value="${v.birthDate || ''}" />
+          </div>
+          <div class="field">
+            <label for="f_age">السن (لو التاريخ غير متاح)</label>
+            <input type="number" min="0" max="130" id="f_age" name="age" value="${v.age ?? ''}" />
+          </div>
+
+          ${textFieldHTML({ field: 'job', label: 'الوظيفة' }, v.job)}
+          <div class="field" id="eduStageWrap" hidden>
+            <label for="f_educationStage">المرحلة التعليمية</label>
+            <input type="text" id="f_educationStage" value="${escapeHTML(v.educationStage || '')}" />
+          </div>
+
+          ${textFieldHTML({ field: 'confessionFather', label: 'أب الاعتراف' }, v.confessionFather)}
+          ${selectFieldHTML({ field: 'service', label: 'الخدمة' }, v.service, VISITATION_SERVICE_OPTIONS)}
+          ${textFieldHTML({ field: 'serviceOther', label: 'خدمة أخرى' }, v.serviceOther)}
+
+          <div class="form-section-divider full"><h4>العنوان</h4></div>
 
           ${selectFieldHTML({ field: 'city', label: 'المدينة' }, v.city, CITY_OPTIONS)}
           ${selectFieldHTML({ field: 'neighborhood', label: 'الحي' }, v.neighborhood, NEIGHBORHOOD_OPTIONS)}
@@ -1153,19 +1181,27 @@ async function renderVisitationForm(idStr) {
             <input type="hidden" id="f_locationLink" value="${escapeHTML(v.locationLink || '')}" />
           </div>
 
-          ${textFieldHTML({ field: 'job', label: 'الوظيفة' }, v.job)}
-          ${textFieldHTML({ field: 'confessionFather', label: 'أب الاعتراف' }, v.confessionFather)}
-          ${selectFieldHTML({ field: 'service', label: 'الخدمة' }, v.service, VISITATION_SERVICE_OPTIONS)}
-          ${textFieldHTML({ field: 'serviceOther', label: 'خدمة أخرى' }, v.serviceOther)}
+          <div class="field full" id="spouseSectionsWrap" hidden>
+            <div class="subform-section" id="husbandSection" hidden>
+              <h4>بيانات الزوج</h4>
+              <div class="subform-grid">
+                ${visitationSpouseFieldsHTML('h', v.husband, 'husband')}
+              </div>
+            </div>
+            <div class="subform-section" id="wifeSection" hidden>
+              <h4>بيانات الزوجة</h4>
+              <div class="subform-grid">
+                ${visitationSpouseFieldsHTML('w', v.wife, 'wife')}
+              </div>
+            </div>
+            <div class="subform-section">
+              <h4>الأبناء (<span id="childrenCountLabel">${(v.children || []).length}</span>)</h4>
+              <div id="childrenList">${(v.children || []).map(visitationChildRowHTML).join('')}</div>
+              <button type="button" class="btn btn-outline btn-sm" id="addChildBtn">${ICONS.plus}<span>إضافة ابن/ابنة</span></button>
+            </div>
+          </div>
 
-          <div class="field">
-            <label for="f_birthDate">تاريخ الميلاد</label>
-            <input type="date" id="f_birthDate" name="birthDate" value="${v.birthDate || ''}" />
-          </div>
-          <div class="field">
-            <label for="f_age">السن (لو التاريخ غير متاح)</label>
-            <input type="number" min="0" max="130" id="f_age" name="age" value="${v.age ?? ''}" />
-          </div>
+          <div class="form-section-divider full"><h4>الافتقاد</h4></div>
 
           <div class="field">
             <label for="f_visitDate">تواريخ الافتقاد (إضافة تاريخ جديد)</label>
@@ -1382,23 +1418,24 @@ async function renderVisitationForm(idStr) {
 }
 
 /* Profile display for the husband/wife/children sub-fields (Part 1). */
-function spouseInfoSectionHTML(title, s) {
+function spouseInfoSectionHTML(title, s, kind) {
   const age = computeAge(s);
   const birth = formatBirthDate(s);
+  const L = SPOUSE_FIELD_LABELS[kind] || SPOUSE_FIELD_LABELS.husband;
   return `
     <div class="info-section">
       <h3>${ICONS.church} ${title}</h3>
       <dl class="info-grid">
-        <div class="info-item"><dt>الاسم</dt><dd class="${s.name ? '' : 'muted'}">${fieldOrFallback(s.name)}</dd></div>
-        <div class="info-item"><dt>الوظيفة</dt><dd class="${s.job ? '' : 'muted'}">${fieldOrFallback(s.job)}</dd></div>
-        <div class="info-item"><dt>رقم الهاتف</dt><dd>${phoneLinkHTML(s.phone)}</dd></div>
-        <div class="info-item"><dt>أب الاعتراف</dt><dd class="${s.confessionFather ? '' : 'muted'}">${fieldOrFallback(s.confessionFather)}</dd></div>
+        <div class="info-item"><dt>${L.name}</dt><dd class="${s.name ? '' : 'muted'}">${fieldOrFallback(s.name)}</dd></div>
+        <div class="info-item"><dt>${L.job}</dt><dd class="${s.job ? '' : 'muted'}">${fieldOrFallback(s.job)}</dd></div>
+        <div class="info-item"><dt>${L.phone}</dt><dd>${phoneLinkHTML(s.phone)}</dd></div>
+        <div class="info-item"><dt>${L.confessionFather}</dt><dd class="${s.confessionFather ? '' : 'muted'}">${fieldOrFallback(s.confessionFather)}</dd></div>
         <div class="info-item"><dt>الخدمة</dt><dd class="${s.service ? '' : 'muted'}">${fieldOrFallback(s.service)}</dd></div>
         ${s.serviceOther ? `<div class="info-item"><dt>خدمة أخرى</dt><dd>${escapeHTML(s.serviceOther)}</dd></div>` : ''}
-        <div class="info-item"><dt>تاريخ الميلاد</dt><dd class="${birth ? '' : 'muted'}">${birth || 'غير متوفر'}</dd></div>
+        <div class="info-item"><dt>${L.birthDate}</dt><dd class="${birth ? '' : 'muted'}">${birth || 'غير متوفر'}</dd></div>
         <div class="info-item"><dt>السن</dt><dd class="${age !== null ? '' : 'muted'}">${age !== null ? age + ' سنة' : 'غير متوفر'}</dd></div>
-        <div class="info-item"><dt>المرحلة التعليمية</dt><dd class="${s.educationStage ? '' : 'muted'}">${fieldOrFallback(s.educationStage)}</dd></div>
-        ${s.notes ? `<div class="info-item full"><dt>ملاحظات</dt><dd>${escapeHTML(s.notes)}</dd></div>` : ''}
+        <div class="info-item"><dt>${L.educationStage}</dt><dd class="${s.educationStage ? '' : 'muted'}">${fieldOrFallback(s.educationStage)}</dd></div>
+        ${s.notes ? `<div class="info-item full"><dt>${L.notes}</dt><dd>${escapeHTML(s.notes)}</dd></div>` : ''}
       </dl>
     </div>`;
 }
@@ -1487,8 +1524,8 @@ async function renderVisitationProfile(idStr) {
         <dl class="info-grid"><div class="info-item full"><dd>${escapeHTML(fam.educationStage)}</dd></div></dl>
       </div>` : ''}
 
-      ${fam.husband ? spouseInfoSectionHTML('بيانات الزوج', fam.husband) : ''}
-      ${fam.wife ? spouseInfoSectionHTML('بيانات الزوجة', fam.wife) : ''}
+      ${fam.husband ? spouseInfoSectionHTML('بيانات الزوج', fam.husband, 'husband') : ''}
+      ${fam.wife ? spouseInfoSectionHTML('بيانات الزوجة', fam.wife, 'wife') : ''}
       ${Array.isArray(fam.children) && fam.children.length ? childrenInfoSectionHTML(fam.children) : ''}
 
       <div class="info-section">

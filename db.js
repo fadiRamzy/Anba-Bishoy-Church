@@ -298,31 +298,20 @@ const VisitationDB = {
     return all.filter((f) => normalizeArabic(f.name || '').includes(norm));
   },
 
-  /* Flexible/partial matching across name, spouse name, both mobile numbers
-     (digits-only), city, حي/neighborhood, street, job/profession, أب
-     الاعتراف, الخدمة and الحالة الاجتماعية. Case-insensitive and
-     Arabic-tolerant (via normalizeArabic), same behavior as
-     MembersDB.searchAll. */
+  /* TRUE GLOBAL SEARCH — recursively scans every string/number value found
+     anywhere inside the family record (including nested objects/arrays such
+     as husband/wife sub-fields and the children array), so the caller never
+     needs to know which field holds the match. Case-insensitive and
+     Arabic-tolerant (via normalizeArabic) for text, plus digits-only
+     matching for phone-like numbers. Does NOT modify the stored record —
+     only the values are read and normalized in-memory for comparison. */
   async searchAll(query) {
     const raw = (query || '').toString().trim();
     if (!raw) return [];
     const all = await this.getAll();
     const norm = normalizeArabic(raw);
     const digits = raw.replace(/\D/g, '');
-    return all.filter((f) => {
-      if (norm && normalizeArabic(f.name || '').includes(norm)) return true;
-      if (norm && normalizeArabic(f.spouseName || '').includes(norm)) return true;
-      if (digits) {
-        const p1 = (f.phone1 || '').toString().replace(/\D/g, '');
-        const p2 = (f.phone2 || '').toString().replace(/\D/g, '');
-        if ((p1 && p1.includes(digits)) || (p2 && p2.includes(digits))) return true;
-      }
-      if (norm) {
-        const otherFields = [f.city, f.neighborhood, f.street, f.job, f.confessionFather, f.service, f.maritalStatus];
-        if (otherFields.some((v) => v && normalizeArabic(v.toString()).includes(norm))) return true;
-      }
-      return false;
-    });
+    return all.filter((f) => recordMatchesQuery(f, norm, digits));
   },
 
   async bulkPut(families) {
@@ -395,6 +384,44 @@ const SettingsDB = {
     });
   },
 };
+
+/* Recursively collects every string/number value found anywhere inside a
+   record (including nested objects like husband/wife and arrays like
+   children) into a flat list of strings, so a global search can scan the
+   COMPLETE record without needing to know which field holds a match.
+   Skips "id" (internal identifier, not user-facing data). Read-only: never
+   mutates the record it walks. */
+function flattenSearchableValues(value, acc) {
+  if (value === null || value === undefined) return;
+  if (typeof value === 'string' || typeof value === 'number') {
+    acc.push(value.toString());
+  } else if (Array.isArray(value)) {
+    value.forEach((item) => flattenSearchableValues(item, acc));
+  } else if (typeof value === 'object') {
+    Object.keys(value).forEach((key) => {
+      if (key === 'id') return;
+      flattenSearchableValues(value[key], acc);
+    });
+  }
+}
+
+/* True deep/global match: does ANY value anywhere inside the record
+   (top-level or nested — husband/wife sub-fields, children array, etc.)
+   match the search text (Arabic-normalized) or the digits-only query
+   (for phone-like numbers)? */
+function recordMatchesQuery(record, norm, digits) {
+  if (!norm && !digits) return false;
+  const values = [];
+  flattenSearchableValues(record, values);
+  for (const val of values) {
+    if (norm && normalizeArabic(val).includes(norm)) return true;
+    if (digits) {
+      const onlyDigits = val.replace(/\D/g, '');
+      if (onlyDigits && onlyDigits.includes(digits)) return true;
+    }
+  }
+  return false;
+}
 
 /* Normalize Arabic text for tolerant search: strip tashkeel, unify alef/ya/ta-marbuta, collapse spaces. */
 function normalizeArabic(str) {

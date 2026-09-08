@@ -740,7 +740,25 @@ body[data-section="visitation"] .brand-verse {
 }
 .field textarea { resize: vertical; min-height: 80px; }
 
-/* بيانات الزوج / بيانات الزوجة / الأبناء — sub-sections inside the
+/* Section dividers inside the "إضافة أسرة" form — purely visual grouping
+   (البيانات الشخصية / العنوان / الافتقاد) to make the long form read like an
+   organized data-entry sheet. No effect on form behavior. */
+.form-section-divider {
+  grid-column: 1 / -1;
+  margin: 6px 0 -4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-line);
+}
+.form-section-divider:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
+.form-section-divider h4 {
+  margin: 0;
+  font-size: .85rem;
+  font-weight: 700;
+  color: var(--color-maroon);
+  letter-spacing: .2px;
+}
+
+/* بيانات الزوج / بيانات الزوجة / الأبناء — sub-sections inside الـ
    "إضافة أسرة" form, shown conditionally based on الحالة الاجتماعية. */
 .subform-section {
   border: 1.5px dashed var(--color-line);
