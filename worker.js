@@ -156,27 +156,10 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 }
 
 const TAVILY_TIMEOUT_MS = 6000;
-const GEMINI_TIMEOUT_MS = 18000;
+const GEMINI_TIMEOUT_MS = 30000;
 
 /* ==========================================================================
    DIAGNOSTIC TESTS
-   --------------------------------------------------------------------------
-   Temporary diagnostic route:
-   /assistant/diag?token=...
-
-   TEST 1:
-   Google API connectivity.
-
-   TEST 2:
-   Minimal generateContent using the current production model.
-
-   TEST 3:
-   Full production-shaped generateContent using the current production model.
-
-   TEST 4:
-   Minimal generateContent using gemini-3-flash-preview.
-
-   No response bodies, API keys, user questions, or user data are returned.
    ========================================================================== */
 
 const DIAG_TIMEOUT_MS = 10000;
@@ -235,8 +218,6 @@ async function runAssistantDiagnostic(env) {
   const previewGeminiUrl =
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${env.GEMINI_API_KEY}`;
 
-  /* TEST 2 + TEST 4: Minimal Gemini request */
-
   const minimalBody = {
     contents: [
       {
@@ -249,8 +230,6 @@ async function runAssistantDiagnostic(env) {
       },
     ],
   };
-
-  /* TEST 3: Production-shaped Gemini request */
 
   const productionBody = {
     systemInstruction: {
@@ -292,8 +271,6 @@ async function runAssistantDiagnostic(env) {
     test4
   ] = await Promise.all([
 
-    /* TEST 1 — Google API connectivity */
-
     runDiagnosticTest(() =>
       fetchWithTimeout(
         googleModelsUrl,
@@ -303,8 +280,6 @@ async function runAssistantDiagnostic(env) {
         DIAG_TIMEOUT_MS
       )
     ),
-
-    /* TEST 2 — Current production model */
 
     runDiagnosticTest(() =>
       fetchWithTimeout(
@@ -324,8 +299,6 @@ async function runAssistantDiagnostic(env) {
       )
     ),
 
-    /* TEST 3 — Current production request */
-
     runDiagnosticTest(() =>
       fetchWithTimeout(
         geminiUrl,
@@ -343,8 +316,6 @@ async function runAssistantDiagnostic(env) {
         DIAG_TIMEOUT_MS
       )
     ),
-
-    /* TEST 4 — Preview model */
 
     runDiagnosticTest(() =>
       fetchWithTimeout(
@@ -449,6 +420,57 @@ async function callTavily(
     .join('\n\n')
     ||
     'لم يتم العثور على نتائج بحث مناسبة.';
+}
+
+/* ==========================================================================
+   GEMINI RESPONSE PARSER
+   ========================================================================== */
+
+async function parseGeminiResponse(res, stage) {
+  let rawText = '';
+
+  try {
+    rawText = await res.text();
+  } catch (_) {
+    console.error(
+      'gemini_response_read_error',
+      stage
+    );
+
+    return {
+      data: null,
+      parseError: true
+    };
+  }
+
+  if (!rawText) {
+    console.error(
+      'gemini_empty_response',
+      stage
+    );
+
+    return {
+      data: null,
+      parseError: true
+    };
+  }
+
+  try {
+    return {
+      data: JSON.parse(rawText),
+      parseError: false
+    };
+  } catch (_) {
+    console.error(
+      'gemini_response_parse_error',
+      stage
+    );
+
+    return {
+      data: null,
+      parseError: true
+    };
+  }
 }
 
 /* ==========================================================================
@@ -568,8 +590,21 @@ async function callGemini(
     );
   }
 
+  let parsed =
+    await parseGeminiResponse(
+      res,
+      'gemini_1'
+    );
+
+  if (
+    parsed.parseError ||
+    !parsed.data
+  ) {
+    return 'لم يصل رد قابل للقراءة من المساعد. حاول مرة أخرى.';
+  }
+
   let data =
-    await res.json();
+    parsed.data;
 
   let candidate =
     data &&
@@ -621,9 +656,18 @@ async function callGemini(
 
     mark('tavily_done');
 
-    contents.push(
+    /*
+     * Keep the model's function-call turn in the conversation,
+     * then provide the web-search result.
+     */
+    if (
+      candidate &&
       candidate.content
-    );
+    ) {
+      contents.push(
+        candidate.content
+      );
+    }
 
     contents.push({
       role: 'user',
@@ -713,8 +757,21 @@ async function callGemini(
       );
     }
 
+    parsed =
+      await parseGeminiResponse(
+        res,
+        'gemini_2'
+      );
+
+    if (
+      parsed.parseError ||
+      !parsed.data
+    ) {
+      return 'لم يصل رد قابل للقراءة من المساعد بعد البحث. حاول مرة أخرى.';
+    }
+
     data =
-      await res.json();
+      parsed.data;
 
     candidate =
       data &&
@@ -732,7 +789,10 @@ async function callGemini(
   const text =
     parts
       .filter(
-        (p) => p.text
+        (p) =>
+          p &&
+          typeof p.text === 'string' &&
+          p.text.trim()
       )
       .map(
         (p) => p.text
@@ -740,10 +800,15 @@ async function callGemini(
       .join('\n')
       .trim();
 
-  return (
-    text ||
-    'لم يصل رد نصي من المساعد.'
+  if (text) {
+    return text;
+  }
+
+  console.error(
+    'gemini_no_text_response'
   );
+
+  return 'لم يصل رد نصي من المساعد.';
 }
 
 /* ==========================================================================
@@ -1077,6 +1142,11 @@ export default {
           err.code
         ) ||
         'upstream_error';
+
+      console.error(
+        'assistant_request_error',
+        code
+      );
 
       return json(
         {
