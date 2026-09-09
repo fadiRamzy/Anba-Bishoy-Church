@@ -1088,17 +1088,58 @@ function visitationSpouseFieldsHTML(prefix, s, kind) {
     </div>`;
 }
 
+/* Incrementing counter so every child row's birth-date/age inputs get a
+   unique id on the page (required by wireBirthDateAgeSync(), which looks
+   elements up via document.getElementById()). Never reset mid-page. */
+let _childRowSeq = 0;
+
 function visitationChildRowHTML(child) {
-  const type = (child && child.type === 'ابنة') ? 'ابنة' : 'ابن';
+  child = child || {};
+  const type = (child.type === 'ابنة') ? 'ابنة' : 'ابن';
+  const uid = ++_childRowSeq;
+  const birthId = `f_child_${uid}_birthDate`;
+  const ageId = `f_child_${uid}_age`;
   return `
-    <div class="child-row">
+    <div class="child-row" style="flex-wrap:wrap;align-items:flex-end;">
       <select class="child-type-select">
         <option value="ابن" ${type === 'ابن' ? 'selected' : ''}>ابن</option>
         <option value="ابنة" ${type === 'ابنة' ? 'selected' : ''}>ابنة</option>
       </select>
-      <input type="text" class="child-name-input" placeholder="اسم الابن/الابنة" value="${escapeHTML((child && child.name) || '')}" />
+      <input type="text" class="child-name-input" placeholder="اسم الابن/الابنة" value="${escapeHTML(child.name || '')}" />
       <button type="button" class="btn btn-outline btn-sm remove-child-btn" aria-label="حذف">${ICONS.trash}</button>
+      <div class="subform-grid" style="flex:1 0 100%;margin-top:8px;">
+        <div class="field">
+          <label for="f_child_${uid}_educationStage">المرحلة التعليمية</label>
+          <input type="text" class="child-educationStage-input" id="f_child_${uid}_educationStage" value="${escapeHTML(child.educationStage || '')}" />
+        </div>
+        <div class="field">
+          <label for="f_child_${uid}_confessionFather">أب الاعتراف</label>
+          <input type="text" class="child-confessionFather-input" id="f_child_${uid}_confessionFather" value="${escapeHTML(child.confessionFather || '')}" />
+        </div>
+        <div class="field">
+          <label for="f_child_${uid}_phone">رقم الهاتف</label>
+          <input type="tel" class="child-phone-input" id="f_child_${uid}_phone" value="${escapeHTML(child.phone || '')}" />
+        </div>
+        <div class="field">
+          <label for="${birthId}">تاريخ الميلاد</label>
+          <input type="date" class="child-birthDate-input" id="${birthId}" value="${child.birthDate || ''}" />
+        </div>
+        <div class="field">
+          <label for="${ageId}">السن</label>
+          <input type="number" min="0" max="130" class="child-age-input" id="${ageId}" value="${child.age ?? ''}" />
+        </div>
+      </div>
     </div>`;
+}
+
+/* Wires the reused wireBirthDateAgeSync() logic for one child row's own
+   birth-date/age inputs, using the unique ids visitationChildRowHTML()
+   already gave them (found via the row-scoped classes, so callers don't
+   need to know the generated ids). */
+function wireChildRowAgeSync(rowEl) {
+  const birthInput = rowEl.querySelector('.child-birthDate-input');
+  const ageInput = rowEl.querySelector('.child-age-input');
+  if (birthInput && ageInput) wireBirthDateAgeSync(birthInput.id, ageInput.id);
 }
 
 function wireBirthDateAgeSync(birthId, ageId) {
@@ -1306,7 +1347,9 @@ async function renderVisitationForm(idStr) {
   document.getElementById('addChildBtn').addEventListener('click', () => {
     const wrapper = document.createElement('div');
     wrapper.innerHTML = visitationChildRowHTML(null);
-    childrenList.appendChild(wrapper.firstElementChild);
+    const newRow = wrapper.firstElementChild;
+    childrenList.appendChild(newRow);
+    wireChildRowAgeSync(newRow);
     refreshChildrenCount();
   });
   childrenList.addEventListener('click', (e) => {
@@ -1315,6 +1358,9 @@ async function renderVisitationForm(idStr) {
     btn.closest('.child-row').remove();
     refreshChildrenCount();
   });
+  /* Existing children (edit mode) were rendered server-side above —
+     wire each one's own birth-date/age sync independently. */
+  document.querySelectorAll('#childrenList .child-row').forEach(wireChildRowAgeSync);
 
   const dupBox = document.getElementById('dupWarning');
   async function checkDuplicates() {
@@ -1388,10 +1434,22 @@ async function renderVisitationForm(idStr) {
     const wife = spouseKind === 'wife' ? readSpouseBlock('w') : null;
     const children = spouseKind
       ? Array.from(document.querySelectorAll('#childrenList .child-row'))
-          .map((row) => ({
-            type: row.querySelector('.child-type-select').value,
-            name: row.querySelector('.child-name-input').value.trim(),
-          }))
+          .map((row) => {
+            const eduStageInput = row.querySelector('.child-educationStage-input');
+            const confessionFatherInput = row.querySelector('.child-confessionFather-input');
+            const phoneInput = row.querySelector('.child-phone-input');
+            const birthDateInput = row.querySelector('.child-birthDate-input');
+            const ageInput = row.querySelector('.child-age-input');
+            return {
+              type: row.querySelector('.child-type-select').value,
+              name: row.querySelector('.child-name-input').value.trim(),
+              educationStage: eduStageInput.value.trim() || null,
+              confessionFather: confessionFatherInput.value.trim() || null,
+              phone: phoneInput.value.trim() || null,
+              birthDate: birthDateInput.value || null,
+              age: ageInput.value ? Number(ageInput.value) : null,
+            };
+          })
           .filter((c) => c.name)
       : [];
 
@@ -1461,9 +1519,22 @@ function childrenInfoSectionHTML(children) {
   return `
     <div class="info-section">
       <h3>${ICONS.notes} الأبناء (${children.length})</h3>
-      <ul class="children-list">
-        ${children.map((c, i) => `<li>${i + 1}. ${escapeHTML(c.type)} — ${escapeHTML(c.name)}</li>`).join('')}
-      </ul>
+      ${children.map((c, i) => {
+        const age = computeAge(c);
+        const birth = formatBirthDate(c);
+        return `
+        <div class="subform-section" style="margin-bottom:${i === children.length - 1 ? '0' : '12px'};">
+          <h4>${i + 1}. ${escapeHTML(c.type)} — ${escapeHTML(c.name)}</h4>
+          <dl class="info-grid">
+            <div class="info-item"><dt>الاسم / النوع</dt><dd>${escapeHTML(c.type)} — ${escapeHTML(c.name)}</dd></div>
+            <div class="info-item"><dt>المرحلة التعليمية</dt><dd class="${c.educationStage ? '' : 'muted'}">${fieldOrFallback(c.educationStage)}</dd></div>
+            <div class="info-item"><dt>أب الاعتراف</dt><dd class="${c.confessionFather ? '' : 'muted'}">${fieldOrFallback(c.confessionFather)}</dd></div>
+            <div class="info-item"><dt>رقم الهاتف</dt><dd>${phoneLinkHTML(c.phone)}</dd></div>
+            <div class="info-item"><dt>تاريخ الميلاد</dt><dd class="${birth ? '' : 'muted'}">${birth || 'غير متوفر'}</dd></div>
+            <div class="info-item"><dt>السن</dt><dd class="${age !== null ? '' : 'muted'}">${age !== null ? age + ' سنة' : 'غير متوفر'}</dd></div>
+          </dl>
+        </div>`;
+      }).join('')}
     </div>`;
 }
 
