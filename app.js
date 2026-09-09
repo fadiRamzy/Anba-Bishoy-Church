@@ -2092,19 +2092,15 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
 /*  الافتقاد" logic/data at all — it only READS from MembersDB.            */
 /*                                                                          */
 /*  IMPORTANT ARCHITECTURE NOTE (please read):                             */
-/*  This site is static (GitHub Pages) with no backend/server. There is    */
-/*  no way to call a secret-key-based AI API from a static site without    */
-/*  exposing that key to whoever opens dev tools on the device. The        */
-/*  smallest practical option that keeps no key in the repo/source code is */
-/*  to let each user enter their OWN Anthropic API key at runtime; it is   */
-/*  stored only in this browser's IndexedDB (via SettingsDB, same store    */
-/*  already used elsewhere in this app) and sent directly from the         */
-/*  browser to Anthropic per-request. That key never leaves this device    */
-/*  except to Anthropic itself, and is never written to any file that      */
-/*  gets committed to GitHub. It is NOT fully secret from someone with     */
-/*  physical/devtools access to the same device — that limitation is       */
-/*  inherent to any pure static-site architecture, not specific to this    */
-/*  implementation. See the settings modal below.                         */
+/*  This site is static (GitHub Pages) and has no server of its own, so it */
+/*  cannot hold a secret AI API key itself. Instead, the assistant calls a */
+/*  small separate Cloudflare Worker (deployed outside this repo — see     */
+/*  ASSISTANT_WORKER_URL below) which holds the real Gemini + Tavily keys  */
+/*  as Cloudflare secrets and never exposes them to the browser. No user   */
+/*  of this site ever sees, enters, or stores an API key of any kind.      */
+/*  The Worker also owns the system prompts (kept in sync with the ones    */
+/*  below purely for local reference) and decides, per question, whether  */
+/*  a live web search (Tavily) is actually needed before answering.        */
 /*                                                                          */
 /*  DATA-SAFETY NOTE: the assistant is intentionally wired to MembersDB    */
 /*  ("دليل الخدمات") ONLY. "خدمات الافتقاد" data (VisitationDB) sits       */
@@ -2112,84 +2108,65 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
 /*  assistant page has no such gate — so it must never read VisitationDB.  */
 /* ---------------------------------------------------------------------- */
 
-const ASSISTANT_API_KEY_SETTING = 'assistant_api_key';
-const ASSISTANT_MODEL_SETTING = 'assistant_api_model';
-const ASSISTANT_DEFAULT_MODEL = 'claude-sonnet-5';
+/* TODO (one-time, after deploying the Cloudflare Worker — see the change
+   report): replace this with your actual Worker URL, e.g.
+   'https://smart-servant.your-subdomain.workers.dev/assistant'. Nothing
+   else in this file needs to change. */
+const ASSISTANT_WORKER_URL = 'https://smart-servant.YOUR-SUBDOMAIN.workers.dev/assistant';
 
-async function getAssistantApiKey() {
-  return SettingsDB.get(ASSISTANT_API_KEY_SETTING);
-}
-async function setAssistantApiKey(key) {
-  return SettingsDB.set(ASSISTANT_API_KEY_SETTING, key || '');
-}
-async function getAssistantModel() {
-  const m = await SettingsDB.get(ASSISTANT_MODEL_SETTING);
-  return m || ASSISTANT_DEFAULT_MODEL;
-}
+/* The real system prompts (hymn safety rules, "never invent" rules, the
+   "only answer from the attached JSON" rule for دليل الخدمات questions,
+   etc.) now live server-side in the Cloudflare Worker, so they can't be
+   tampered with from the browser and don't need to be sent on every
+   request. They are functionally identical to the previous in-app prompts
+   — see worker.js in the Worker project for the exact wording. */
 
-const ASSISTANT_SYSTEM_PROMPT = `أنت "مساعد الخادم الذكي" في كنيسة الأنبا بيشوي بالمنيا الجديدة، إيبارشية شرق المنيا للأقباط الأرثوذكس.
-مجالك هو: المسيحية الأرثوذكسية القبطية، الكتاب المقدس، الألحان، الطقوس، القديسين، الأعياد، الدروس وإعداد الخدمة والمخدومين.
-إذا سُئلت عن موضوع لا علاقة له بهذا المجال إطلاقًا، اعتذر بأدب واشرح أنك متخصص في شؤون الخدمة والكنيسة فقط، ولا تحاول الإجابة عليه.
-قواعد صارمة بخصوص الألحان:
-- لا تختلق نص لحن أو ترجمة أو معلومة لحنية لم تجدها في مصدر موثوق.
-- "الحذَّات" (الهذّات) شيء مختلف تمامًا عن النوتة الموسيقية الغربية (دو ري مي فا صول لا سي). لا تخلط بينهما، ووضّح دائمًا أيهما تعرض إن وجدت أيًا منهما.
-- إذا لم تجد معلومة معينة (نص اللحن، الحذّات، النوتة)، صرّح بوضوح أنها غير متوفرة لديك، ولا تخترعها أبدًا.
-أجب دائمًا باللغة العربية، بأسلوب واضح ومباشر يناسب خادم/خادمة في الكنيسة.`;
-
-const ASSISTANT_DATA_SYSTEM_PROMPT = `أنت مساعد يعرض بيانات "دليل الخدمات" لكنيسة الأنبا بيشوي بناءً على نتائج مُفلترة محليًا بالفعل، مُرفقة لك كنص JSON.
-اكتب ردًا عربيًا طبيعيًا موجزًا يلخص هذه النتائج فقط.
-لا تُضف أي اسم أو رقم أو معلومة غير موجودة في البيانات المرفقة، ولا تخترع أي شيء.
-إن كانت القائمة فارغة، وضّح بوضوح أنه لا توجد نتائج مطابقة في بيانات دليل الخدمات.`;
-
-/* Calls the Anthropic Messages API directly from the browser with the
-   user's own locally-stored key (see the architecture note above). */
-async function assistantCallAI({ system, userText, useWebSearch }) {
-  const apiKey = await getAssistantApiKey();
-  if (!apiKey) {
-    const err = new Error('لازم تدخل مفتاح API أولًا.');
-    err.code = 'NO_API_KEY';
-    throw err;
-  }
-  const model = await getAssistantModel();
-  const body = {
-    model,
-    max_tokens: 1400,
-    system,
-    messages: [{ role: 'user', content: userText }],
-  };
-  if (useWebSearch) {
-    body.tools = [{ type: 'web_search_20250305', name: 'web_search' }];
-  }
+/* Calls the Cloudflare Worker (never a third-party AI API directly, and
+   never with any key — see the architecture note above). `mode` is
+   'general' for open church/Bible/hymn questions (the Worker decides on
+   its own, per question, whether it actually needs to run a live web
+   search) or 'data' for already-locally-filtered دليل الخدمات results
+   that just need natural-language phrasing. */
+async function assistantCallAI({ mode, question, dataContext }) {
   let res;
   try {
-    res = await fetch('https://api.anthropic.com/v1/messages', {
+    res = await fetch(ASSISTANT_WORKER_URL, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify(body),
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode, question, dataContext }),
     });
   } catch (networkErr) {
-    throw new Error('تعذر الاتصال بخدمة الذكاء الاصطناعي. تأكد من الاتصال بالإنترنت.');
+    const err = new Error('تعذر الاتصال بمساعد الخدمة. تأكد من الاتصال بالإنترنت وحاول مرة أخرى.');
+    err.code = 'NETWORK';
+    throw err;
   }
-  if (!res.ok) {
-    let msg = `تعذر الاتصال بخدمة الذكاء الاصطناعي (${res.status})`;
-    try {
-      const errJson = await res.json();
-      if (errJson && errJson.error && errJson.error.message) msg = errJson.error.message;
-    } catch (_) { /* keep default msg */ }
-    throw new Error(msg);
+  let data = null;
+  try { data = await res.json(); } catch (_) { /* non-JSON error body */ }
+
+  if (!res.ok || (data && data.error)) {
+    const code = (data && data.error) || (res.status === 429 ? 'rate_limited' : 'upstream_error');
+    const err = new Error(assistantFriendlyErrorMessage(code));
+    err.code = code;
+    throw err;
   }
-  const data = await res.json();
-  const text = (data.content || [])
-    .filter((b) => b.type === 'text')
-    .map((b) => b.text)
-    .join('\n\n')
-    .trim();
+  const text = (data && data.text) ? String(data.text).trim() : '';
   return text || 'لم يصل رد نصي من المساعد.';
+}
+
+/* Friendly Arabic messages for the small set of error codes the Worker
+   returns, so a quota/rate-limit hiccup never shows the person a raw
+   HTTP status or English text. */
+function assistantFriendlyErrorMessage(code) {
+  switch (code) {
+    case 'rate_limited':
+      return 'في ضغط كبير على المساعد دلوقتي، من فضلك جرّب تاني بعد شوية.';
+    case 'quota_exceeded':
+      return 'المساعد وصل للحد المسموح به من الأسئلة لليوم، جرّب تاني بعد شوية أو بكرة.';
+    case 'invalid_request':
+      return 'السؤال طويل أو بصيغة غير مدعومة، من فضلك جرّبه بشكل أقصر.';
+    default:
+      return 'تعذر الاتصال بمساعد الخدمة حاليًا. جرّب تاني بعد شوية.';
+  }
 }
 
 /* ------------------------------------------------------------------- */
@@ -2307,65 +2284,28 @@ function assistantFormatDataFallback(intent, rows) {
     if (r.city) extra.push(r.city);
     return `${i + 1}. ${r.name}${extra.length ? ' — ' + extra.join('، ') : ''}`;
   });
-  return `${title} (${rows.length}):\n${lines.join('\n')}\n\n(سرد مباشر من بيانات دليل الخدمات على هذا الجهاز، بدون مفتاح API. لإجابة بصياغة أذكى، أدخل مفتاح API من الإعدادات فوق.)`;
+  return `${title} (${rows.length}):\n${lines.join('\n')}\n\n(سرد مباشر من بيانات دليل الخدمات على هذا الجهاز.)`;
 }
 
+/* Local دليل الخدمات questions are answered locally first, always — the
+   Worker (if reachable) is only used afterwards to phrase the already-
+   filtered rows more naturally; the minimal filtered rows are the only
+   thing ever sent, never the full MembersDB, and VisitationDB is never
+   touched here at all. If the Worker is unreachable or over quota, the
+   person still gets a correct plain-text answer from assistantFormatDataFallback
+   — the AI phrasing is a nice-to-have layer on top of a working fallback. */
 async function assistantAnswer(rawQuestion) {
   const intent = assistantDetectDataIntent(rawQuestion);
   if (intent) {
     const rows = await assistantRunDataQuery(intent);
-    const apiKey = await getAssistantApiKey();
-    if (!apiKey) {
+    try {
+      return await assistantCallAI({ mode: 'data', question: rawQuestion, dataContext: rows.slice(0, 200) });
+    } catch (_) {
+      // Worker down/over quota/etc. — local fallback still answers correctly.
       return assistantFormatDataFallback(intent, rows);
     }
-    const contextJSON = JSON.stringify(rows.slice(0, 200));
-    const userText = `السؤال: ${rawQuestion}\n\nنتائج مطابقة من بيانات دليل الخدمات (${rows.length} سجل):\n${contextJSON}`;
-    return assistantCallAI({ system: ASSISTANT_DATA_SYSTEM_PROMPT, userText, useWebSearch: false });
   }
-  return assistantCallAI({ system: ASSISTANT_SYSTEM_PROMPT, userText: rawQuestion, useWebSearch: true });
-}
-
-/* ------------------------------------------------------------------- */
-/*  Settings modal — where the user enters their own Anthropic API key. */
-/*  Reuses the exact same .pin-modal-backdrop/.pin-modal chrome as the  */
-/*  Admin/Visitation PIN modals (openPinModal), just with plain text     */
-/*  inputs instead of a PIN field.                                       */
-/* ------------------------------------------------------------------- */
-async function openAssistantSettingsModal() {
-  const currentKey = (await getAssistantApiKey()) || '';
-  const currentModel = await getAssistantModel();
-  const backdrop = document.createElement('div');
-  backdrop.className = 'pin-modal-backdrop';
-  backdrop.innerHTML = `
-    <div class="pin-modal assistant-settings-modal" role="dialog" aria-modal="true">
-      <h3>إعداد المساعد الذكي</h3>
-      <p style="color:var(--color-ink-soft);font-size:.85rem;text-align:right;">
-        مفتاح Anthropic API الخاص بيك بيتخزن على هذا الجهاز فقط، ويُستخدم للاتصال المباشر بخدمة الذكاء الاصطناعي من المتصفح. لا يُرفع لأي مكان تاني ولا يوضع في ملفات المشروع. أي حد يستخدم هذا الجهاز/المتصفح هيقدر يشوفه، فمن فضلك متشاركوش.
-      </p>
-      <label style="font-size:.82rem;color:var(--color-ink-soft);display:block;margin-top:10px;">مفتاح API</label>
-      <input type="password" id="assistantApiKeyInput" placeholder="sk-ant-..." value="${escapeHTML(currentKey)}" autocomplete="off" />
-      <label style="font-size:.82rem;color:var(--color-ink-soft);display:block;">اسم الموديل (اختياري)</label>
-      <input type="text" id="assistantModelInput" placeholder="${ASSISTANT_DEFAULT_MODEL}" value="${escapeHTML(currentModel === ASSISTANT_DEFAULT_MODEL ? '' : currentModel)}" autocomplete="off" />
-      <div class="field-error" style="min-height:1.2em;"></div>
-      <div class="form-actions" style="justify-content:center;">
-        <button class="btn btn-outline btn-cancel">إلغاء</button>
-        <button class="btn btn-primary btn-confirm">حفظ</button>
-      </div>
-    </div>`;
-  document.body.appendChild(backdrop);
-  const close = () => backdrop.remove();
-  backdrop.querySelector('.btn-cancel').addEventListener('click', close);
-  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
-  backdrop.querySelector('.btn-confirm').addEventListener('click', async () => {
-    const key = document.getElementById('assistantApiKeyInput').value.trim();
-    const model = document.getElementById('assistantModelInput').value.trim() || ASSISTANT_DEFAULT_MODEL;
-    await setAssistantApiKey(key);
-    await SettingsDB.set(ASSISTANT_MODEL_SETTING, model);
-    close();
-    showToast('تم حفظ إعدادات المساعد', 'success');
-    renderAssistant();
-  });
-  setTimeout(() => document.getElementById('assistantApiKeyInput').focus(), 30);
+  return assistantCallAI({ mode: 'general', question: rawQuestion });
 }
 
 /* ------------------------------------------------------------------- */
@@ -2455,7 +2395,6 @@ function assistantMessageHTML(msg, idx) {
 
 async function renderAssistant() {
   renderChrome(true, '/');
-  const hasKey = !!(await getAssistantApiKey());
 
   APP_ROOT.innerHTML = `
     <div class="container assistant-page">
@@ -2465,10 +2404,7 @@ async function renderAssistant() {
           <h2 class="section-title">مساعد الخادم الذكي</h2>
           <p class="section-sub">مساعدك في الخدمة والكتاب المقدس والألحان والموضوعات الكنسية</p>
         </div>
-        <button type="button" class="btn btn-outline btn-sm" id="assistantSettingsBtn">${ICONS.key}<span>مفتاح API</span></button>
       </div>
-
-      ${!hasKey ? `<div class="assistant-setup-notice">لازم تدخل مفتاح Anthropic API الخاص بيك عشان المساعد يشتغل بالذكاء الاصطناعي (بيانات دليل الخدمات هتشتغل حتى من غيره). اضغط زرار "مفتاح API" فوق.</div>` : ''}
 
       <div class="assistant-suggestions" id="assistantSuggestions">
         ${ASSISTANT_SUGGESTIONS.map((s) => `<button type="button" class="assistant-chip">${escapeHTML(s)}</button>`).join('')}
@@ -2499,8 +2435,6 @@ async function renderAssistant() {
   }
   renderMessages();
 
-  document.getElementById('assistantSettingsBtn').addEventListener('click', openAssistantSettingsModal);
-
   document.querySelectorAll('.assistant-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
       inputEl.value = chip.textContent;
@@ -2526,9 +2460,7 @@ async function renderAssistant() {
       const text = await assistantAnswer(q);
       assistantMessages[idx] = { role: 'assistant', text, question: q };
     } catch (err) {
-      const friendly = err && err.code === 'NO_API_KEY'
-        ? 'لازم تدخل مفتاح API أولًا من زرار "مفتاح API" فوق.'
-        : ((err && err.message) || 'حدث خطأ غير متوقع.');
+      const friendly = (err && err.message) || 'حدث خطأ غير متوقع.';
       assistantMessages[idx] = { role: 'assistant', text: friendly, isError: true, question: q };
     } finally {
       assistantBusy = false;

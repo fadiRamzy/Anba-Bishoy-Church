@@ -1,0 +1,13 @@
+name = "smart-servant"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# Optional non-secret settings — safe to keep here since this file is NOT
+# the church website's repo. If your GitHub Pages site ever moves to a
+# custom domain, update ALLOWED_ORIGIN to match (no trailing slash).
+[vars]
+ALLOWED_ORIGIN = "https://fadiramzy.github.io"
+GEMINI_MODEL = "gemini-2.5-flash"
+
+# GEMINI_API_KEY and TAVILY_API_KEY are NOT set here — they must be added
+# as encrypted Worker secrets (see DEPLOY.md), never written to this file.
