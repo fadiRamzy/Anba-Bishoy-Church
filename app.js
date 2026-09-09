@@ -2108,11 +2108,25 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
 /*  assistant page has no such gate — so it must never read VisitationDB.  */
 /* ---------------------------------------------------------------------- */
 
-/* TODO (one-time, after deploying the Cloudflare Worker — see the change
-   report): replace this with your actual Worker URL, e.g.
+/* TODO (one-time, after deploying the Cloudflare Worker — see DEPLOY.md):
+   replace this with your actual deployed Worker URL, e.g.
    'https://smart-servant.your-subdomain.workers.dev/assistant'. Nothing
-   else in this file needs to change. */
-const ASSISTANT_WORKER_URL = 'https://smart-servant.YOUR-SUBDOMAIN.workers.dev/assistant';
+   else in this file needs to change.
+
+   ROOT CAUSE OF "تعذر الاتصال بمساعد الخدمة...": this constant was still
+   left at its literal placeholder value below, which is not a real,
+   resolvable address — every request to it fails at the network layer
+   before it ever reaches a server, for every visitor, regardless of their
+   own internet connection. This is expected until DEPLOY.md is completed
+   once by the site admin (see that file for exact steps + why a one-time
+   backend deployment is unavoidable for a static GitHub Pages site). */
+const ASSISTANT_WORKER_URL = 'https://anba-bishoy-church.fadi6298.workers.dev/assistant';
+
+/* True only while ASSISTANT_WORKER_URL is still the unedited placeholder
+   above. Lets assistantCallAI fail fast with an accurate "not configured
+   yet" message instead of a generic network error, and avoids firing a
+   doomed fetch() (and its console error) on every single question. */
+const ASSISTANT_WORKER_NOT_CONFIGURED = /YOUR-SUBDOMAIN/.test(ASSISTANT_WORKER_URL);
 
 /* The real system prompts (hymn safety rules, "never invent" rules, the
    "only answer from the attached JSON" rule for دليل الخدمات questions,
@@ -2128,6 +2142,11 @@ const ASSISTANT_WORKER_URL = 'https://smart-servant.YOUR-SUBDOMAIN.workers.dev/a
    search) or 'data' for already-locally-filtered دليل الخدمات results
    that just need natural-language phrasing. */
 async function assistantCallAI({ mode, question, dataContext }) {
+  if (ASSISTANT_WORKER_NOT_CONFIGURED) {
+    const err = new Error('المساعد الذكي لسه محتاج إعداد لمرة واحدة من المسؤول عن الموقع (راجع DEPLOY.md). البيانات المحلية (دليل الخدمات) شغالة عادي.');
+    err.code = 'NOT_CONFIGURED';
+    throw err;
+  }
   let res;
   try {
     res = await fetch(ASSISTANT_WORKER_URL, {
