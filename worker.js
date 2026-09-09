@@ -185,12 +185,16 @@ async function callGemini(env, { systemPrompt, userText, allowSearch }) {
   // the wall-clock time of — the same maxOutputTokens budget as the visible
   // answer. gemini-2.5-flash had no such default overhead, so switching the
   // GEMINI_MODEL env var alone silently made every call much slower without
-  // changing any code here. For a short, direct-answer chat assistant like
-  // this one, "low" keeps latency in a normal range; it does not disable
-  // thinking outright, so the model can still reason when it needs to.
+  // changing any code here. 'low' is NOT the lowest tier for this model
+  // family — 'minimal' is documented as the dedicated low-latency option,
+  // and production evidence (first Gemini call hanging the full timeout
+  // window with near-zero Worker cpuTime, i.e. pure I/O wait) points at
+  // thinking time as the likely driver. 'minimal' still leaves thinking
+  // enabled as a capability, it just stops the model defaulting to heavy
+  // reasoning for a short, direct-answer chat assistant like this one.
   const generationConfig = {
     maxOutputTokens: 1400,
-    thinkingConfig: { thinkingLevel: 'low' },
+    thinkingConfig: { thinkingLevel: 'minimal' },
   };
   const body = {
     systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -199,7 +203,7 @@ async function callGemini(env, { systemPrompt, userText, allowSearch }) {
   };
   if (allowSearch) body.tools = [WEB_SEARCH_TOOL];
 
-  mark('gemini_1_start');
+  mark(`gemini_1_start model=${model}`);
   let res = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -250,7 +254,7 @@ async function callGemini(env, { systemPrompt, userText, allowSearch }) {
       }],
     });
 
-    mark('gemini_2_start');
+    mark(`gemini_2_start model=${model}`);
     res = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
