@@ -33,6 +33,9 @@ const ICONS = {
   cross: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M5 8h14"/><circle cx="12" cy="3" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="21" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="8" r="1" fill="currentColor" stroke="none"/></svg>',
   cake: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7a2 2 0 012-2h12a2 2 0 012 2v7M2 21h20M4 14a3 3 0 013-3h10a3 3 0 013 3M9 9V6M12 9V6M15 9V6M9 6c0-.8.5-1.2.5-2S9 2.5 9 2M12 6c0-.8.5-1.2.5-2S12 2.5 12 2M15 6c0-.8.5-1.2.5-2S15 2.5 15 2"/></svg>',
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>',
+  sparkle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.4L19 10l-5.4 1.6L12 17l-1.6-5.4L5 10l5.4-1.6L12 3z"/><path d="M19 3l.6 2 2 .6-2 .6-.6 2-.6-2-2-.6 2-.6.6-2z"/></svg>',
+  send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
+  key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.5 12.5L20 3M20 3v4h-4M17 6l3 3"/></svg>',
 };
 
 /* ---------------------------------------------------------------------- */
@@ -53,12 +56,17 @@ const BRAND_VERSES = {
     text: '«إِنْ كَانَ لِإِنْسَانٍ مِئَةُ خَرُوفٍ، وَضَلَّ وَاحِدٌ مِنْهَا، أَفَلَا يَتْرُكُ التِّسْعَةَ وَالتِّسْعِينَ عَلَى الْجِبَالِ، وَيَذْهَبُ يَطْلُبُ الضَّالَّ؟»',
     ref: 'مَتَّى ١٨: ١٢',
   },
+  assistant: {
+    text: '«اُطْلُبُوا فَتَجِدُوا. اِقْرَعُوا فَيُفْتَحَ لَكُمْ»',
+    ref: 'مَتَّى ٧: ٧',
+  },
 };
 
 const BRAND_TAGLINES = {
   home: 'دليل الخدام لمتابعة الافتقاد',
   landing: 'دليل خدمات الكنيسة',
   visitation: 'دليل الكاهن لمتابعة الافتقاد',
+  assistant: 'مساعدك في الخدمة والكتاب المقدس والألحان',
 };
 
 function applyHeaderChrome(section) {
@@ -402,6 +410,15 @@ async function router() {
     return renderVisitationHome(params);
   }
 
+  // "مساعد الخادم الذكي" — new AI assistant page (see the Assistant section
+  // near the end of this file). No password gate: it only ever reads from
+  // MembersDB ("دليل الخدمات"), never from VisitationDB ("خدمات الافتقاد"),
+  // so it can't surface anything that sits behind the visitation password.
+  if (segments[0] === 'assistant') {
+    applyHeaderChrome('assistant');
+    return renderAssistant();
+  }
+
   // "دليل الخدمات" — the original, existing website, unchanged, now living
   // under the /home (and its existing sub-routes) instead of the bare root.
   applyHeaderChrome('home');
@@ -464,6 +481,10 @@ async function renderLanding() {
         <a href="#/visitation" class="landing-card">
           <span class="icon-wrap">${ICONS.church}</span>
           <span class="landing-card-title">خدمات الافتقاد</span>
+        </a>
+        <a href="#/assistant" class="landing-card">
+          <span class="icon-wrap">${ICONS.sparkle}</span>
+          <span class="landing-card-title">مساعد الخادم الذكي</span>
         </a>
       </div>
     </div>
@@ -2062,6 +2083,459 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
     btn.disabled = false;
     btn.innerHTML = originalLabel;
   }
+}
+
+/* ---------------------------------------------------------------------- */
+/*  مساعد الخادم الذكي — Smart Assistant                                   */
+/*                                                                          */
+/*  New, additive feature. Does not touch "دليل الخدمات" or "خدمات         */
+/*  الافتقاد" logic/data at all — it only READS from MembersDB.            */
+/*                                                                          */
+/*  IMPORTANT ARCHITECTURE NOTE (please read):                             */
+/*  This site is static (GitHub Pages) with no backend/server. There is    */
+/*  no way to call a secret-key-based AI API from a static site without    */
+/*  exposing that key to whoever opens dev tools on the device. The        */
+/*  smallest practical option that keeps no key in the repo/source code is */
+/*  to let each user enter their OWN Anthropic API key at runtime; it is   */
+/*  stored only in this browser's IndexedDB (via SettingsDB, same store    */
+/*  already used elsewhere in this app) and sent directly from the         */
+/*  browser to Anthropic per-request. That key never leaves this device    */
+/*  except to Anthropic itself, and is never written to any file that      */
+/*  gets committed to GitHub. It is NOT fully secret from someone with     */
+/*  physical/devtools access to the same device — that limitation is       */
+/*  inherent to any pure static-site architecture, not specific to this    */
+/*  implementation. See the settings modal below.                         */
+/*                                                                          */
+/*  DATA-SAFETY NOTE: the assistant is intentionally wired to MembersDB    */
+/*  ("دليل الخدمات") ONLY. "خدمات الافتقاد" data (VisitationDB) sits       */
+/*  behind its own password gate specifically to protect it, and this      */
+/*  assistant page has no such gate — so it must never read VisitationDB.  */
+/* ---------------------------------------------------------------------- */
+
+const ASSISTANT_API_KEY_SETTING = 'assistant_api_key';
+const ASSISTANT_MODEL_SETTING = 'assistant_api_model';
+const ASSISTANT_DEFAULT_MODEL = 'claude-sonnet-5';
+
+async function getAssistantApiKey() {
+  return SettingsDB.get(ASSISTANT_API_KEY_SETTING);
+}
+async function setAssistantApiKey(key) {
+  return SettingsDB.set(ASSISTANT_API_KEY_SETTING, key || '');
+}
+async function getAssistantModel() {
+  const m = await SettingsDB.get(ASSISTANT_MODEL_SETTING);
+  return m || ASSISTANT_DEFAULT_MODEL;
+}
+
+const ASSISTANT_SYSTEM_PROMPT = `أنت "مساعد الخادم الذكي" في كنيسة الأنبا بيشوي بالمنيا الجديدة، إيبارشية شرق المنيا للأقباط الأرثوذكس.
+مجالك هو: المسيحية الأرثوذكسية القبطية، الكتاب المقدس، الألحان، الطقوس، القديسين، الأعياد، الدروس وإعداد الخدمة والمخدومين.
+إذا سُئلت عن موضوع لا علاقة له بهذا المجال إطلاقًا، اعتذر بأدب واشرح أنك متخصص في شؤون الخدمة والكنيسة فقط، ولا تحاول الإجابة عليه.
+قواعد صارمة بخصوص الألحان:
+- لا تختلق نص لحن أو ترجمة أو معلومة لحنية لم تجدها في مصدر موثوق.
+- "الحذَّات" (الهذّات) شيء مختلف تمامًا عن النوتة الموسيقية الغربية (دو ري مي فا صول لا سي). لا تخلط بينهما، ووضّح دائمًا أيهما تعرض إن وجدت أيًا منهما.
+- إذا لم تجد معلومة معينة (نص اللحن، الحذّات، النوتة)، صرّح بوضوح أنها غير متوفرة لديك، ولا تخترعها أبدًا.
+أجب دائمًا باللغة العربية، بأسلوب واضح ومباشر يناسب خادم/خادمة في الكنيسة.`;
+
+const ASSISTANT_DATA_SYSTEM_PROMPT = `أنت مساعد يعرض بيانات "دليل الخدمات" لكنيسة الأنبا بيشوي بناءً على نتائج مُفلترة محليًا بالفعل، مُرفقة لك كنص JSON.
+اكتب ردًا عربيًا طبيعيًا موجزًا يلخص هذه النتائج فقط.
+لا تُضف أي اسم أو رقم أو معلومة غير موجودة في البيانات المرفقة، ولا تخترع أي شيء.
+إن كانت القائمة فارغة، وضّح بوضوح أنه لا توجد نتائج مطابقة في بيانات دليل الخدمات.`;
+
+/* Calls the Anthropic Messages API directly from the browser with the
+   user's own locally-stored key (see the architecture note above). */
+async function assistantCallAI({ system, userText, useWebSearch }) {
+  const apiKey = await getAssistantApiKey();
+  if (!apiKey) {
+    const err = new Error('لازم تدخل مفتاح API أولًا.');
+    err.code = 'NO_API_KEY';
+    throw err;
+  }
+  const model = await getAssistantModel();
+  const body = {
+    model,
+    max_tokens: 1400,
+    system,
+    messages: [{ role: 'user', content: userText }],
+  };
+  if (useWebSearch) {
+    body.tools = [{ type: 'web_search_20250305', name: 'web_search' }];
+  }
+  let res;
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (networkErr) {
+    throw new Error('تعذر الاتصال بخدمة الذكاء الاصطناعي. تأكد من الاتصال بالإنترنت.');
+  }
+  if (!res.ok) {
+    let msg = `تعذر الاتصال بخدمة الذكاء الاصطناعي (${res.status})`;
+    try {
+      const errJson = await res.json();
+      if (errJson && errJson.error && errJson.error.message) msg = errJson.error.message;
+    } catch (_) { /* keep default msg */ }
+    throw new Error(msg);
+  }
+  const data = await res.json();
+  const text = (data.content || [])
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text)
+    .join('\n\n')
+    .trim();
+  return text || 'لم يصل رد نصي من المساعد.';
+}
+
+/* ------------------------------------------------------------------- */
+/*  Natural-language -> MembersDB query detection (birth month, age     */
+/*  threshold, neighborhood, city). Only ever reads MembersDB.          */
+/* ------------------------------------------------------------------- */
+function assistantDetectMonth(normQ) {
+  for (let i = 0; i < ARABIC_MONTHS.length; i++) {
+    if (normQ.includes(normalizeArabic(ARABIC_MONTHS[i]))) return i;
+  }
+  const m = normQ.match(/شهر\s*(\d{1,2})/);
+  if (m) {
+    const n = Number(m[1]);
+    if (n >= 1 && n <= 12) return n - 1;
+  }
+  return null;
+}
+
+function assistantDetectAge(normQ) {
+  let m = normQ.match(/(اكبر من|فوق|اكثر من)\s*(\d{1,3})/);
+  if (m) return { min: Number(m[2]) };
+  m = normQ.match(/(اصغر من|اقل من)\s*(\d{1,3})/);
+  if (m) return { max: Number(m[2]) };
+  return null;
+}
+
+function assistantDetectDataIntent(rawQuestion) {
+  const normQ = normalizeArabic(rawQuestion);
+  const filters = {};
+  const label = [];
+
+  const month = assistantDetectMonth(normQ);
+  if (month !== null && /ميلاد|مواليد/.test(normQ)) {
+    filters.birthMonth = month;
+    label.push(`مواليد شهر ${ARABIC_MONTHS[month]}`);
+  }
+
+  const age = assistantDetectAge(normQ);
+  if (age) {
+    filters.age = age;
+    if (age.min !== undefined) label.push(`أكبر من ${age.min} سنة`);
+    if (age.max !== undefined) label.push(`أقل من ${age.max} سنة`);
+  }
+
+  for (const n of NEIGHBORHOOD_OPTIONS) {
+    if (normQ.includes(normalizeArabic(n))) {
+      filters.neighborhood = n;
+      label.push(`الحي: ${n}`);
+      break;
+    }
+  }
+  if (!filters.neighborhood) {
+    const m = normQ.match(/حي\s*(?:رقم\s*)?(\d{1,2})/);
+    if (m) {
+      const idx = Number(m[1]) - 1;
+      if (NEIGHBORHOOD_OPTIONS[idx]) {
+        filters.neighborhood = NEIGHBORHOOD_OPTIONS[idx];
+        label.push(`الحي: ${NEIGHBORHOOD_OPTIONS[idx]}`);
+      }
+    }
+  }
+
+  for (const c of CITY_OPTIONS) {
+    if (normQ.includes(normalizeArabic(c))) {
+      filters.city = c;
+      label.push(`المدينة: ${c}`);
+    }
+  }
+
+  if (!Object.keys(filters).length) return null;
+  return { filters, label };
+}
+
+/* Filters MembersDB locally, then returns ONLY the fields relevant to the
+   detected question (never phone/notes/etc. unless the question is about
+   them specifically) — keeps the AI request minimal and avoids exposing
+   unnecessary personal data, per the data-safety requirement. */
+async function assistantRunDataQuery(intent) {
+  const all = await MembersDB.getAll();
+  const rows = all.filter((m) => {
+    const f = intent.filters;
+    if (f.birthMonth !== undefined) {
+      const parts = (m.birthDate || '').split('-');
+      const month = parts.length === 3 ? Number(parts[1]) - 1 : null;
+      if (month !== f.birthMonth) return false;
+    }
+    if (f.age) {
+      const age = computeAge(m);
+      if (age === null) return false;
+      if (f.age.min !== undefined && age < f.age.min) return false;
+      if (f.age.max !== undefined && age > f.age.max) return false;
+    }
+    if (f.neighborhood && (m.neighborhood || '') !== f.neighborhood) return false;
+    if (f.city && (m.city || '') !== f.city) return false;
+    return true;
+  });
+  return rows.map((m) => {
+    const out = { name: m.name || '' };
+    if (intent.filters.birthMonth !== undefined) out.birthDate = m.birthDate || null;
+    if (intent.filters.age) out.age = computeAge(m);
+    if (intent.filters.neighborhood) out.neighborhood = m.neighborhood || '';
+    if (intent.filters.city) out.city = m.city || '';
+    return out;
+  });
+}
+
+function assistantFormatDataFallback(intent, rows) {
+  const title = intent.label.join(' — ') || 'نتائج البحث';
+  if (!rows.length) return `${title}:\nلا توجد نتائج مطابقة في بيانات دليل الخدمات.`;
+  const lines = rows.map((r, i) => {
+    const extra = [];
+    if (r.birthDate) extra.push(formatBirthDate({ birthDate: r.birthDate }) || r.birthDate);
+    if (r.age !== undefined && r.age !== null) extra.push(`${r.age} سنة`);
+    if (r.neighborhood) extra.push(`حي ${r.neighborhood}`);
+    if (r.city) extra.push(r.city);
+    return `${i + 1}. ${r.name}${extra.length ? ' — ' + extra.join('، ') : ''}`;
+  });
+  return `${title} (${rows.length}):\n${lines.join('\n')}\n\n(سرد مباشر من بيانات دليل الخدمات على هذا الجهاز، بدون مفتاح API. لإجابة بصياغة أذكى، أدخل مفتاح API من الإعدادات فوق.)`;
+}
+
+async function assistantAnswer(rawQuestion) {
+  const intent = assistantDetectDataIntent(rawQuestion);
+  if (intent) {
+    const rows = await assistantRunDataQuery(intent);
+    const apiKey = await getAssistantApiKey();
+    if (!apiKey) {
+      return assistantFormatDataFallback(intent, rows);
+    }
+    const contextJSON = JSON.stringify(rows.slice(0, 200));
+    const userText = `السؤال: ${rawQuestion}\n\nنتائج مطابقة من بيانات دليل الخدمات (${rows.length} سجل):\n${contextJSON}`;
+    return assistantCallAI({ system: ASSISTANT_DATA_SYSTEM_PROMPT, userText, useWebSearch: false });
+  }
+  return assistantCallAI({ system: ASSISTANT_SYSTEM_PROMPT, userText: rawQuestion, useWebSearch: true });
+}
+
+/* ------------------------------------------------------------------- */
+/*  Settings modal — where the user enters their own Anthropic API key. */
+/*  Reuses the exact same .pin-modal-backdrop/.pin-modal chrome as the  */
+/*  Admin/Visitation PIN modals (openPinModal), just with plain text     */
+/*  inputs instead of a PIN field.                                       */
+/* ------------------------------------------------------------------- */
+async function openAssistantSettingsModal() {
+  const currentKey = (await getAssistantApiKey()) || '';
+  const currentModel = await getAssistantModel();
+  const backdrop = document.createElement('div');
+  backdrop.className = 'pin-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="pin-modal assistant-settings-modal" role="dialog" aria-modal="true">
+      <h3>إعداد المساعد الذكي</h3>
+      <p style="color:var(--color-ink-soft);font-size:.85rem;text-align:right;">
+        مفتاح Anthropic API الخاص بيك بيتخزن على هذا الجهاز فقط، ويُستخدم للاتصال المباشر بخدمة الذكاء الاصطناعي من المتصفح. لا يُرفع لأي مكان تاني ولا يوضع في ملفات المشروع. أي حد يستخدم هذا الجهاز/المتصفح هيقدر يشوفه، فمن فضلك متشاركوش.
+      </p>
+      <label style="font-size:.82rem;color:var(--color-ink-soft);display:block;margin-top:10px;">مفتاح API</label>
+      <input type="password" id="assistantApiKeyInput" placeholder="sk-ant-..." value="${escapeHTML(currentKey)}" autocomplete="off" />
+      <label style="font-size:.82rem;color:var(--color-ink-soft);display:block;">اسم الموديل (اختياري)</label>
+      <input type="text" id="assistantModelInput" placeholder="${ASSISTANT_DEFAULT_MODEL}" value="${escapeHTML(currentModel === ASSISTANT_DEFAULT_MODEL ? '' : currentModel)}" autocomplete="off" />
+      <div class="field-error" style="min-height:1.2em;"></div>
+      <div class="form-actions" style="justify-content:center;">
+        <button class="btn btn-outline btn-cancel">إلغاء</button>
+        <button class="btn btn-primary btn-confirm">حفظ</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  const close = () => backdrop.remove();
+  backdrop.querySelector('.btn-cancel').addEventListener('click', close);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  backdrop.querySelector('.btn-confirm').addEventListener('click', async () => {
+    const key = document.getElementById('assistantApiKeyInput').value.trim();
+    const model = document.getElementById('assistantModelInput').value.trim() || ASSISTANT_DEFAULT_MODEL;
+    await setAssistantApiKey(key);
+    await SettingsDB.set(ASSISTANT_MODEL_SETTING, model);
+    close();
+    showToast('تم حفظ إعدادات المساعد', 'success');
+    renderAssistant();
+  });
+  setTimeout(() => document.getElementById('assistantApiKeyInput').focus(), 30);
+}
+
+/* ------------------------------------------------------------------- */
+/*  PDF export — "📄 استخراج PDF" for a single assistant answer.        */
+/*  Reuses the same jsPDF/html2canvas vendor libraries already loaded    */
+/*  for the birthdays PDF export above (_loadPdfLibs), rasterizing an    */
+/*  offscreen page and slicing it into as many A4 pages as needed.       */
+/* ------------------------------------------------------------------- */
+async function downloadAssistantAnswerPDF(msg) {
+  if (!msg || msg.role !== 'assistant' || msg.isError) return;
+  let stage = null;
+  try {
+    await _loadPdfLibs();
+    const { jsPDF } = window.jspdf;
+    const PAGE_W = 595, PAGE_H = 842, MARGIN = 40;
+    const contentW = PAGE_W - MARGIN * 2;
+
+    stage = document.createElement('div');
+    stage.style.cssText = `position:fixed;left:-99999px;top:0;width:${contentW}px;background:#FFFDF8;`;
+    stage.innerHTML = `
+      <div style="padding:24px;direction:rtl;font-family:'Cairo',system-ui,sans-serif;">
+        <div style="text-align:center;margin-bottom:16px;">
+          <div style="font-family:'Aref Ruqaa',serif;font-size:20px;color:#7C1F2C;font-weight:700;">كنيسة الأنبا بيشوي</div>
+          <div style="font-family:'Cairo',sans-serif;font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">مساعد الخادم الذكي</div>
+        </div>
+        ${msg.question ? `<div style="font-size:12px;color:#591420;font-weight:700;margin-bottom:10px;">السؤال: ${escapeHTML(msg.question)}</div>` : ''}
+        <div style="font-size:11.5px;line-height:1.7;color:#2A211B;white-space:pre-wrap;">${escapeHTML(msg.text)}</div>
+      </div>`;
+    document.body.appendChild(stage);
+
+    const canvas = await window.html2canvas(stage, { scale: 2, backgroundColor: '#FFFDF8', useCORS: true });
+    stage.remove();
+    stage = null;
+
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+    const scale = canvas.width / contentW;
+    const sliceHpx = (PAGE_H - MARGIN * 2) * scale;
+    let sy = 0, first = true;
+    while (sy < canvas.height) {
+      const sliceH = Math.min(sliceHpx, canvas.height - sy);
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = sliceH;
+      sliceCanvas.getContext('2d').drawImage(canvas, 0, sy, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+      const imgData = sliceCanvas.toDataURL('image/png');
+      if (!first) pdf.addPage();
+      first = false;
+      pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, contentW, sliceH / scale);
+      sy += sliceH;
+    }
+    pdf.save(`مساعد_الخادم_${Date.now()}.pdf`);
+  } catch (err) {
+    console.error('Assistant PDF generation failed:', err);
+    showToast('حدث خطأ أثناء إنشاء ملف PDF', 'error');
+  } finally {
+    if (stage) stage.remove();
+  }
+}
+
+/* ------------------------------------------------------------------- */
+/*  Page render — chat-style UI, Arabic/RTL, suggested prompts.         */
+/*  Conversation is kept in-memory only (module-level array), so it     */
+/*  persists while navigating the app but resets on page reload —       */
+/*  intentionally simple for this first version, no new DB store added. */
+/* ------------------------------------------------------------------- */
+let assistantMessages = [];
+let assistantBusy = false;
+
+const ASSISTANT_SUGGESTIONS = [
+  'لخصلي درس يونان',
+  'هاتلي أعياد الميلاد في سبتمبر',
+  'هاتلي آيات عن المحبة',
+  'اشرحلي معنى التجسد',
+  'هاتلي لحن كي إبيرتو',
+];
+
+function assistantMessageHTML(msg, idx) {
+  const bubbleClass = msg.role === 'user'
+    ? 'assistant-msg assistant-msg-user'
+    : 'assistant-msg assistant-msg-bot' + (msg.isError ? ' assistant-msg-error' : '');
+  const bodyHTML = escapeHTML(msg.text).replace(/\n/g, '<br>');
+  const pdfBtn = (msg.role === 'assistant' && !msg.isError && !msg.thinking)
+    ? `<button type="button" class="btn btn-outline btn-sm assistant-pdf-btn" data-idx="${idx}">${ICONS.download}<span>📄 استخراج PDF</span></button>`
+    : '';
+  return `<div class="${bubbleClass}"><div class="assistant-msg-body">${bodyHTML}</div>${pdfBtn}</div>`;
+}
+
+async function renderAssistant() {
+  renderChrome(true, '/');
+  const hasKey = !!(await getAssistantApiKey());
+
+  APP_ROOT.innerHTML = `
+    <div class="container assistant-page">
+      <p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>مساعد الخادم الذكي</span></p>
+      <div class="assistant-header">
+        <div>
+          <h2 class="section-title">مساعد الخادم الذكي</h2>
+          <p class="section-sub">مساعدك في الخدمة والكتاب المقدس والألحان والموضوعات الكنسية</p>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" id="assistantSettingsBtn">${ICONS.key}<span>مفتاح API</span></button>
+      </div>
+
+      ${!hasKey ? `<div class="assistant-setup-notice">لازم تدخل مفتاح Anthropic API الخاص بيك عشان المساعد يشتغل بالذكاء الاصطناعي (بيانات دليل الخدمات هتشتغل حتى من غيره). اضغط زرار "مفتاح API" فوق.</div>` : ''}
+
+      <div class="assistant-suggestions" id="assistantSuggestions">
+        ${ASSISTANT_SUGGESTIONS.map((s) => `<button type="button" class="assistant-chip">${escapeHTML(s)}</button>`).join('')}
+      </div>
+
+      <div class="assistant-chat" id="assistantChat"></div>
+
+      <form class="assistant-input-row" id="assistantForm">
+        <input type="text" id="assistantInput" placeholder="اسأل عن درس، لحن، آية، كتاب، خدمة أو أي موضوع كنسي..." autocomplete="off" />
+        <button type="submit" class="btn btn-primary" id="assistantSendBtn">${ICONS.send}<span>إرسال</span></button>
+      </form>
+    </div>
+  `;
+
+  const chatEl = document.getElementById('assistantChat');
+  const formEl = document.getElementById('assistantForm');
+  const inputEl = document.getElementById('assistantInput');
+  const sendBtn = document.getElementById('assistantSendBtn');
+
+  function renderMessages() {
+    chatEl.innerHTML = assistantMessages.length
+      ? assistantMessages.map((m, i) => assistantMessageHTML(m, i)).join('')
+      : `<p class="assistant-empty">اكتب سؤالك تحت، أو اختر أحد الاقتراحات.</p>`;
+    chatEl.scrollTop = chatEl.scrollHeight;
+    chatEl.querySelectorAll('.assistant-pdf-btn').forEach((btn) => {
+      btn.addEventListener('click', () => downloadAssistantAnswerPDF(assistantMessages[Number(btn.dataset.idx)]));
+    });
+  }
+  renderMessages();
+
+  document.getElementById('assistantSettingsBtn').addEventListener('click', openAssistantSettingsModal);
+
+  document.querySelectorAll('.assistant-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      inputEl.value = chip.textContent;
+      formEl.requestSubmit ? formEl.requestSubmit() : formEl.dispatchEvent(new Event('submit', { cancelable: true }));
+    });
+  });
+
+  formEl.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const q = inputEl.value.trim();
+    if (!q || assistantBusy) return;
+    inputEl.value = '';
+    assistantMessages.push({ role: 'user', text: q });
+    renderMessages();
+
+    assistantBusy = true;
+    sendBtn.disabled = true;
+    const idx = assistantMessages.length;
+    assistantMessages.push({ role: 'assistant', text: 'جارٍ التفكير...', thinking: true, question: q });
+    renderMessages();
+
+    try {
+      const text = await assistantAnswer(q);
+      assistantMessages[idx] = { role: 'assistant', text, question: q };
+    } catch (err) {
+      const friendly = err && err.code === 'NO_API_KEY'
+        ? 'لازم تدخل مفتاح API أولًا من زرار "مفتاح API" فوق.'
+        : ((err && err.message) || 'حدث خطأ غير متوقع.');
+      assistantMessages[idx] = { role: 'assistant', text: friendly, isError: true, question: q };
+    } finally {
+      assistantBusy = false;
+      sendBtn.disabled = false;
+      renderMessages();
+    }
+  });
 }
 
 /* ---------------------------------------------------------------------- */
