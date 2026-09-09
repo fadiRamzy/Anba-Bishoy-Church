@@ -2327,6 +2327,170 @@ async function downloadVisitationFamiliesPDF(families) {
 }
 
 /* ---------------------------------------------------------------------- */
+/*  Sector members PDF export ("استخراج PDF")                             */
+/*  #/browse/sector/:value — exports exactly the members currently shown  */
+/*  (i.e. already narrowed down by الفصل + النوع filters). Reuses the     */
+/*  same jsPDF/html2canvas pipeline and visual template as the existing    */
+/*  exports above (_loadPdfLibs, same page geometry, header and table      */
+/*  styling) — only the columns/data differ.                              */
+/* ---------------------------------------------------------------------- */
+function normalizeSectorGenderWord(w) {
+  if (w === 'بنين' || w === 'شباب') return 'بنين';
+  if (w === 'بنات' || w === 'شابات') return 'بنات';
+  return null;
+}
+
+/* Gender derived from existing stored values only (no DB change):
+   explicit stageGender/sectorGender/gender fields first, then the trailing
+   gender word embedded in sector/stage text (e.g. 'اعدادي بنين'). */
+function getSectorMemberGender(m) {
+  const explicit = normalizeSectorGenderWord((m.stageGender || '').toString().trim())
+    || normalizeSectorGenderWord((m.sectorGender || '').toString().trim())
+    || normalizeSectorGenderWord((m.gender || '').toString().trim());
+  if (explicit) return explicit;
+  const fromSector = normalizeSectorGenderWord(deriveStageGender(m.sector || ''));
+  if (fromSector) return fromSector;
+  return normalizeSectorGenderWord(deriveStageGender(m.stage || ''));
+}
+
+async function downloadSectorMembersPDF(members, sectorLabel) {
+  const btn = document.getElementById('sectorPdfBtn');
+  const rows = members.map((m) => {
+    const phoneRaw = m.phone1 || m.phone2 || '';
+    return {
+      name: m.name || '',
+      phone: phoneRaw ? formatPhone(phoneRaw) : '—',
+      className: cleanLabel(m.class) || '—',
+      address: visitationFamilyAddress(m) || '—',
+    };
+  });
+
+  if (!rows.length) {
+    showToast('لا توجد أسماء مطابقة للفلاتر الحالية لتصديرها', 'error');
+    return;
+  }
+
+  const originalLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = 'جاري التجهيز...';
+
+  const cleanupEls = [];
+  try {
+    await _loadPdfLibs();
+    const { jsPDF } = window.jspdf;
+
+    /* Same page geometry convention as downloadVisitationFamiliesPDF:
+       single full-width table per page with equal column widths. */
+    const PAGE_W = 595, PAGE_H = 842;
+    const MARGIN = 26;
+    const HEADER_H = 96;
+    const BLOCK_W = PAGE_W - MARGIN * 2;
+    const BLOCK_H = PAGE_H - HEADER_H - MARGIN * 2;
+    const HEAD_ROW_H = 24;
+    const MIN_ROW_H = 20;
+    const COLS = [
+      { key: 'name', label: 'الاسم', w: 0.25 },
+      { key: 'phone', label: 'رقم الهاتف', w: 0.25 },
+      { key: 'className', label: 'الفصل', w: 0.25 },
+      { key: 'address', label: 'العنوان', w: 0.25 },
+    ];
+    const nameColW = BLOCK_W * COLS[0].w - 2;
+    const phoneColW = BLOCK_W * COLS[1].w - 2;
+    const classColW = BLOCK_W * COLS[2].w - 2;
+    const addressColW = BLOCK_W * COLS[3].w - 2;
+
+    /* Measure wrapped height per row across every column so no row is ever
+       split across a block/page boundary (same technique as the existing
+       exports). */
+    const probe = document.createElement('div');
+    probe.style.cssText = `position:fixed;visibility:hidden;left:-9999px;top:0;font-family:'Cairo',system-ui,sans-serif;font-size:10.5px;line-height:1.4;padding:5px 6px;box-sizing:border-box;word-break:break-word;`;
+    document.body.appendChild(probe);
+    cleanupEls.push(probe);
+    function measureH(text, width) {
+      probe.style.width = `${width}px`;
+      probe.textContent = text;
+      return probe.offsetHeight;
+    }
+    const measured = rows.map((r, idx) => {
+      const serial = idx + 1;
+      const nameH = measureH(`${serial} - ${r.name}`, nameColW);
+      const phoneH = measureH(r.phone, phoneColW);
+      const classH = measureH(r.className, classColW);
+      const addressH = measureH(r.address, addressColW);
+      return { ...r, serial, rowH: Math.max(MIN_ROW_H, nameH, phoneH, classH, addressH) };
+    });
+
+    /* Bin-pack rows into blocks that each fit within BLOCK_H. */
+    const blocks = [];
+    let current = [], currentH = HEAD_ROW_H;
+    for (const r of measured) {
+      if (currentH + r.rowH > BLOCK_H && current.length) {
+        blocks.push(current);
+        current = [];
+        currentH = HEAD_ROW_H;
+      }
+      current.push(r);
+      currentH += r.rowH;
+    }
+    if (current.length) blocks.push(current);
+
+    function tableHTML(blockRows) {
+      const colgroup = COLS.map((c) => `<col style="width:${c.w * 100}%;">`).join('');
+      const th = COLS.map((c) => `<th style="border:1px solid #9AA7B2;background:#DCE6F1;color:#1F2A37;font-family:'Cairo',sans-serif;font-weight:700;font-size:10.5px;line-height:1.35;padding:5px 6px;text-align:center;vertical-align:middle;">${escapeHTML(c.label)}</th>`).join('');
+      const trs = blockRows.map((r) => `
+        <tr>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;word-break:break-word;text-align:right;vertical-align:middle;">${r.serial} - ${escapeHTML(r.name)}</td>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;direction:ltr;">${escapeHTML(r.phone)}</td>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;word-break:break-word;text-align:center;vertical-align:middle;">${escapeHTML(r.className)}</td>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;word-break:break-word;text-align:right;vertical-align:middle;">${escapeHTML(r.address)}</td>
+        </tr>`).join('');
+      return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><colgroup>${colgroup}</colgroup><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
+    }
+
+    function pageHTML(pageBlock) {
+      return `
+        <div style="width:${PAGE_W}px;height:${PAGE_H}px;background:#FFFDF8;box-sizing:border-box;position:relative;overflow:hidden;">
+          <div style="position:absolute;inset:0;background-image:url('site-bg.jpg');background-size:cover;background-position:center;opacity:0.08;"></div>
+          <div style="position:relative;padding:${MARGIN}px;direction:rtl;">
+            <div style="text-align:center;margin-bottom:10px;">
+              <div style="font-family:'Aref Ruqaa',serif;font-size:22px;color:#7C1F2C;font-weight:700;">قطاع ${escapeHTML(cleanLabel(sectorLabel))}</div>
+              <div style="font-family:'Cairo',sans-serif;font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
+              <div style="font-family:'Cairo',sans-serif;font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
+            </div>
+            <div style="width:${BLOCK_W}px;">${tableHTML(pageBlock)}</div>
+          </div>
+        </div>`;
+    }
+
+    const stage = document.createElement('div');
+    stage.style.cssText = 'position:fixed;left:-99999px;top:0;';
+    document.body.appendChild(stage);
+    cleanupEls.push(stage);
+
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+    for (let i = 0; i < blocks.length; i++) {
+      stage.innerHTML = pageHTML(blocks[i]);
+      const pageEl = stage.firstElementChild;
+      // eslint-disable-next-line no-await-in-loop
+      const canvas = await window.html2canvas(pageEl, { scale: 2, backgroundColor: '#FFFDF8', useCORS: true });
+      const imgData = canvas.toDataURL('image/png');
+      if (i > 0) pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, 0, PAGE_W, PAGE_H);
+    }
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    pdf.save(`قطاع_${cleanLabel(sectorLabel)}_${stamp}.pdf`);
+  } catch (err) {
+    console.error('PDF generation failed:', err);
+    showToast('حدث خطأ أثناء إنشاء ملف PDF', 'error');
+  } finally {
+    cleanupEls.forEach((el) => el.remove());
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
 /*  Browse: category list -> (optional sub-filter) -> members             */
 /* ---------------------------------------------------------------------- */
 async function renderBrowse(key, valueRaw, params) {
@@ -2357,7 +2521,9 @@ async function renderBrowse(key, valueRaw, params) {
 
   // value selected: fetch matching members, and if there's a meaningful sub-filter (class), show chips
   let members = await MembersDB.filterBy(section.field, value);
-  const subField = params.class;
+  const subField = params.class || '';
+  const genderParamRaw = section.key === 'sector' ? (params.gender || '') : '';
+  const validGenderParam = (genderParamRaw === 'بنين' || genderParamRaw === 'بنات') ? genderParamRaw : '';
   let classValues = [];
   if (section.key === 'sector') {
     classValues = Array.from(new Set(members.map((m) => (m.class || '').trim()).filter(Boolean)));
@@ -2372,14 +2538,23 @@ async function renderBrowse(key, valueRaw, params) {
     : [];
 
   let filtered = members;
-  if (section.key === 'sector' && subField) {
-    filtered = members.filter((m) => (m.class || '') === subField);
+  if (section.key === 'sector') {
+    if (subField) filtered = filtered.filter((m) => (m.class || '') === subField);
+    if (validGenderParam) filtered = filtered.filter((m) => getSectorMemberGender(m) === validGenderParam);
   } else if (showCategoryFilter && catParam) {
     const catDef = CATEGORY_DEFS.find((c) => c.label === catParam);
     if (catDef) filtered = members.filter(catDef.match);
   }
 
   const valueLabel = (section.field === 'stage' || section.field === 'sector') ? cleanLabel(value) : value;
+  const browseBase = `#/browse/${key}/${encodeURIComponent(value)}`;
+  const browseHref = (q) => {
+    const s = qs(q);
+    return s ? `${browseBase}?${s}` : browseBase;
+  };
+  const isSectorFiltered = section.key === 'sector' && (!!subField || !!validGenderParam);
+  const boysCount = section.key === 'sector' ? members.filter((m) => getSectorMemberGender(m) === 'بنين').length : 0;
+  const girlsCount = section.key === 'sector' ? members.filter((m) => getSectorMemberGender(m) === 'بنات').length : 0;
 
   APP_ROOT.innerHTML = `
     <div class="container">
@@ -2389,11 +2564,24 @@ async function renderBrowse(key, valueRaw, params) {
         <span>${escapeHTML(valueLabel)}</span>
       </p>
       <h2 class="section-title">${escapeHTML(valueLabel)}</h2>
-      <p class="section-sub">إجمالي المسجلين: ${catParam ? filtered.length : members.length}</p>
-      ${classValues.length > 1 ? `
+      <p class="section-sub">إجمالي المسجلين: ${(catParam || isSectorFiltered) ? filtered.length : members.length}</p>
+      ${section.key === 'sector' && classValues.length ? `
+        <p class="section-sub" style="margin-top:14px;">الفصل</p>
         <div class="chip-row">
-          <a href="#/browse/${key}/${encodeURIComponent(value)}" class="chip${!subField ? ' active' : ''}">الكل<span class="count">${members.length}</span></a>
-          ${classValues.map((c) => `<a href="#/browse/${key}/${encodeURIComponent(value)}?${qs({ class: c })}" class="chip${subField === c ? ' active' : ''}">${escapeHTML(cleanLabel(c))}<span class="count">${members.filter((m) => m.class === c).length}</span></a>`).join('')}
+          <a href="${browseHref({ gender: validGenderParam })}" class="chip${!subField ? ' active' : ''}">الكل<span class="count">${members.length}</span></a>
+          ${classValues.map((c) => `<a href="${browseHref({ class: c, gender: validGenderParam })}" class="chip${subField === c ? ' active' : ''}">${escapeHTML(cleanLabel(c))}<span class="count">${members.filter((m) => m.class === c).length}</span></a>`).join('')}
+        </div>` : ''}
+      ${section.key === 'sector' ? `
+        <p class="section-sub" style="margin-top:14px;">النوع</p>
+        <div class="chip-row">
+          <a href="${browseHref({ class: subField })}" class="chip${!validGenderParam ? ' active' : ''}">الكل<span class="count">${members.length}</span></a>
+          <a href="${browseHref({ class: subField, gender: 'بنين' })}" class="chip${validGenderParam === 'بنين' ? ' active' : ''}">بنين<span class="count">${boysCount}</span></a>
+          <a href="${browseHref({ class: subField, gender: 'بنات' })}" class="chip${validGenderParam === 'بنات' ? ' active' : ''}">بنات<span class="count">${girlsCount}</span></a>
+        </div>
+        <div style="margin-top:14px;">
+          <button type="button" id="sectorPdfBtn" class="btn btn-outline btn-sm">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-inline-end:4px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>استخراج PDF
+          </button>
         </div>` : ''}
       ${showCategoryFilter && categoryCounts.some((c) => c.count > 0) ? `
         <p class="section-sub" style="margin-top:14px;">تصفية</p>
@@ -2403,6 +2591,11 @@ async function renderBrowse(key, valueRaw, params) {
         </div>` : ''}
       ${renderMemberListOrEmpty(filtered, 'لا يوجد أسماء في هذا التصنيف')}
     </div>`;
+
+  const sectorPdfBtn = document.getElementById('sectorPdfBtn');
+  if (sectorPdfBtn) {
+    sectorPdfBtn.addEventListener('click', () => downloadSectorMembersPDF(filtered, value));
+  }
 }
 
 /* ---------------------------------------------------------------------- */
