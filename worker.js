@@ -92,7 +92,12 @@ const WEB_SEARCH_TOOL = {
     description: 'ابحث في الإنترنت عن معلومات موثوقة وحديثة عند الحاجة، مثل نصوص الألحان القبطية أو الحذّات أو النوتة الموسيقية أو معلومات عن قديس أو عيد أو أي معلومة غير مؤكدة.',
     parameters: {
       type: 'OBJECT',
-      properties: { query: { type: 'STRING', description: 'نص البحث بالعربية أو الإنجليزية' } },
+      properties: {
+        query: {
+          type: 'STRING',
+          description: 'نص البحث بالعربية أو الإنجليزية'
+        }
+      },
       required: ['query'],
     },
   }],
@@ -112,7 +117,10 @@ function corsHeaders(origin, allowedOrigin) {
 function json(body, status, headers) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', ...headers },
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      ...headers
+    },
   });
 }
 
@@ -126,11 +134,17 @@ function json(body, status, headers) {
 async function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
   } catch (err) {
     if (err && err.name === 'AbortError') {
-      throw Object.assign(new Error('upstream_timeout'), { code: 'upstream_timeout' });
+      throw Object.assign(new Error('upstream_timeout'), {
+        code: 'upstream_timeout'
+      });
     }
     throw err;
   } finally {
@@ -138,8 +152,155 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
-const TAVILY_TIMEOUT_MS = 6000;
-const GEMINI_TIMEOUT_MS = 18000;
+/* ---- Temporary Cloudflare-side diagnostic route -------------------------
+   This route is intentionally isolated from the production /assistant path.
+
+   It performs three independent Google requests in parallel:
+     1. Google API connectivity without inference.
+     2. Minimal Gemini generation.
+     3. Current full production Gemini request.
+
+   It returns timing/status only and never exposes response bodies,
+   API keys, request payloads, or user data.
+   ----------------------------------------------------------------------- */
+
+const DIAG_TIMEOUT_MS = 10000;
+
+async function runDiagnosticTest(fn) {
+  const startedAt = Date.now();
+
+  try {
+    const result = await fn();
+    const ms = Date.now() - startedAt;
+
+    return {
+      status: result.status,
+      ms,
+      ok: result.ok,
+      ...(result.ok ? {} : {
+        error: `http_${result.status}`
+      }),
+    };
+  } catch (err) {
+    const ms = Date.now() - startedAt;
+
+    if (err && err.code === 'upstream_timeout') {
+      return {
+        ms,
+        ok: false,
+        error: 'timeout',
+      };
+    }
+
+    return {
+      ms,
+      ok: false,
+      error: 'fetch_error',
+    };
+  }
+}
+
+async function runAssistantDiagnostic(env) {
+  const model = env.GEMINI_MODEL || GEMINI_MODEL_DEFAULT;
+
+  const googleModelsUrl =
+    `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=${env.GEMINI_API_KEY}`;
+
+  const geminiUrl =
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
+
+  // TEST 2: absolute minimum Gemini request.
+  const minimalBody = {
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          {
+            text: 'قل: تم',
+          },
+        ],
+      },
+    ],
+  };
+
+  // TEST 3: same production Gemini request shape currently used by
+  // callGemini(), with a fixed diagnostic question and no real user data.
+  const productionBody = {
+    systemInstruction: {
+      parts: [
+        {
+          text: GENERAL_SYSTEM_PROMPT,
+        },
+      ],
+    },
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          {
+            text: 'اختبار تشخيصي فقط. أجب بكلمة واحدة: تم',
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      maxOutputTokens: 1024,
+      thinkingConfig: {
+        thinkingLevel: 'minimal',
+      },
+    },
+    tools: [WEB_SEARCH_TOOL],
+  };
+
+  const [test1, test2, test3] = await Promise.all([
+    // TEST 1 — Google API connectivity only.
+    runDiagnosticTest(() =>
+      fetchWithTimeout(
+        googleModelsUrl,
+        {
+          method: 'GET',
+        },
+        DIAG_TIMEOUT_MS
+      )
+    ),
+
+    // TEST 2 — Minimal Gemini generation.
+    runDiagnosticTest(() =>
+      fetchWithTimeout(
+        geminiUrl,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(minimalBody),
+        },
+        DIAG_TIMEOUT_MS
+      )
+    ),
+
+    // TEST 3 — Full production Gemini request.
+    runDiagnosticTest(() =>
+      fetchWithTimeout(
+        geminiUrl,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(productionBody),
+        },
+        DIAG_TIMEOUT_MS
+      )
+    ),
+  ]);
+
+  return {
+    test1,
+    test2,
+    test3,
+  };
+}
 
 async function callTavily(env, query) {
   const res = await fetchWithTimeout('https://api.tavily.com/search', {
@@ -155,203 +316,511 @@ async function callTavily(env, query) {
       include_answer: false,
     }),
   }, TAVILY_TIMEOUT_MS);
+
   if (!res.ok) {
     // Server-side only (Cloudflare Worker logs) — never sent to the browser.
-    console.error('tavily_upstream_error', res.status, await res.text().catch(() => ''));
+    console.error(
+      'tavily_upstream_error',
+      res.status,
+      await res.text().catch(() => '')
+    );
+
     throw new Error(`tavily_${res.status}`);
   }
+
   const data = await res.json();
   const results = Array.isArray(data.results) ? data.results : [];
+
   // Compact, token-cheap text block the model can read + cite from.
   return results
     .slice(0, 5)
-    .map((r, i) => `[${i + 1}] ${r.title || ''}\n${r.content || ''}\nرابط: ${r.url || ''}`)
+    .map(
+      (r, i) =>
+        `[${i + 1}] ${r.title || ''}\n${r.content || ''}\nرابط: ${r.url || ''}`
+    )
     .join('\n\n') || 'لم يتم العثور على نتائج بحث مناسبة.';
 }
 
-async function callGemini(env, { systemPrompt, userText, allowSearch }) {
+async function callGemini(env, {
+  systemPrompt,
+  userText,
+  allowSearch
+}) {
   const model = env.GEMINI_MODEL || GEMINI_MODEL_DEFAULT;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
-  // Diagnostic-only stage timing (no question text, no keys) — the whole
-  // reason this bug took multiple rounds to chase is that a canceled
-  // request left zero log lines to work from. This turns the next failure
-  // into evidence: which stage was in flight when it died.
-  const t0 = Date.now();
-  const mark = (stage) => console.log('assistant_stage', stage, `${Date.now() - t0}ms`);
 
-  const contents = [{ role: 'user', parts: [{ text: userText }] }];
-  // Gemini 3.x models (gemini-3.6-flash included) have "thinking" turned ON
-  // by default, and those thinking tokens are billed against — and eat into
-  // the wall-clock time of — the same maxOutputTokens budget as the visible
-  // answer. gemini-2.5-flash had no such default overhead, so switching the
-  // GEMINI_MODEL env var alone silently made every call much slower without
-  // changing any code here.
-  //
-  // Two independent, low-risk levers on that shared budget:
-  //   - thinkingLevel: 'minimal' is the model's own documented low-latency
-  //     tier (not just a lower number than 'low' — Google's docs for this
-  //     exact model recommend it specifically for cost/latency-sensitive
-  //     calls). 'low' was never an invalid value, so this is a latency
-  //     lever, not a bug fix for a malformed request.
-  //   - maxOutputTokens is capped tighter (1400 -> 1024). Since thinking
-  //     tokens draw from this same pool, this directly bounds the worst
-  //     case time Google can spend before it must stop and return,
-  //     independent of whatever is actually driving the slowness. 1024 is
-  //     still generous for the short, direct-answer style
-  //     (واضح ومباشر) this assistant's own system prompt already asks for.
-  //
-  // NOTE: neither of these is a proven fix. Cloudflare's own logs show the
-  // Worker sitting fully idle (cpuTime ~2ms) for the entire 18s window
-  // before the AbortController fires — that is equally consistent with
-  // "Gemini is genuinely taking a while" and "Gemini is stuck", because
-  // generateContent is non-streaming and gives the Worker zero signal
-  // either way until the full response is ready. These two changes reduce
-  // the worst case regardless of which of those it turns out to be; they
-  // do not resolve the question of which one it actually is.
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
+
+  // Diagnostic-only stage timing.
+  const t0 = Date.now();
+
+  const mark = (stage) =>
+    console.log(
+      'assistant_stage',
+      stage,
+      `${Date.now() - t0}ms`
+    );
+
+  const contents = [
+    {
+      role: 'user',
+      parts: [
+        {
+          text: userText
+        }
+      ]
+    }
+  ];
+
   const generationConfig = {
     maxOutputTokens: 1024,
-    thinkingConfig: { thinkingLevel: 'minimal' },
+    thinkingConfig: {
+      thinkingLevel: 'minimal'
+    },
   };
+
   const body = {
-    systemInstruction: { parts: [{ text: systemPrompt }] },
+    systemInstruction: {
+      parts: [
+        {
+          text: systemPrompt
+        }
+      ]
+    },
     contents,
     generationConfig,
   };
-  if (allowSearch) body.tools = [WEB_SEARCH_TOOL];
+
+  if (allowSearch) {
+    body.tools = [WEB_SEARCH_TOOL];
+  }
 
   mark(`gemini_1_start model=${model}`);
-  let res = await fetchWithTimeout(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  }, GEMINI_TIMEOUT_MS);
+
+  let res = await fetchWithTimeout(
+    url,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify(body),
+    },
+    GEMINI_TIMEOUT_MS
+  );
+
   mark('gemini_1_done');
-  if (res.status === 429) throw Object.assign(new Error('gemini_quota'), { code: 'quota_exceeded' });
+
+  if (res.status === 429) {
+    throw Object.assign(
+      new Error('gemini_quota'),
+      {
+        code: 'quota_exceeded'
+      }
+    );
+  }
+
   if (!res.ok) {
-    // Server-side only (Cloudflare Worker logs) — never sent to the browser.
-    console.error('gemini_upstream_error', model, res.status, await res.text().catch(() => ''));
-    throw Object.assign(new Error(`gemini_${res.status}`), { code: 'upstream_error' });
+    // Server-side only.
+    console.error(
+      'gemini_upstream_error',
+      model,
+      res.status,
+      await res.text().catch(() => '')
+    );
+
+    throw Object.assign(
+      new Error(`gemini_${res.status}`),
+      {
+        code: 'upstream_error'
+      }
+    );
   }
 
   let data = await res.json();
-  let candidate = data && data.candidates && data.candidates[0];
-  let parts = (candidate && candidate.content && candidate.content.parts) || [];
-  const functionCallPart = parts.find((p) => p.functionCall);
+
+  let candidate =
+    data &&
+    data.candidates &&
+    data.candidates[0];
+
+  let parts =
+    (candidate &&
+      candidate.content &&
+      candidate.content.parts) ||
+    [];
+
+  const functionCallPart =
+    parts.find((p) => p.functionCall);
 
   if (functionCallPart && allowSearch) {
-    const searchQuery = (functionCallPart.functionCall.args && functionCallPart.functionCall.args.query) || userText;
+    const searchQuery =
+      (
+        functionCallPart.functionCall.args &&
+        functionCallPart.functionCall.args.query
+      ) ||
+      userText;
+
     let toolResultText;
+
     mark('tavily_start');
+
     try {
-      toolResultText = await callTavily(env, searchQuery);
+      toolResultText =
+        await callTavily(
+          env,
+          searchQuery
+        );
     } catch (_) {
-      toolResultText = 'تعذر إجراء البحث الآن (الخدمة غير متاحة مؤقتًا).';
+      toolResultText =
+        'تعذر إجراء البحث الآن (الخدمة غير متاحة مؤقتًا).';
     }
+
     mark('tavily_done');
 
-    // Echo back candidate.content AS RETURNED (not a hand-built copy of just
-    // the functionCall part) — some Gemini models attach extra fields
-    // (e.g. a thought signature) to that turn that must round-trip intact
-    // for the follow-up call to be accepted.
+    // Echo back candidate.content AS RETURNED.
     contents.push(candidate.content);
-    // Gemini 3.x requires the functionResponse to carry the same `id` as the
-    // functionCall it answers, so the model can match them up; this was
-    // previously omitted (harmless under gemini-2.5-flash, which had no such
-    // requirement). Falls back to undefined (omitted) for models/responses
-    // that don't send an id, so this stays backward compatible.
+
     contents.push({
       role: 'user',
-      parts: [{
-        functionResponse: {
-          id: functionCallPart.functionCall.id,
-          name: 'web_search',
-          response: { result: toolResultText },
+      parts: [
+        {
+          functionResponse: {
+            id: functionCallPart.functionCall.id,
+            name: 'web_search',
+            response: {
+              result: toolResultText
+            },
+          },
         },
-      }],
+      ],
     });
 
     mark(`gemini_2_start model=${model}`);
-    res = await fetchWithTimeout(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents,
-        generationConfig,
-        tools: [WEB_SEARCH_TOOL],
-      }),
-    }, GEMINI_TIMEOUT_MS);
+
+    res = await fetchWithTimeout(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [
+              {
+                text: systemPrompt
+              }
+            ]
+          },
+          contents,
+          generationConfig,
+          tools: [WEB_SEARCH_TOOL],
+        }),
+      },
+      GEMINI_TIMEOUT_MS
+    );
+
     mark('gemini_2_done');
-    if (res.status === 429) throw Object.assign(new Error('gemini_quota'), { code: 'quota_exceeded' });
-    if (!res.ok) {
-      // Server-side only (Cloudflare Worker logs) — never sent to the browser.
-      console.error('gemini_upstream_error_followup', model, res.status, await res.text().catch(() => ''));
-      throw Object.assign(new Error(`gemini_${res.status}`), { code: 'upstream_error' });
+
+    if (res.status === 429) {
+      throw Object.assign(
+        new Error('gemini_quota'),
+        {
+          code: 'quota_exceeded'
+        }
+      );
     }
+
+    if (!res.ok) {
+      console.error(
+        'gemini_upstream_error_followup',
+        model,
+        res.status,
+        await res.text().catch(() => '')
+      );
+
+      throw Object.assign(
+        new Error(`gemini_${res.status}`),
+        {
+          code: 'upstream_error'
+        }
+      );
+    }
+
     data = await res.json();
-    candidate = data && data.candidates && data.candidates[0];
-    parts = (candidate && candidate.content && candidate.content.parts) || [];
+
+    candidate =
+      data &&
+      data.candidates &&
+      data.candidates[0];
+
+    parts =
+      (candidate &&
+        candidate.content &&
+        candidate.content.parts) ||
+      [];
   }
 
-  const text = parts.filter((p) => p.text).map((p) => p.text).join('\n').trim();
+  const text =
+    parts
+      .filter((p) => p.text)
+      .map((p) => p.text)
+      .join('\n')
+      .trim();
+
   return text || 'لم يصل رد نصي من المساعد.';
 }
 
 export default {
   async fetch(request, env) {
-    const allowedOrigin = env.ALLOWED_ORIGIN || 'https://fadiramzy.github.io';
-    const origin = request.headers.get('Origin') || '';
-    const cors = corsHeaders(origin, allowedOrigin);
+
+    /* ---- Temporary diagnostic endpoint ------------------------------- */
+
+    const requestUrl = new URL(request.url);
+
+    if (
+      request.method === 'GET' &&
+      requestUrl.pathname === '/assistant/diag'
+    ) {
+      const suppliedToken =
+        requestUrl.searchParams.get('token');
+
+      // Invalid/missing token deliberately looks like an ordinary 404.
+      if (
+        !env.DIAG_TOKEN ||
+        suppliedToken !== env.DIAG_TOKEN
+      ) {
+        return new Response('Not Found', {
+          status: 404,
+          headers: {
+            'content-type': 'text/plain; charset=utf-8',
+            'cache-control': 'no-store',
+          },
+        });
+      }
+
+      // The diagnostic requires Gemini only.
+      if (!env.GEMINI_API_KEY) {
+        return json(
+          {
+            error: 'server_config_error'
+          },
+          500,
+          {
+            'cache-control': 'no-store'
+          }
+        );
+      }
+
+      try {
+        const result =
+          await runAssistantDiagnostic(env);
+
+        return json(
+          result,
+          200,
+          {
+            'cache-control': 'no-store'
+          }
+        );
+      } catch (_) {
+        return json(
+          {
+            error: 'diagnostic_failed'
+          },
+          500,
+          {
+            'cache-control': 'no-store'
+          }
+        );
+      }
+    }
+
+    /* ---- Existing production /assistant flow ------------------------- */
+
+    const allowedOrigin =
+      env.ALLOWED_ORIGIN ||
+      'https://fadiramzy.github.io';
+
+    const origin =
+      request.headers.get('Origin') || '';
+
+    const cors =
+      corsHeaders(
+        origin,
+        allowedOrigin
+      );
 
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: cors });
-    }
-    if (request.method !== 'POST') {
-      return json({ error: 'invalid_request' }, 405, cors);
-    }
-    if (origin && origin !== allowedOrigin) {
-      return json({ error: 'invalid_request' }, 403, cors);
-    }
-    // Distinguishable "server misconfigured" case: a missing secret should
-    // never look like a generic upstream failure to whoever is debugging.
-    if (!env.GEMINI_API_KEY || !env.TAVILY_API_KEY) {
-      return json({ error: 'server_config_error' }, 500, cors);
+      return new Response(null, {
+        status: 204,
+        headers: cors
+      });
     }
 
-    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-    if (isRateLimited(ip)) {
-      return json({ error: 'rate_limited' }, 429, cors);
+    if (request.method !== 'POST') {
+      return json(
+        {
+          error: 'invalid_request'
+        },
+        405,
+        cors
+      );
     }
+
+    if (
+      origin &&
+      origin !== allowedOrigin
+    ) {
+      return json(
+        {
+          error: 'invalid_request'
+        },
+        403,
+        cors
+      );
+    }
+
+    // Distinguishable "server misconfigured" case.
+    if (
+      !env.GEMINI_API_KEY ||
+      !env.TAVILY_API_KEY
+    ) {
+      return json(
+        {
+          error: 'server_config_error'
+        },
+        500,
+        cors
+      );
+    }
+
+    const ip =
+      request.headers.get(
+        'CF-Connecting-IP'
+      ) ||
+      'unknown';
+
+    if (isRateLimited(ip)) {
+      return json(
+        {
+          error: 'rate_limited'
+        },
+        429,
+        cors
+      );
+    }
+
     if (isOverDailySoftCap()) {
-      return json({ error: 'quota_exceeded' }, 429, cors);
+      return json(
+        {
+          error: 'quota_exceeded'
+        },
+        429,
+        cors
+      );
     }
 
     let payload;
+
     try {
-      payload = await request.json();
+      payload =
+        await request.json();
     } catch (_) {
-      return json({ error: 'invalid_request' }, 400, cors);
+      return json(
+        {
+          error: 'invalid_request'
+        },
+        400,
+        cors
+      );
     }
 
-    const mode = payload && payload.mode;
-    const question = payload && typeof payload.question === 'string' ? payload.question.trim() : '';
-    if (!question || question.length > MAX_QUESTION_CHARS || (mode !== 'general' && mode !== 'data')) {
-      return json({ error: 'invalid_request' }, 400, cors);
+    const mode =
+      payload &&
+      payload.mode;
+
+    const question =
+      payload &&
+      typeof payload.question === 'string'
+        ? payload.question.trim()
+        : '';
+
+    if (
+      !question ||
+      question.length > MAX_QUESTION_CHARS ||
+      (mode !== 'general' &&
+        mode !== 'data')
+    ) {
+      return json(
+        {
+          error: 'invalid_request'
+        },
+        400,
+        cors
+      );
     }
 
     try {
       let text;
+
       if (mode === 'data') {
-        const rows = Array.isArray(payload.dataContext) ? payload.dataContext.slice(0, MAX_DATA_ROWS) : [];
-        const userText = `السؤال: ${question}\n\nنتائج مطابقة من بيانات دليل الخدمات (${rows.length} سجل):\n${JSON.stringify(rows)}`;
-        text = await callGemini(env, { systemPrompt: DATA_SYSTEM_PROMPT, userText, allowSearch: false });
+        const rows =
+          Array.isArray(
+            payload.dataContext
+          )
+            ? payload.dataContext.slice(
+                0,
+                MAX_DATA_ROWS
+              )
+            : [];
+
+        const userText =
+          `السؤال: ${question}\n\nنتائج مطابقة من بيانات دليل الخدمات (${rows.length} سجل):\n${JSON.stringify(rows)}`;
+
+        text =
+          await callGemini(
+            env,
+            {
+              systemPrompt:
+                DATA_SYSTEM_PROMPT,
+              userText,
+              allowSearch: false
+            }
+          );
       } else {
-        text = await callGemini(env, { systemPrompt: GENERAL_SYSTEM_PROMPT, userText: question, allowSearch: true });
+        text =
+          await callGemini(
+            env,
+            {
+              systemPrompt:
+                GENERAL_SYSTEM_PROMPT,
+              userText: question,
+              allowSearch: true
+            }
+          );
       }
-      return json({ text }, 200, cors);
+
+      return json(
+        {
+          text
+        },
+        200,
+        cors
+      );
     } catch (err) {
-      const code = (err && err.code) || 'upstream_error';
-      return json({ error: code }, 502, cors);
+      const code =
+        (err && err.code) ||
+        'upstream_error';
+
+      return json(
+        {
+          error: code
+        },
+        502,
+        cors
+      );
     }
   },
 };
