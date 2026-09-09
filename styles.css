@@ -1230,3 +1230,38 @@ main { min-height: 60vh; padding-bottom: 30px; }
   font-size: .82rem;
   margin-top: 2px;
 }
+
+/* ==========================================================================
+   Servant Assistant — Phase 1 (additive only; no existing rule modified)
+   ========================================================================== */
+
+/* Landing grid grows to 3 columns once the assistant card joins. Older
+   browsers without :has() simply wrap the third card to a new row. */
+.landing-grid:has(> :nth-child(3)) { grid-template-columns: repeat(3, 1fr); max-width: 940px; }
+@media (max-width: 720px) {
+  .landing-grid:has(> :nth-child(3)) { grid-template-columns: 1fr; max-width: 360px; }
+}
+
+/* Search-result snippet (multi-line excerpt under the result title). */
+.kb-snippet { display: block; font-size: .85rem; color: var(--color-ink-soft); line-height: 1.7; margin-top: 2px; }
+.kb-snippet mark { background: #F3E3B3; color: inherit; border-radius: 3px; padding: 0 2px; }
+
+/* Long-form KB prose inside info sections. */
+.kb-prose p { margin: 0 0 10px; line-height: 1.9; }
+.kb-prose p:last-child { margin-bottom: 0; }
+.kb-prose h4 { margin: 14px 0 6px; font-size: .95rem; color: var(--color-maroon); }
+.kb-prose h4:first-child { margin-top: 0; }
+ul.kb-list { margin: 0 0 10px; padding-inline-start: 20px; line-height: 1.9; }
+.kb-muted { color: var(--color-ink-soft); font-size: .88rem; }
+
+/* Numbered Bible verses. */
+.kb-verses { margin-top: 6px; }
+.kb-verse { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1px dashed var(--color-line); line-height: 2; }
+.kb-verse:last-child { border-bottom: none; }
+.kb-verse-n { flex: none; min-width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--color-maroon-tint); color: var(--color-maroon); font-size: .8rem; font-weight: 700; margin-top: 4px; }
+
+/* Mobile overflow fix (Phase 1 verification): .member-meta is an inline
+   span, so its nowrap/ellipsis can never clip — long meta lines overflow
+   the card on narrow screens. Block layout activates the existing
+   overflow/ellipsis rules. No visual change where text already fits. */
+.member-card .member-meta { display: block; }
