@@ -21,7 +21,12 @@
        account of any kind.
    ========================================================================== */
 
-const GEMINI_MODEL_DEFAULT = 'gemini-2.5-flash';
+// gemini-2.5-flash began returning 404 "This model ... is no longer
+// available" from Google well ahead of its official Oct 16 2026 shutdown
+// date (widely reported by other developers from July 2026 onward). Per
+// Google's own Gemini deprecations page, the documented recommended
+// replacement for gemini-2.5-flash is gemini-3-flash-preview.
+const GEMINI_MODEL_DEFAULT = 'gemini-3-flash-preview';
 const MAX_QUESTION_CHARS = 600;
 const MAX_DATA_ROWS = 200;
 
@@ -125,7 +130,11 @@ async function callTavily(env, query) {
       include_answer: false,
     }),
   });
-  if (!res.ok) throw new Error(`tavily_${res.status}`);
+  if (!res.ok) {
+    // Server-side only (Cloudflare Worker logs) — never sent to the browser.
+    console.error('tavily_upstream_error', res.status, await res.text().catch(() => ''));
+    throw new Error(`tavily_${res.status}`);
+  }
   const data = await res.json();
   const results = Array.isArray(data.results) ? data.results : [];
   // Compact, token-cheap text block the model can read + cite from.
@@ -153,7 +162,11 @@ async function callGemini(env, { systemPrompt, userText, allowSearch }) {
     body: JSON.stringify(body),
   });
   if (res.status === 429) throw Object.assign(new Error('gemini_quota'), { code: 'quota_exceeded' });
-  if (!res.ok) throw Object.assign(new Error(`gemini_${res.status}`), { code: 'upstream_error' });
+  if (!res.ok) {
+    // Server-side only (Cloudflare Worker logs) — never sent to the browser.
+    console.error('gemini_upstream_error', model, res.status, await res.text().catch(() => ''));
+    throw Object.assign(new Error(`gemini_${res.status}`), { code: 'upstream_error' });
+  }
 
   let data = await res.json();
   let candidate = data && data.candidates && data.candidates[0];
@@ -190,7 +203,11 @@ async function callGemini(env, { systemPrompt, userText, allowSearch }) {
       }),
     });
     if (res.status === 429) throw Object.assign(new Error('gemini_quota'), { code: 'quota_exceeded' });
-    if (!res.ok) throw Object.assign(new Error(`gemini_${res.status}`), { code: 'upstream_error' });
+    if (!res.ok) {
+      // Server-side only (Cloudflare Worker logs) — never sent to the browser.
+      console.error('gemini_upstream_error_followup', model, res.status, await res.text().catch(() => ''));
+      throw Object.assign(new Error(`gemini_${res.status}`), { code: 'upstream_error' });
+    }
     data = await res.json();
     candidate = data && data.candidates && data.candidates[0];
     parts = (candidate && candidate.content && candidate.content.parts) || [];
