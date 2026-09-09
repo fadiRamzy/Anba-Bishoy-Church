@@ -169,9 +169,13 @@ async function callGemini(env, { systemPrompt, userText, allowSearch }) {
       toolResultText = 'تعذر إجراء البحث الآن (الخدمة غير متاحة مؤقتًا).';
     }
 
-    contents.push({ role: 'model', parts: [{ functionCall: functionCallPart.functionCall }] });
+    // Echo back candidate.content AS RETURNED (not a hand-built copy of just
+    // the functionCall part) — some Gemini models attach extra fields
+    // (e.g. a thought signature) to that turn that must round-trip intact
+    // for the follow-up call to be accepted.
+    contents.push(candidate.content);
     contents.push({
-      role: 'function',
+      role: 'user',
       parts: [{ functionResponse: { name: 'web_search', response: { result: toolResultText } } }],
     });
 
@@ -210,6 +214,11 @@ export default {
     }
     if (origin && origin !== allowedOrigin) {
       return json({ error: 'invalid_request' }, 403, cors);
+    }
+    // Distinguishable "server misconfigured" case: a missing secret should
+    // never look like a generic upstream failure to whoever is debugging.
+    if (!env.GEMINI_API_KEY || !env.TAVILY_API_KEY) {
+      return json({ error: 'server_config_error' }, 500, cors);
     }
 
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
