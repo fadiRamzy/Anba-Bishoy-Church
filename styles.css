@@ -805,6 +805,27 @@ body[data-section="visitation"] .brand-verse {
   font-weight: 600;
   font-size: .96rem;
 }
+
+/* تواريخ الافتقاد — existing dates list with a per-row "حذف" button
+   inside إضافة/تعديل أسرة (change: deletable visitation dates). */
+.visit-dates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.visit-date-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1.5px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  background: var(--color-bg);
+  font-size: .92rem;
+  font-weight: 600;
+}
+.visit-date-row .remove-date-btn { flex-shrink: 0; }
 @media (max-width: 640px) {
   .subform-grid { grid-template-columns: 1fr; }
 }
@@ -944,6 +965,41 @@ label[for="importFile"] svg { width: 11px; height: 11px; }
   justify-content: center;
   line-height: 1;
   box-shadow: 0 0 0 2px var(--color-surface);
+}
+
+/* ==========================================================================
+   Visitation Services — mobile nav (خدمات الافتقاد back button/nav area).
+   Scoped with the existing body[data-section="visitation"] attribute (set
+   by applyHeaderChrome('visitation') for every #/visitation route), so none
+   of this touches .top-nav or .back-link on the home/landing pages — only
+   the desktop row layout stays exactly as .top-nav already defines it.
+   ========================================================================== */
+
+/* Portrait phones (~320px–430px) and small tablets: stack the back button
+   onto its own full-width row with a comfortable tap target, so it isn't
+   cramped against the reminder button or the screen edge, and never
+   overlaps the page title below. */
+@media (max-width: 480px) {
+  body[data-section="visitation"] #topNav {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  body[data-section="visitation"] #topNav > span:first-child { flex: 1 1 100%; }
+  body[data-section="visitation"] #topNav > span:last-child { flex: 1 1 100%; display: flex; }
+  body[data-section="visitation"] .back-link {
+    padding: 12px 10px;
+    border-radius: var(--radius-sm);
+  }
+  body[data-section="visitation"] .back-link:active { background: var(--color-surface-alt); }
+}
+
+/* Landscape phones: keep the back button and reminder button on one row
+   so the page doesn't waste the limited vertical space when rotated. */
+@media (orientation: landscape) and (max-height: 500px) {
+  body[data-section="visitation"] #topNav { flex-wrap: nowrap; row-gap: 0; }
+  body[data-section="visitation"] #topNav > span:first-child,
+  body[data-section="visitation"] #topNav > span:last-child { flex: 0 0 auto; }
+  body[data-section="visitation"] .back-link { padding: 10px 8px; }
 }
 
 .reminder-panel {

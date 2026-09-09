@@ -1160,6 +1160,19 @@ function wireBirthDateAgeSync(birthId, ageId) {
   sync();
 }
 
+/* One existing visitation date row inside the إضافة/تعديل أسرة form, with its
+   own "حذف" button (change: deletable visitation dates). The date value is
+   kept on data-date so the submit handler can re-collect whichever rows are
+   still present (i.e. weren't deleted) without touching visitationDates'
+   existing string[] shape. */
+function visitDateRowHTML(dateStr) {
+  return `
+    <div class="visit-date-row" data-date="${escapeHTML(dateStr)}">
+      <span>${formatDMY(dateStr)}</span>
+      <button type="button" class="btn btn-outline btn-sm remove-date-btn" aria-label="حذف هذا التاريخ">${ICONS.trash}<span>حذف</span></button>
+    </div>`;
+}
+
 /* #/visitation/add and #/visitation/edit/:id */
 async function renderVisitationForm(idStr) {
   const isEdit = !!idStr;
@@ -1258,6 +1271,11 @@ async function renderVisitationForm(idStr) {
           </div>
 
           <div class="form-section-divider full"><h4>الافتقاد</h4></div>
+
+          <div class="field full" id="visitDatesWrap" ${(v.visitationDates || []).length ? '' : 'hidden'}>
+            <label>تواريخ الافتقاد المسجّلة</label>
+            <div id="visitDatesList" class="visit-dates-list">${(v.visitationDates || []).slice().sort((a, b) => b.localeCompare(a)).map(visitDateRowHTML).join('')}</div>
+          </div>
 
           <div class="field">
             <label for="f_visitDate">تواريخ الافتقاد (إضافة تاريخ جديد)</label>
@@ -1362,6 +1380,18 @@ async function renderVisitationForm(idStr) {
      wire each one's own birth-date/age sync independently. */
   document.querySelectorAll('#childrenList .child-row').forEach(wireChildRowAgeSync);
 
+  /* تواريخ الافتقاد — each existing date has its own "حذف" button (change 2).
+     Deleting a row only removes it from this page's list; nothing is saved
+     until the form is submitted, same as every other field here. */
+  const visitDatesWrap = document.getElementById('visitDatesWrap');
+  const visitDatesList = document.getElementById('visitDatesList');
+  visitDatesList.addEventListener('click', (e) => {
+    const btn = e.target.closest('.remove-date-btn');
+    if (!btn) return;
+    btn.closest('.visit-date-row').remove();
+    if (!visitDatesList.children.length) visitDatesWrap.hidden = true;
+  });
+
   const dupBox = document.getElementById('dupWarning');
   async function checkDuplicates() {
     const name = nameInput.value.trim();
@@ -1393,7 +1423,9 @@ async function renderVisitationForm(idStr) {
     nameField.parentElement.classList.remove('invalid');
     nameErr.textContent = '';
 
-    const existingDates = Array.isArray(v.visitationDates) ? v.visitationDates.slice() : [];
+    // Remaining dates come from whichever rows are still in #visitDatesList —
+    // any the user deleted via "حذف" are simply no longer among them.
+    const existingDates = Array.from(document.querySelectorAll('#visitDatesList .visit-date-row')).map((row) => row.dataset.date);
     const newDateVal = document.getElementById('f_visitDate').value;
     if (newDateVal && !existingDates.includes(newDateVal)) existingDates.push(newDateVal);
 
