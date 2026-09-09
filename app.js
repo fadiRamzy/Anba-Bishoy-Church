@@ -800,7 +800,13 @@ async function renderVisitationFamilies() {
         </div>
         <div class="field filter-clear-field">
           <label>&nbsp;</label>
-          <button type="button" class="btn btn-outline btn-sm" id="clearFiltersBtn">مسح الفلاتر</button>
+          <button type="button" class="btn btn-outline btn-sm" id="clearFiltersBtn">مسح الفلتر</button>
+        </div>
+        <div class="field filter-clear-field">
+          <label>&nbsp;</label>
+          <button type="button" class="btn btn-outline btn-sm" id="visitationFamiliesPdfBtn">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-inline-end:4px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>استخراج PDF
+          </button>
         </div>
       </div>
 
@@ -819,6 +825,8 @@ async function renderVisitationFamilies() {
     birthMonth: document.getElementById('filterBirthMonth'),
   };
 
+  let currentFiltered = all; // kept in sync with the results currently shown, for PDF export (change 3)
+
   async function refresh() {
     const query = searchInput.value.trim();
     const base = query ? await VisitationDB.searchAll(query) : all;
@@ -830,6 +838,7 @@ async function renderVisitationFamilies() {
       birthMonth: filterEls.birthMonth.value,
     };
     const filtered = base.filter((f) => familyMatchesFilters(f, filters));
+    currentFiltered = filtered;
     const anyFilterActive = query || Object.values(filters).some(Boolean);
     const emptyMsg = anyFilterActive ? 'لا توجد أسر مطابقة لهذا البحث/الفلاتر' : 'لا توجد أسر مسجلة بعد';
     resultsBox.innerHTML = renderVisitationListOrEmpty(filtered, emptyMsg);
@@ -846,6 +855,9 @@ async function renderVisitationFamilies() {
     searchInput.value = '';
     Object.values(filterEls).forEach((el) => { el.value = ''; });
     refresh();
+  });
+  document.getElementById('visitationFamiliesPdfBtn').addEventListener('click', () => {
+    downloadVisitationFamiliesPDF(currentFiltered);
   });
 
   refresh();
@@ -2158,6 +2170,153 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
   } catch (err) {
     // Full error kept in the console for diagnosis; the toast stays a
     // short, friendly Arabic message for end users.
+    console.error('PDF generation failed:', err);
+    showToast('حدث خطأ أثناء إنشاء ملف PDF', 'error');
+  } finally {
+    cleanupEls.forEach((el) => el.remove());
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Visitation families PDF export ("استخراج PDF")                        */
+/*  #/visitation/families — exports exactly the families currently shown  */
+/*  (i.e. already narrowed down by the page's existing search + filters). */
+/*  Reuses the same jsPDF/html2canvas pipeline and visual template as the */
+/*  "أعياد الميلاد" PDF export above (_loadPdfLibs, same page geometry,   */
+/*  header and table styling) — only the columns/data differ.            */
+/* ---------------------------------------------------------------------- */
+function visitationFamilyAddress(f) {
+  return [f.city, f.neighborhood, f.street].filter(Boolean).join(' - ');
+}
+
+async function downloadVisitationFamiliesPDF(families) {
+  const btn = document.getElementById('visitationFamiliesPdfBtn');
+  const rows = families.map((f) => ({
+    name: f.name || '',
+    confessionFather: f.confessionFather || '—',
+    phone: f.phone1 || f.phone2 || '—',
+    address: visitationFamilyAddress(f) || '—',
+  }));
+
+  if (!rows.length) {
+    showToast('لا توجد أسر مطابقة للفلاتر الحالية لتصديرها', 'error');
+    return;
+  }
+
+  const originalLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = 'جاري التجهيز...';
+
+  const cleanupEls = [];
+  try {
+    await _loadPdfLibs();
+    const { jsPDF } = window.jspdf;
+
+    /* Same page geometry convention as downloadBirthdaysPDF, but a single
+       full-width table per page (4 columns need more horizontal room than
+       the birthdays table). */
+    const PAGE_W = 595, PAGE_H = 842;
+    const MARGIN = 26;
+    const HEADER_H = 96;
+    const BLOCK_W = PAGE_W - MARGIN * 2;
+    const BLOCK_H = PAGE_H - HEADER_H - MARGIN * 2;
+    const HEAD_ROW_H = 24;
+    const MIN_ROW_H = 20;
+    const COLS = [
+      { key: 'name', label: 'اسم الشخص', w: 0.30 },
+      { key: 'confessionFather', label: 'أب الاعتراف', w: 0.22 },
+      { key: 'phone', label: 'رقم الهاتف', w: 0.18 },
+      { key: 'address', label: 'العنوان', w: 0.30 },
+    ];
+    const nameColW = BLOCK_W * COLS[0].w - 2;
+    const fatherColW = BLOCK_W * COLS[1].w - 2;
+    const phoneColW = BLOCK_W * COLS[2].w - 2;
+    const addressColW = BLOCK_W * COLS[3].w - 2;
+
+    /* Measure wrapped height per row across every column so no row is ever
+       split across a block/page boundary (same technique as the birthdays
+       export). */
+    const probe = document.createElement('div');
+    probe.style.cssText = `position:fixed;visibility:hidden;left:-9999px;top:0;font-family:'Cairo',system-ui,sans-serif;font-size:10.5px;line-height:1.4;padding:5px 6px;box-sizing:border-box;word-break:break-word;`;
+    document.body.appendChild(probe);
+    cleanupEls.push(probe);
+    function measureH(text, width) {
+      probe.style.width = `${width}px`;
+      probe.textContent = text;
+      return probe.offsetHeight;
+    }
+    const measured = rows.map((r, idx) => {
+      const serial = idx + 1;
+      const nameH = measureH(`${serial} - ${r.name}`, nameColW);
+      const fatherH = measureH(r.confessionFather, fatherColW);
+      const phoneH = measureH(r.phone, phoneColW);
+      const addressH = measureH(r.address, addressColW);
+      return { ...r, serial, rowH: Math.max(MIN_ROW_H, nameH, fatherH, phoneH, addressH) };
+    });
+
+    /* Bin-pack rows into blocks that each fit within BLOCK_H. */
+    const blocks = [];
+    let current = [], currentH = HEAD_ROW_H;
+    for (const r of measured) {
+      if (currentH + r.rowH > BLOCK_H && current.length) {
+        blocks.push(current);
+        current = [];
+        currentH = HEAD_ROW_H;
+      }
+      current.push(r);
+      currentH += r.rowH;
+    }
+    if (current.length) blocks.push(current);
+
+    function tableHTML(blockRows) {
+      const colgroup = COLS.map((c) => `<col style="width:${c.w * 100}%;">`).join('');
+      const th = COLS.map((c) => `<th style="border:1px solid #9AA7B2;background:#DCE6F1;color:#1F2A37;font-family:'Cairo',sans-serif;font-weight:700;font-size:10.5px;line-height:1.35;padding:5px 6px;text-align:center;vertical-align:middle;">${escapeHTML(c.label)}</th>`).join('');
+      const trs = blockRows.map((r) => `
+        <tr>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;word-break:break-word;text-align:right;vertical-align:middle;">${r.serial} - ${escapeHTML(r.name)}</td>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;word-break:break-word;text-align:center;vertical-align:middle;">${escapeHTML(r.confessionFather)}</td>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;direction:ltr;">${escapeHTML(r.phone)}</td>
+          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;word-break:break-word;text-align:right;vertical-align:middle;">${escapeHTML(r.address)}</td>
+        </tr>`).join('');
+      return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><colgroup>${colgroup}</colgroup><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
+    }
+
+    function pageHTML(pageBlock) {
+      return `
+        <div style="width:${PAGE_W}px;height:${PAGE_H}px;background:#FFFDF8;box-sizing:border-box;position:relative;overflow:hidden;">
+          <div style="position:absolute;inset:0;background-image:url('site-bg.jpg');background-size:cover;background-position:center;opacity:0.08;"></div>
+          <div style="position:relative;padding:${MARGIN}px;direction:rtl;">
+            <div style="text-align:center;margin-bottom:10px;">
+              <div style="font-family:'Aref Ruqaa',serif;font-size:22px;color:#7C1F2C;font-weight:700;">الأسر</div>
+              <div style="font-family:'Cairo',sans-serif;font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
+              <div style="font-family:'Cairo',sans-serif;font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
+            </div>
+            <div style="width:${BLOCK_W}px;">${tableHTML(pageBlock)}</div>
+          </div>
+        </div>`;
+    }
+
+    const stage = document.createElement('div');
+    stage.style.cssText = 'position:fixed;left:-99999px;top:0;';
+    document.body.appendChild(stage);
+    cleanupEls.push(stage);
+
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+    for (let i = 0; i < blocks.length; i++) {
+      stage.innerHTML = pageHTML(blocks[i]);
+      const pageEl = stage.firstElementChild;
+      // eslint-disable-next-line no-await-in-loop
+      const canvas = await window.html2canvas(pageEl, { scale: 2, backgroundColor: '#FFFDF8', useCORS: true });
+      const imgData = canvas.toDataURL('image/png');
+      if (i > 0) pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, 0, PAGE_W, PAGE_H);
+    }
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    pdf.save(`الأسر_${stamp}.pdf`);
+  } catch (err) {
     console.error('PDF generation failed:', err);
     showToast('حدث خطأ أثناء إنشاء ملف PDF', 'error');
   } finally {
