@@ -185,15 +185,31 @@ async function callGemini(env, { systemPrompt, userText, allowSearch }) {
   // the wall-clock time of — the same maxOutputTokens budget as the visible
   // answer. gemini-2.5-flash had no such default overhead, so switching the
   // GEMINI_MODEL env var alone silently made every call much slower without
-  // changing any code here. 'low' is NOT the lowest tier for this model
-  // family — 'minimal' is documented as the dedicated low-latency option,
-  // and production evidence (first Gemini call hanging the full timeout
-  // window with near-zero Worker cpuTime, i.e. pure I/O wait) points at
-  // thinking time as the likely driver. 'minimal' still leaves thinking
-  // enabled as a capability, it just stops the model defaulting to heavy
-  // reasoning for a short, direct-answer chat assistant like this one.
+  // changing any code here.
+  //
+  // Two independent, low-risk levers on that shared budget:
+  //   - thinkingLevel: 'minimal' is the model's own documented low-latency
+  //     tier (not just a lower number than 'low' — Google's docs for this
+  //     exact model recommend it specifically for cost/latency-sensitive
+  //     calls). 'low' was never an invalid value, so this is a latency
+  //     lever, not a bug fix for a malformed request.
+  //   - maxOutputTokens is capped tighter (1400 -> 1024). Since thinking
+  //     tokens draw from this same pool, this directly bounds the worst
+  //     case time Google can spend before it must stop and return,
+  //     independent of whatever is actually driving the slowness. 1024 is
+  //     still generous for the short, direct-answer style
+  //     (واضح ومباشر) this assistant's own system prompt already asks for.
+  //
+  // NOTE: neither of these is a proven fix. Cloudflare's own logs show the
+  // Worker sitting fully idle (cpuTime ~2ms) for the entire 18s window
+  // before the AbortController fires — that is equally consistent with
+  // "Gemini is genuinely taking a while" and "Gemini is stuck", because
+  // generateContent is non-streaming and gives the Worker zero signal
+  // either way until the full response is ready. These two changes reduce
+  // the worst case regardless of which of those it turns out to be; they
+  // do not resolve the question of which one it actually is.
   const generationConfig = {
-    maxOutputTokens: 1400,
+    maxOutputTokens: 1024,
     thinkingConfig: { thinkingLevel: 'minimal' },
   };
   const body = {
