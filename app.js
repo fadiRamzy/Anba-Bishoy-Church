@@ -2522,11 +2522,15 @@ async function renderBrowse(key, valueRaw, params) {
   // value selected: fetch matching members, and if there's a meaningful sub-filter (class), show chips
   let members = await MembersDB.filterBy(section.field, value);
   const subField = params.class || '';
-  const genderParamRaw = section.key === 'sector' ? (params.gender || '') : '';
-  const validGenderParam = (genderParamRaw === 'بنين' || genderParamRaw === 'بنات') ? genderParamRaw : '';
+  const neighborhoodParam = section.key === 'sector' ? (params.neighborhood || '') : '';
+  const stageParam = section.key === 'sector' ? (params.stage || '') : '';
   let classValues = [];
+  let neighborhoodValues = [];
+  let stageValues = [];
   if (section.key === 'sector') {
     classValues = Array.from(new Set(members.map((m) => (m.class || '').trim()).filter(Boolean)));
+    neighborhoodValues = Array.from(new Set(members.map((m) => (m.neighborhood || '').trim()).filter(Boolean)));
+    stageValues = Array.from(new Set(members.map((m) => (m.stage || '').trim()).filter(Boolean)));
   }
 
   // تصفية: broad category filter, available for sections other than sector
@@ -2540,7 +2544,8 @@ async function renderBrowse(key, valueRaw, params) {
   let filtered = members;
   if (section.key === 'sector') {
     if (subField) filtered = filtered.filter((m) => (m.class || '') === subField);
-    if (validGenderParam) filtered = filtered.filter((m) => getSectorMemberGender(m) === validGenderParam);
+    if (neighborhoodParam) filtered = filtered.filter((m) => (m.neighborhood || '') === neighborhoodParam);
+    if (stageParam) filtered = filtered.filter((m) => (m.stage || '') === stageParam);
   } else if (showCategoryFilter && catParam) {
     const catDef = CATEGORY_DEFS.find((c) => c.label === catParam);
     if (catDef) filtered = members.filter(catDef.match);
@@ -2552,9 +2557,7 @@ async function renderBrowse(key, valueRaw, params) {
     const s = qs(q);
     return s ? `${browseBase}?${s}` : browseBase;
   };
-  const isSectorFiltered = section.key === 'sector' && (!!subField || !!validGenderParam);
-  const boysCount = section.key === 'sector' ? members.filter((m) => getSectorMemberGender(m) === 'بنين').length : 0;
-  const girlsCount = section.key === 'sector' ? members.filter((m) => getSectorMemberGender(m) === 'بنات').length : 0;
+  const isSectorFiltered = section.key === 'sector' && (!!subField || !!neighborhoodParam || !!stageParam);
 
   APP_ROOT.innerHTML = `
     <div class="container">
@@ -2565,19 +2568,25 @@ async function renderBrowse(key, valueRaw, params) {
       </p>
       <h2 class="section-title">${escapeHTML(valueLabel)}</h2>
       <p class="section-sub">إجمالي المسجلين: ${(catParam || isSectorFiltered) ? filtered.length : members.length}</p>
+      ${section.key === 'sector' && neighborhoodValues.length ? `
+        <p class="section-sub" style="margin-top:14px;">الحي</p>
+        <div class="chip-row">
+          <a href="${browseHref({ class: subField, stage: stageParam })}" class="chip${!neighborhoodParam ? ' active' : ''}">الكل<span class="count">${members.length}</span></a>
+          ${neighborhoodValues.map((n) => `<a href="${browseHref({ class: subField, neighborhood: n, stage: stageParam })}" class="chip${neighborhoodParam === n ? ' active' : ''}">${escapeHTML(n)}<span class="count">${members.filter((m) => m.neighborhood === n).length}</span></a>`).join('')}
+        </div>` : ''}
+      ${section.key === 'sector' && stageValues.length ? `
+        <p class="section-sub" style="margin-top:14px;">المرحلة</p>
+        <div class="chip-row">
+          <a href="${browseHref({ class: subField, neighborhood: neighborhoodParam })}" class="chip${!stageParam ? ' active' : ''}">الكل<span class="count">${members.length}</span></a>
+          ${stageValues.map((s) => `<a href="${browseHref({ class: subField, neighborhood: neighborhoodParam, stage: s })}" class="chip${stageParam === s ? ' active' : ''}">${escapeHTML(cleanLabel(s))}<span class="count">${members.filter((m) => m.stage === s).length}</span></a>`).join('')}
+        </div>` : ''}
       ${section.key === 'sector' && classValues.length ? `
         <p class="section-sub" style="margin-top:14px;">الفصل</p>
         <div class="chip-row">
-          <a href="${browseHref({ gender: validGenderParam })}" class="chip${!subField ? ' active' : ''}">الكل<span class="count">${members.length}</span></a>
-          ${classValues.map((c) => `<a href="${browseHref({ class: c, gender: validGenderParam })}" class="chip${subField === c ? ' active' : ''}">${escapeHTML(cleanLabel(c))}<span class="count">${members.filter((m) => m.class === c).length}</span></a>`).join('')}
+          <a href="${browseHref({ neighborhood: neighborhoodParam, stage: stageParam })}" class="chip${!subField ? ' active' : ''}">الكل<span class="count">${members.length}</span></a>
+          ${classValues.map((c) => `<a href="${browseHref({ class: c, neighborhood: neighborhoodParam, stage: stageParam })}" class="chip${subField === c ? ' active' : ''}">${escapeHTML(cleanLabel(c))}<span class="count">${members.filter((m) => m.class === c).length}</span></a>`).join('')}
         </div>` : ''}
       ${section.key === 'sector' ? `
-        <p class="section-sub" style="margin-top:14px;">النوع</p>
-        <div class="chip-row">
-          <a href="${browseHref({ class: subField })}" class="chip${!validGenderParam ? ' active' : ''}">الكل<span class="count">${members.length}</span></a>
-          <a href="${browseHref({ class: subField, gender: 'بنين' })}" class="chip${validGenderParam === 'بنين' ? ' active' : ''}">بنين<span class="count">${boysCount}</span></a>
-          <a href="${browseHref({ class: subField, gender: 'بنات' })}" class="chip${validGenderParam === 'بنات' ? ' active' : ''}">بنات<span class="count">${girlsCount}</span></a>
-        </div>
         <div style="margin-top:14px;">
           <button type="button" id="sectorPdfBtn" class="btn btn-outline btn-sm">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-inline-end:4px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>استخراج PDF
