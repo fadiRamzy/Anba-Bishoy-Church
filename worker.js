@@ -116,8 +116,33 @@ function json(body, status, headers) {
   });
 }
 
+// Cloudflare Workers give a request a finite lifetime, but a plain fetch()
+// has none — if an upstream (Gemini or Tavily) accepts the TCP connection
+// and then never finishes responding, the fetch just hangs. Previously
+// nothing here ever aborted that hang, so the whole Worker invocation would
+// eventually be killed by the platform with no exception and no log line
+// (exactly the "canceled ~49s, no logs" symptom). Wrap every upstream call
+// so a stuck request fails fast with a normal, catchable error instead.
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      throw Object.assign(new Error('upstream_timeout'), { code: 'upstream_timeout' });
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const TAVILY_TIMEOUT_MS = 6000;
+const GEMINI_TIMEOUT_MS = 18000;
+
 async function callTavily(env, query) {
-  const res = await fetch('https://api.tavily.com/search', {
+  const res = await fetchWithTimeout('https://api.tavily.com/search', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -129,7 +154,7 @@ async function callTavily(env, query) {
       max_results: 5,
       include_answer: false,
     }),
-  });
+  }, TAVILY_TIMEOUT_MS);
   if (!res.ok) {
     // Server-side only (Cloudflare Worker logs) — never sent to the browser.
     console.error('tavily_upstream_error', res.status, await res.text().catch(() => ''));
@@ -149,18 +174,30 @@ async function callGemini(env, { systemPrompt, userText, allowSearch }) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
 
   const contents = [{ role: 'user', parts: [{ text: userText }] }];
+  // Gemini 3.x models (gemini-3.6-flash included) have "thinking" turned ON
+  // by default, and those thinking tokens are billed against — and eat into
+  // the wall-clock time of — the same maxOutputTokens budget as the visible
+  // answer. gemini-2.5-flash had no such default overhead, so switching the
+  // GEMINI_MODEL env var alone silently made every call much slower without
+  // changing any code here. For a short, direct-answer chat assistant like
+  // this one, "low" keeps latency in a normal range; it does not disable
+  // thinking outright, so the model can still reason when it needs to.
+  const generationConfig = {
+    maxOutputTokens: 1400,
+    thinkingConfig: { thinkingLevel: 'low' },
+  };
   const body = {
     systemInstruction: { parts: [{ text: systemPrompt }] },
     contents,
-    generationConfig: { maxOutputTokens: 1400 },
+    generationConfig,
   };
   if (allowSearch) body.tools = [WEB_SEARCH_TOOL];
 
-  let res = await fetch(url, {
+  let res = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
-  });
+  }, GEMINI_TIMEOUT_MS);
   if (res.status === 429) throw Object.assign(new Error('gemini_quota'), { code: 'quota_exceeded' });
   if (!res.ok) {
     // Server-side only (Cloudflare Worker logs) — never sent to the browser.
@@ -187,21 +224,32 @@ async function callGemini(env, { systemPrompt, userText, allowSearch }) {
     // (e.g. a thought signature) to that turn that must round-trip intact
     // for the follow-up call to be accepted.
     contents.push(candidate.content);
+    // Gemini 3.x requires the functionResponse to carry the same `id` as the
+    // functionCall it answers, so the model can match them up; this was
+    // previously omitted (harmless under gemini-2.5-flash, which had no such
+    // requirement). Falls back to undefined (omitted) for models/responses
+    // that don't send an id, so this stays backward compatible.
     contents.push({
       role: 'user',
-      parts: [{ functionResponse: { name: 'web_search', response: { result: toolResultText } } }],
+      parts: [{
+        functionResponse: {
+          id: functionCallPart.functionCall.id,
+          name: 'web_search',
+          response: { result: toolResultText },
+        },
+      }],
     });
 
-    res = await fetch(url, {
+    res = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemPrompt }] },
         contents,
-        generationConfig: { maxOutputTokens: 1400 },
+        generationConfig,
         tools: [WEB_SEARCH_TOOL],
       }),
-    });
+    }, GEMINI_TIMEOUT_MS);
     if (res.status === 429) throw Object.assign(new Error('gemini_quota'), { code: 'quota_exceeded' });
     if (!res.ok) {
       // Server-side only (Cloudflare Worker logs) — never sent to the browser.
