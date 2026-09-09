@@ -825,7 +825,18 @@ body[data-section="visitation"] .brand-verse {
   font-size: .92rem;
   font-weight: 600;
 }
-.visit-date-row .remove-date-btn { flex-shrink: 0; }
+
+.visit-date-row > span {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.visit-date-row .remove-date-btn {
+  flex-shrink: 0;
+}
 @media (max-width: 640px) {
   .subform-grid { grid-template-columns: 1fr; }
 }
