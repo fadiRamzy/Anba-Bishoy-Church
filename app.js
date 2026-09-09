@@ -2527,10 +2527,13 @@ async function renderBrowse(key, valueRaw, params) {
   let classValues = [];
   let neighborhoodValues = [];
   let stageValues = [];
+  let allSectors = [];
   if (section.key === 'sector') {
     classValues = Array.from(new Set(members.map((m) => (m.class || '').trim()).filter(Boolean)));
     neighborhoodValues = Array.from(new Set(members.map((m) => (m.neighborhood || '').trim()).filter(Boolean)));
     stageValues = Array.from(new Set(members.map((m) => (m.stage || '').trim()).filter(Boolean)));
+    allSectors = await MembersDB.distinctValues('sector');
+    if (value && !allSectors.includes(value)) allSectors.unshift(value);
   }
 
   // تصفية: broad category filter, available for sections other than sector
@@ -2552,11 +2555,6 @@ async function renderBrowse(key, valueRaw, params) {
   }
 
   const valueLabel = (section.field === 'stage' || section.field === 'sector') ? cleanLabel(value) : value;
-  const browseBase = `#/browse/${key}/${encodeURIComponent(value)}`;
-  const browseHref = (q) => {
-    const s = qs(q);
-    return s ? `${browseBase}?${s}` : browseBase;
-  };
   const isSectorFiltered = section.key === 'sector' && (!!subField || !!neighborhoodParam || !!stageParam);
 
   APP_ROOT.innerHTML = `
@@ -2568,26 +2566,26 @@ async function renderBrowse(key, valueRaw, params) {
       </p>
       <h2 class="section-title">${escapeHTML(valueLabel)}</h2>
       <p class="section-sub">إجمالي المسجلين: ${(catParam || isSectorFiltered) ? filtered.length : members.length}</p>
-      ${section.key === 'sector' && neighborhoodValues.length ? `
-        <p class="section-sub" style="margin-top:14px;">الحي</p>
-        <div class="chip-row">
-          <a href="${browseHref({ class: subField, stage: stageParam })}" class="chip${!neighborhoodParam ? ' active' : ''}">الكل<span class="count">${members.length}</span></a>
-          ${neighborhoodValues.map((n) => `<a href="${browseHref({ class: subField, neighborhood: n, stage: stageParam })}" class="chip${neighborhoodParam === n ? ' active' : ''}">${escapeHTML(n)}<span class="count">${members.filter((m) => m.neighborhood === n).length}</span></a>`).join('')}
-        </div>` : ''}
-      ${section.key === 'sector' && stageValues.length ? `
-        <p class="section-sub" style="margin-top:14px;">المرحلة</p>
-        <div class="chip-row">
-          <a href="${browseHref({ class: subField, neighborhood: neighborhoodParam })}" class="chip${!stageParam ? ' active' : ''}">الكل<span class="count">${members.length}</span></a>
-          ${stageValues.map((s) => `<a href="${browseHref({ class: subField, neighborhood: neighborhoodParam, stage: s })}" class="chip${stageParam === s ? ' active' : ''}">${escapeHTML(cleanLabel(s))}<span class="count">${members.filter((m) => m.stage === s).length}</span></a>`).join('')}
-        </div>` : ''}
-      ${section.key === 'sector' && classValues.length ? `
-        <p class="section-sub" style="margin-top:14px;">الفصل</p>
-        <div class="chip-row">
-          <a href="${browseHref({ neighborhood: neighborhoodParam, stage: stageParam })}" class="chip${!subField ? ' active' : ''}">الكل<span class="count">${members.length}</span></a>
-          ${classValues.map((c) => `<a href="${browseHref({ class: c, neighborhood: neighborhoodParam, stage: stageParam })}" class="chip${subField === c ? ' active' : ''}">${escapeHTML(cleanLabel(c))}<span class="count">${members.filter((m) => m.class === c).length}</span></a>`).join('')}
-        </div>` : ''}
       ${section.key === 'sector' ? `
-        <div style="margin-top:14px;">
+        <div class="filter-bar">
+          <div class="field">
+            <label for="sectorFilterSelect">القطاع</label>
+            <select id="sectorFilterSelect">${allSectors.map((s) => `<option value="${escapeHTML(s)}" ${s === value ? 'selected' : ''}>${escapeHTML(cleanLabel(s))}</option>`).join('')}</select>
+          </div>
+          <div class="field">
+            <label for="neighborhoodFilterSelect">الحي</label>
+            <select id="neighborhoodFilterSelect"><option value="">الكل</option>${neighborhoodValues.map((n) => `<option value="${escapeHTML(n)}" ${n === neighborhoodParam ? 'selected' : ''}>${escapeHTML(n)}</option>`).join('')}${neighborhoodParam && !neighborhoodValues.includes(neighborhoodParam) ? `<option value="${escapeHTML(neighborhoodParam)}" selected>${escapeHTML(neighborhoodParam)}</option>` : ''}</select>
+          </div>
+          <div class="field">
+            <label for="stageFilterSelect">المرحلة</label>
+            <select id="stageFilterSelect"><option value="">الكل</option>${stageValues.map((s) => `<option value="${escapeHTML(s)}" ${s === stageParam ? 'selected' : ''}>${escapeHTML(cleanLabel(s))}</option>`).join('')}${stageParam && !stageValues.includes(stageParam) ? `<option value="${escapeHTML(stageParam)}" selected>${escapeHTML(cleanLabel(stageParam))}</option>` : ''}</select>
+          </div>
+          <div class="field">
+            <label for="classFilterSelect">الفصل</label>
+            <select id="classFilterSelect"><option value="">الكل</option>${classValues.map((c) => `<option value="${escapeHTML(c)}" ${c === subField ? 'selected' : ''}>${escapeHTML(cleanLabel(c))}</option>`).join('')}${subField && !classValues.includes(subField) ? `<option value="${escapeHTML(subField)}" selected>${escapeHTML(cleanLabel(subField))}</option>` : ''}</select>
+          </div>
+        </div>
+        <div style="margin:18px 0 24px;">
           <button type="button" id="sectorPdfBtn" class="btn btn-outline btn-sm">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-inline-end:4px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>استخراج PDF
           </button>
@@ -2600,6 +2598,29 @@ async function renderBrowse(key, valueRaw, params) {
         </div>` : ''}
       ${renderMemberListOrEmpty(filtered, 'لا يوجد أسماء في هذا التصنيف')}
     </div>`;
+
+  const sectorFilterSelect = document.getElementById('sectorFilterSelect');
+  if (sectorFilterSelect) {
+    sectorFilterSelect.addEventListener('change', () => {
+      const newSector = sectorFilterSelect.value;
+      if (!newSector || newSector === value) return;
+      const s = qs({ class: subField, neighborhood: neighborhoodParam, stage: stageParam });
+      navigate(`/browse/sector/${encodeURIComponent(newSector)}${s ? `?${s}` : ''}`);
+    });
+  }
+  const wireSectorSubFilter = (id, paramKey) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', () => {
+      const next = { class: subField, neighborhood: neighborhoodParam, stage: stageParam };
+      next[paramKey] = el.value;
+      const s = qs(next);
+      navigate(`/browse/${key}/${encodeURIComponent(value)}${s ? `?${s}` : ''}`);
+    });
+  };
+  wireSectorSubFilter('neighborhoodFilterSelect', 'neighborhood');
+  wireSectorSubFilter('stageFilterSelect', 'stage');
+  wireSectorSubFilter('classFilterSelect', 'class');
 
   const sectorPdfBtn = document.getElementById('sectorPdfBtn');
   if (sectorPdfBtn) {
