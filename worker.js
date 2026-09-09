@@ -172,6 +172,12 @@ async function callTavily(env, query) {
 async function callGemini(env, { systemPrompt, userText, allowSearch }) {
   const model = env.GEMINI_MODEL || GEMINI_MODEL_DEFAULT;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
+  // Diagnostic-only stage timing (no question text, no keys) — the whole
+  // reason this bug took multiple rounds to chase is that a canceled
+  // request left zero log lines to work from. This turns the next failure
+  // into evidence: which stage was in flight when it died.
+  const t0 = Date.now();
+  const mark = (stage) => console.log('assistant_stage', stage, `${Date.now() - t0}ms`);
 
   const contents = [{ role: 'user', parts: [{ text: userText }] }];
   // Gemini 3.x models (gemini-3.6-flash included) have "thinking" turned ON
@@ -193,11 +199,13 @@ async function callGemini(env, { systemPrompt, userText, allowSearch }) {
   };
   if (allowSearch) body.tools = [WEB_SEARCH_TOOL];
 
+  mark('gemini_1_start');
   let res = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   }, GEMINI_TIMEOUT_MS);
+  mark('gemini_1_done');
   if (res.status === 429) throw Object.assign(new Error('gemini_quota'), { code: 'quota_exceeded' });
   if (!res.ok) {
     // Server-side only (Cloudflare Worker logs) — never sent to the browser.
@@ -213,11 +221,13 @@ async function callGemini(env, { systemPrompt, userText, allowSearch }) {
   if (functionCallPart && allowSearch) {
     const searchQuery = (functionCallPart.functionCall.args && functionCallPart.functionCall.args.query) || userText;
     let toolResultText;
+    mark('tavily_start');
     try {
       toolResultText = await callTavily(env, searchQuery);
     } catch (_) {
       toolResultText = 'تعذر إجراء البحث الآن (الخدمة غير متاحة مؤقتًا).';
     }
+    mark('tavily_done');
 
     // Echo back candidate.content AS RETURNED (not a hand-built copy of just
     // the functionCall part) — some Gemini models attach extra fields
@@ -240,6 +250,7 @@ async function callGemini(env, { systemPrompt, userText, allowSearch }) {
       }],
     });
 
+    mark('gemini_2_start');
     res = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -250,6 +261,7 @@ async function callGemini(env, { systemPrompt, userText, allowSearch }) {
         tools: [WEB_SEARCH_TOOL],
       }),
     }, GEMINI_TIMEOUT_MS);
+    mark('gemini_2_done');
     if (res.status === 429) throw Object.assign(new Error('gemini_quota'), { code: 'quota_exceeded' });
     if (!res.ok) {
       // Server-side only (Cloudflare Worker logs) — never sent to the browser.
