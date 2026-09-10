@@ -1265,3 +1265,65 @@ ul.kb-list { margin: 0 0 10px; padding-inline-start: 20px; line-height: 1.9; }
    the card on narrow screens. Block layout activates the existing
    overflow/ellipsis rules. No visual change where text already fits. */
 .member-card .member-meta { display: block; }
+
+/* --- Assistant content blocks (Bible reading / story / hymn text) ------- */
+
+/* Chapter heading inside the Bible reading panel. */
+.kb-bible-heading {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-maroon-dark);
+  margin: 2px 0 6px;
+}
+.kb-verses { direction: rtl; text-align: right; }
+.kb-verse-text { line-height: 2; }
+
+/* Lesson story: comfortable reading panel for a servant preparing to teach. */
+.kb-story {
+  background: var(--color-surface-alt);
+  border-inline-start: 4px solid var(--color-gold-light);
+  border-radius: var(--radius-sm);
+  padding: 16px 18px;
+}
+.kb-story p {
+  margin: 0 0 12px;
+  font-size: 1.02rem;
+  line-height: 2.1;
+}
+.kb-story p:last-child { margin-bottom: 0; }
+
+/* Memory verse quote inside a lesson. */
+.kb-verse-quote {
+  background: var(--color-maroon-tint);
+  border-inline-start: 4px solid var(--color-maroon);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-weight: 600;
+  line-height: 2;
+}
+.kb-verse-quote .kb-ref { color: var(--color-ink-soft); font-weight: 500; }
+
+/* Full hymn lyric text (Coptic / Arabic). */
+.kb-hymn-text { line-height: 2.1; font-size: 1.02rem; }
+.kb-hymn-text p { margin: 0 0 10px; }
+.kb-hymn-text p:last-child { margin-bottom: 0; }
+.kb-coptic { font-size: 1.15rem; }
+
+/* Musical notation asset (image or PDF link). */
+.kb-notation { margin-top: 4px; }
+.kb-notation-img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+.kb-notation-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-maroon);
+  font-weight: 600;
+}
+.kb-notation-link svg { width: 18px; height: 18px; }

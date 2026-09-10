@@ -149,6 +149,32 @@ function kbFlattenText(obj) {
   return acc.join(' ');
 }
 
+/* Admin/source-status keys that must stay OUT of the user-visible content
+   text (search snippets, PDF export). They remain in the KB files for
+   internal administration/legal tracking only. */
+var KB_SKIP_BODY_KEYS = {
+  translation: 1, partial: 1, excerptNote: 1, verseStart: 1, verseEnd: 1,
+  notationRights: 1, textArabicRights: 1, textCopticRights: 1, transliterationRights: 1
+};
+function kbContentFlatten(value, acc) {
+  if (value === null || value === undefined) return;
+  if (typeof value === 'string' || typeof value === 'number') {
+    acc.push(value.toString());
+  } else if (Array.isArray(value)) {
+    value.forEach(function (v) { kbContentFlatten(v, acc); });
+  } else if (typeof value === 'object') {
+    Object.keys(value).forEach(function (k) {
+      if (k === 'id' || KB_SKIP_BODY_KEYS[k] || /Rights$/.test(k)) return;
+      kbContentFlatten(value[k], acc);
+    });
+  }
+}
+function kbContentText(obj) {
+  var acc = [];
+  try { kbContentFlatten(obj, acc); } catch (e) { return ''; }
+  return acc.join(' ');
+}
+
 function kbBuildDoc(item) {
   var b = item.body || {};
   var title = item.title || '';
@@ -158,7 +184,8 @@ function kbBuildDoc(item) {
   if (item.type === 'lesson') {
     headText = [b.mainIdea].concat(kbArr(b.keyPoints)).filter(Boolean).join('\n');
   } else if (item.type === 'hymn') {
-    headText = [b.nameAr, b.nameCoptic].filter(Boolean).join('\n');
+    headText = [b.nameAr, b.nameCoptic].concat(
+      kbArr(b.textArabic), kbArr(b.textCoptic), kbArr(b.transliteration)).filter(Boolean).join('\n');
   } else if (item.type === 'bible') {
     headText = (b.bookAr || '') + ' ' + (b.chapter || '');
   } else if (item.type === 'synaxarium') {
@@ -172,7 +199,7 @@ function kbBuildDoc(item) {
       b.gregorianNote,
       b.copticDate ? (b.copticDate.day + ' ' + (b.copticDate.month || '')) : ''
     ]).filter(Boolean).join('\n');
-  var flat = kbFlattenText(b);
+  var flat = kbContentText(b);
   var bodyText = ((item.summary || '') + ' ' + flat).replace(/\s+/g, ' ').trim();
   return {
     item: item, cat: item.type,
@@ -349,8 +376,7 @@ function kbSearchPanelHTML(inputId, value) {
   return '<div class="search-panel"><form id="' + inputId + 'Form" role="search">' +
     '<div class="search-box">' + ICONS.search +
     '<input type="text" id="' + inputId + '" placeholder="' + KB_PLACEHOLDER +
-    '" value="' + escapeHTML(value || '') + '" autocomplete="off" /></div></form>' +
-    '<p class="search-hint">بحث محلي بالكامل — يعمل بدون إنترنت بعد أول تحميل</p></div>';
+    '" value="' + escapeHTML(value || '') + '" autocomplete="off" /></div></form></div>';
 }
 
 function kbWireSearchForm(inputId, cat) {
@@ -403,15 +429,10 @@ async function kbRenderHome() {
   APP_ROOT.innerHTML = '<div class="container">' +
     '<p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>' + KB_TITLE + '</span></p>' +
     '<h2 class="section-title">' + KB_TITLE + '</h2>' +
-    '<p class="section-sub">بحث محلي في مكتبة الكنيسة: دروس، ألحان، آيات، سنكسار وأعياد</p>' +
+    '<p class="section-sub">مكتبة الكنيسة: دروس، ألحان، آيات، سنكسار وأعياد</p>' +
     kbSearchPanelHTML('kbHomeInput', '') +
     (cards ? '<div class="nav-grid">' + cards + '</div>' : '') +
-    '<div class="info-section"><h3>' + ICONS.book + ' عن مساعد الخادم</h3><div class="kb-prose">' +
-    '<p>مساعد الخادم أداة <strong>بحث محلية</strong> تسترجع المحتوى من مكتبة الجهاز فقط — لا تستخدم ' +
-    'أي ذكاء اصطناعي خارجي، ولا ترسل أي بيانات عبر الإنترنت.</p>' +
-    '<p>المحتوى الحالي <strong>عيّنات صغيرة للتجربة</strong>: نصوص كتابية من ترجمة فاندايك 1865 ' +
-    '(ملكية عامة)، وشروح ودروس من صياغة الكنيسة. الآيات تُعرض بنصّها الأصلي دون أي تغيير.</p>' +
-    '</div></div></div>';
+    '</div>';
   kbWireSearchForm('kbHomeInput', '');
 }
 
@@ -491,37 +512,53 @@ function kbParas(text) {
   }).join('');
 }
 
+/* Story panel for lessons. Preserves explicit paragraph breaks (\n) and,
+   for a long single-paragraph story, breaks the wall of text into short
+   readable paragraphs at sentence boundaries. Presentation only — no
+   wording is added or changed. */
+function kbStoryHTML(story) {
+  if (!story) return '';
+  var paras = Array.isArray(story) ? story : String(story).split(/\n+/);
+  var out = [];
+  paras.forEach(function (block) {
+    var b = String(block).trim();
+    if (!b) return;
+    var sentences = b.replace(/([.!؟])\s+/g, '$1\u0001').split('\u0001').filter(Boolean);
+    if (sentences.length < 3) { out.push(b); return; }
+    for (var i = 0; i < sentences.length; i += 2) {
+      out.push(sentences.slice(i, i + 2).join(' '));
+    }
+  });
+  return '<div class="kb-story">' + out.map(function (p) {
+    return '<p>' + escapeHTML(p) + '</p>';
+  }).join('') + '</div>';
+}
+
 function kbBibleBodyHTML(b) {
   var verses = kbArr(b.verses).map(function (v) {
     return '<div class="kb-verse"><span class="kb-verse-n">' + escapeHTML(String(v.n)) + '</span>' +
-      '<span>' + escapeHTML(v.text || '') + '</span></div>';
+      '<span class="kb-verse-text">' + escapeHTML(v.text || '') + '</span></div>';
   }).join('');
-  var range = (b.verseStart && b.verseEnd) ? ('الآيات ' + b.verseStart + '–' + b.verseEnd) : '';
+  var heading = ((b.bookAr || '') + ' ' + (b.chapter != null ? b.chapter : '')).trim();
   return '<div class="info-section"><h3>' + ICONS.book + ' النص الكتابي</h3>' +
-    '<dl class="info-grid">' +
-    kbMetaRow('السفر', escapeHTML(b.bookAr || '')) +
-    kbMetaRow('الإصحاح', escapeHTML(String(b.chapter || ''))) +
-    kbMetaRow('الترجمة', 'فاندايك 1865 (ملكية عامة)') +
-    (range ? kbMetaRow('النطاق', escapeHTML(range)) : '') +
-    (b.partial && b.excerptNote ? kbMetaRow('ملاحظة', escapeHTML(b.excerptNote), true) : '') +
-    '</dl><div class="kb-verses">' + verses + '</div></div>';
+    (heading ? '<div class="kb-bible-heading">' + escapeHTML(heading) + '</div>' : '') +
+    '<div class="kb-verses">' + verses + '</div></div>';
 }
 
 function kbLessonBodyHTML(b) {
-  return '<div class="info-section"><h3>' + ICONS.notes + ' بيانات الدرس</h3>' +
+  return '<div class="info-section"><h3>' + ICONS.notes + ' فكرة الدرس</h3>' +
     '<dl class="info-grid">' +
-    kbMetaRow('الفئة العمرية', escapeHTML(b.ageGroup || '')) +
-    kbMetaRow('المرحلة', escapeHTML(b.grade || '')) +
-    kbMetaRow('المدة', b.durationMin ? ('نحو ' + escapeHTML(String(b.durationMin)) + ' دقيقة') : '') +
-    kbMetaRow('الفكرة الرئيسية', escapeHTML(b.mainIdea || ''), true) +
-    (b.memoryVerse ? kbMetaRow('الآية للحفظ', escapeHTML('"' + (b.memoryVerse.text || '') + '" (' + (b.memoryVerse.ref || '') + ')'), true) : '') +
+    (b.mainIdea ? kbMetaRow('الفكرة الرئيسية', escapeHTML(b.mainIdea), true) : '') +
+    (kbArr(b.objective).length ? kbMetaRow('الهدف', kbJoinList(b.objective), true) : '') +
     (kbArr(b.bibleRef).length ? kbMetaRow('الشاهد الكتابي', escapeHTML(kbArr(b.bibleRef).join('، ')), true) : '') +
     '</dl></div>' +
+    (b.story ? '<div class="info-section"><h3>' + ICONS.notes + ' القصة</h3>' + kbStoryHTML(b.story) + '</div>' : '') +
     '<div class="info-section"><h3>' + ICONS.notes + ' محتوى الدرس</h3><div class="kb-prose">' +
-    (b.story ? '<h4>القصة</h4>' + kbParas(b.story) : '') +
     (b.explanation ? '<h4>الشرح</h4>' + kbParas(b.explanation) : '') +
     (kbArr(b.keyPoints).length ? '<h4>نقاط أساسية</h4>' + kbBullets(b.keyPoints) : '') +
+    (b.memoryVerse ? '<h4>الآية للحفظ</h4><p class="kb-verse-quote">"' + escapeHTML(b.memoryVerse.text || '') + '" <span class="kb-ref">(' + escapeHTML(b.memoryVerse.ref || '') + ')</span></p>' : '') +
     (kbArr(b.questions).length ? '<h4>أسئلة للحوار</h4>' + kbBullets(b.questions) : '') +
+    (b.discussion ? '<h4>مناقشة</h4>' + kbParas(b.discussion) : '') +
     (kbArr(b.activity).length ? '<h4>نشاط</h4>' + kbBullets(b.activity) : '') +
     (b.application ? '<h4>تطبيق عملي</h4>' + kbParas(b.application) : '') +
     (b.conclusion ? '<h4>ختام</h4>' + kbParas(b.conclusion) : '') +
@@ -529,19 +566,59 @@ function kbLessonBodyHTML(b) {
 }
 
 function kbHymnBodyHTML(b) {
-  return '<div class="info-section"><h3>' + ICONS.music + ' بيانات اللحن</h3>' +
+  var html = '<div class="info-section"><h3>' + ICONS.music + ' اسم اللحن</h3>' +
     '<dl class="info-grid">' +
-    kbMetaRow('الاسم', escapeHTML(b.nameAr || '')) +
-    (b.nameCoptic ? kbMetaRow('الاسم بالقبطية', escapeHTML(b.nameCoptic)) : '') +
+    (b.nameAr ? kbMetaRow('الاسم', escapeHTML(b.nameAr)) : '') +
+    (b.nameCoptic ? kbMetaRow('الاسم بالقبطية', '<span class="kb-coptic">' + escapeHTML(b.nameCoptic) + '</span>') : '') +
+    (b.transliteration ? kbMetaRow('النطق', escapeHTML(b.transliteration)) : '') +
+    '</dl></div>';
+  html += kbHymnTextSection('النص القبطي', b.textCoptic, true);
+  html += kbHymnTextSection('النص العربي', b.textArabic, false);
+  html += kbNotationSection(b.notation);
+  html += '<div class="info-section"><h3>' + ICONS.music + ' المناسبة / الاستخدام</h3>' +
+    '<dl class="info-grid">' +
     (kbArr(b.occasion).length ? kbMetaRow('المناسبة', kbJoinList(b.occasion)) : '') +
-    (kbArr(b.feast).length ? kbMetaRow('العيد', kbJoinList(b.feast)) : '') +
+    (kbArr(b.feast).length ? kbMetaRow('العيد / المناسبة المرتبطة', kbJoinList(b.feast), true) : '') +
     (b.liturgicalContext ? kbMetaRow('السياق الطقسي', escapeHTML(b.liturgicalContext), true) : '') +
     (b.whenSung ? kbMetaRow('متى يُقال', escapeHTML(b.whenSung), true) : '') +
-    '</dl></div>' +
-    '<div class="info-section"><h3>' + ICONS.music + ' شرح اللحن</h3><div class="kb-prose">' +
-    kbParas(b.explanationOriginal) +
-    '<p class="kb-muted">النص الكامل للحن والتدوين الموسيقي غير متاحين في هذه النسخة — تُضاف ' +
-    'لاحقًا من مصدر مصرّح به فقط.</p></div></div>';
+    (kbArr(b.relatedHymns).length ? kbMetaRow('ألحان مرتبطة', kbJoinList(b.relatedHymns), true) : '') +
+    '</dl></div>';
+  if (b.explanationOriginal) {
+    html += '<div class="info-section"><h3>' + ICONS.music + ' الشرح</h3><div class="kb-prose">' +
+      kbParas(b.explanationOriginal) + '</div></div>';
+  }
+  return html;
+}
+
+/* Full hymn lyric text (Coptic or Arabic). Rendered only when the text is
+   actually present — nothing is shown to users when a text is still
+   awaiting a rights-cleared source. */
+function kbHymnTextSection(label, text, coptic) {
+  if (!text) return '';
+  var lines = String(text).split(/\n+/).map(function (l) { return l.trim(); }).filter(Boolean);
+  if (!lines.length) return '';
+  return '<div class="info-section"><h3>' + ICONS.music + ' ' + escapeHTML(label) + '</h3>' +
+    '<div class="kb-hymn-text' + (coptic ? ' kb-coptic' : '') + '">' +
+    lines.map(function (l) { return '<p>' + escapeHTML(l) + '</p>'; }).join('') +
+    '</div></div>';
+}
+
+/* Musical notation asset — image or PDF, local static file. Shown only when
+   a notation asset actually exists in the KB entry. */
+function kbNotationSection(notation) {
+  if (!notation) return '';
+  var url = (typeof notation === 'string') ? notation : (notation && (notation.url || notation.src));
+  if (!url) return '';
+  var kind = (notation && notation.kind) || (/\.pdf($|\?)/i.test(url) ? 'pdf' : 'image');
+  var inner = '';
+  if (kind === 'pdf') {
+    inner = '<a class="kb-notation-link" href="' + escapeHTML(url) + '" target="_blank" rel="noopener">' +
+      ICONS.download + ' فتح النوتة الموسيقية (PDF)</a>';
+  } else {
+    inner = '<img class="kb-notation-img" src="' + escapeHTML(url) + '" alt="النوتة الموسيقية" loading="lazy" />';
+  }
+  return '<div class="info-section"><h3>' + ICONS.music + ' النوتة الموسيقية</h3>' +
+    '<div class="kb-notation">' + inner + '</div></div>';
 }
 
 function kbSynaxariumBodyHTML(b) {
@@ -577,7 +654,7 @@ function kbFeastBodyHTML(b) {
 }
 
 function kbGenericBodyHTML(b) {
-  var flat = kbFlattenText(b).replace(/ /g, '\n');
+  var flat = kbContentText(b).replace(/ /g, '\n');
   return '<div class="info-section"><h3>' + ICONS.notes + ' المحتوى</h3><div class="kb-prose">' +
     kbParas(flat) + '</div></div>';
 }
@@ -590,43 +667,6 @@ function kbContentBodyHTML(item) {
   if (item.type === 'synaxarium') return kbSynaxariumBodyHTML(b);
   if (item.type === 'feast' || item.type === 'rite') return kbFeastBodyHTML(b);
   return kbGenericBodyHTML(b);
-}
-
-function kbRelatedHTML(item) {
-  var rel = kbArr(item.related);
-  if (!rel.length) return '<p class="kb-muted">لا يوجد محتوى مرتبط بعد.</p>';
-  /* Missing target ids are skipped silently: a bad link must never break render. */
-  var cards = rel.map(function (r) {
-    if (r.id && KB.byId.has(r.id)) {
-      var t = KB.byId.get(r.id);
-      return kbResultCardHTML(
-        { id: t.id, type: t.type, title: t.title, tags: [r.label || kbCatLabel(t.type)] },
-        escapeHTML(t.summary || '')
-      );
-    }
-    if (r.query) {
-      return '<a href="#/assistant/search?' + qs({ q: r.query }) + '" class="member-card">' +
-        '<span class="icon-wrap" style="width:44px;height:44px;border-radius:50%;background:var(--color-maroon-tint);' +
-        'color:var(--color-maroon);display:flex;align-items:center;justify-content:center;flex:none;">' +
-        ICONS.search + '</span>' +
-        '<span class="member-info"><span class="member-name">' + escapeHTML(r.label || r.query) + '</span>' +
-        '<span class="member-meta">موضوع مرتبط — اضغط للبحث عنه</span></span></a>';
-    }
-    return '';
-  }).join('');
-  return cards ? '<div class="member-list">' + cards + '</div>' : '<p class="kb-muted">لا يوجد محتوى مرتبط بعد.</p>';
-}
-
-function kbSourceHTML(item) {
-  var s = item.source || {};
-  if (!s.origin && !s.license && !s.notes) return '';
-  return '<div class="info-section"><h3>' + ICONS.notes + ' المصدر والحقوق</h3>' +
-    '<dl class="info-grid">' +
-    kbMetaRow('المصدر', escapeHTML([s.origin, s.edition].filter(Boolean).join(' — ')), true) +
-    kbMetaRow('الترخيص', escapeHTML(s.license || '')) +
-    (s.url ? kbMetaRow('الرابط', escapeHTML(s.url)) : '') +
-    (s.notes ? kbMetaRow('ملاحظات', escapeHTML(s.notes), true) : '') +
-    '</dl></div>';
 }
 
 function kbInitials(name) {
@@ -667,9 +707,7 @@ async function kbRenderItem(id) {
     '<div class="profile-actions">' + kbPdfButtonHTML('kbItemPdfBtn') + '</div></div>' +
     (item.summary ? '<div class="info-section"><h3>' + ICONS.notes + ' نبذة</h3><div class="kb-prose">' +
       kbParas(item.summary) + '</div></div>' : '') +
-    kbContentBodyHTML(item) +
-    '<div class="info-section"><h3>' + ICONS.search + ' محتوى مرتبط</h3>' + kbRelatedHTML(item) + '</div>' +
-    kbSourceHTML(item) + '</div>';
+    kbContentBodyHTML(item) + '</div>';
   var btn = document.getElementById('kbItemPdfBtn');
   if (btn) btn.addEventListener('click', function () {
     var doc = KB.docs.find(function (d) { return d.item.id === item.id; });
