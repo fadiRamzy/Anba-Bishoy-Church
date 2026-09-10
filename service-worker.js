@@ -10,7 +10,7 @@
    does not break the page.
    ========================================================================== */
 
-const CACHE_VERSION = 'abc-church-cache-v3';
+const CACHE_VERSION = 'abc-church-cache-v6';
 
 /* Local files actually loaded by index.html / app.js / styles.css.
    Query strings are kept exactly as referenced so the precached entry
@@ -21,8 +21,17 @@ const PRECACHE_URLS = [
   'app.js?v=8',
   'db.js?v=3',
   'styles.css?v=9',
-  'bible/bible.js?v=2',
+  'bible/bible.js?v=4',
   'bible/metadata.json',
+  'calendar/coptic-calendar.js?v=1',
+  'calendar/calendar.css?v=1',
+  'calendar/calendar-fab.js?v=1',
+  'calendar/calendar-fab.css?v=1',
+  'calendar/data/feasts-fixed.json',
+  'calendar/data/feasts-movable.json',
+  'calendar/data/saints.json',
+  'calendar/data/fasts.json',
+  'calendar/data/readings.json',
   'logo.jpg',
   'site-bg.jpg',
   'seed.json',
