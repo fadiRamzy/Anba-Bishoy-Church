@@ -15,8 +15,10 @@
 
   function engineReady() {
     return typeof calGregorianToJdn === 'function'
-      && typeof calJdnToCoptic === 'function'
-      && typeof COPTIC_MONTHS !== 'undefined';
+      && typeof calJdnToGregorian === 'function'
+      && typeof calWeekday === 'function'
+      && typeof WEEKDAYS_AR !== 'undefined'
+      && typeof GREG_MONTHS_AR !== 'undefined';
   }
 
   function todayJdn() {
@@ -24,13 +26,13 @@
     return calGregorianToJdn(now.getFullYear(), now.getMonth() + 1, now.getDate());
   }
 
-  function copticDateText(jdn) {
-    var c = calJdnToCoptic(jdn);
-    return c.d + ' ' + COPTIC_MONTHS[c.m - 1] + ' ' + c.y;
+  function gregorianDateText(jdn) {
+    var g = calJdnToGregorian(jdn);
+    return WEEKDAYS_AR[calWeekday(jdn)] + '، ' + g.d + ' ' + GREG_MONTHS_AR[g.m - 1] + ' ' + g.y;
   }
 
   /* Priority: major feast > minor feast > refa3 > saint (fixed first,
-     then monthly) > season > current fast > Coptic date fallback. */
+     then monthly) > season > current fast > Gregorian date fallback. */
   function pickLabel(day) {
     var i;
     for (i = 0; i < day.feasts.length; i += 1) {
@@ -61,7 +63,7 @@
     if (day.fast && day.fast.fasting && day.fast.name) {
       return { text: day.fast.name, dot: null };
     }
-    return { text: copticDateText(day.jdn), dot: null };
+    return { text: gregorianDateText(day.jdn), dot: null };
   }
 
   function paint(fab, text, dot) {
@@ -87,8 +89,8 @@
     var jdn;
     try {
       jdn = todayJdn();
-      // Instant fallback needs no data files: today's Coptic date.
-      paint(fab, copticDateText(jdn), null);
+      // Instant fallback needs no data files: today's Gregorian date.
+      paint(fab, gregorianDateText(jdn), null);
     } catch (e) {
       fab.querySelector('.cal-fab-label').hidden = true;
       return;
@@ -98,7 +100,7 @@
     CalendarStore.load().then(function (D) {
       var picked = pickLabel(calResolveDay(jdn, D));
       paint(fab, picked.text, picked.dot);
-    }).catch(function () { /* offline: keep the Coptic-date fallback */ });
+    }).catch(function () { /* offline: keep the Gregorian-date fallback */ });
   }
 
   function init() {

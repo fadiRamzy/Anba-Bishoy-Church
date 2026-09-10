@@ -316,19 +316,6 @@ button.cal-cell:hover {
   gap: 4px;
 }
 
-/* Sources note. */
-.cal-sources p {
-  font-size: .85rem;
-  color: var(--color-ink-soft);
-  margin: 0;
-  line-height: 2;
-}
-.cal-sources code {
-  font-size: .78rem;
-  direction: ltr;
-  display: inline-block;
-}
-
 /* Small screens: tighter cells, smaller micro-text, no overflow. */
 @media (max-width: 560px) {
   .cal-card { padding: 16px 12px; }

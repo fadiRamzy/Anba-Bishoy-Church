@@ -19,8 +19,8 @@
 /* ---------------------------------------------------------------------- */
 /*  1. Names                                                              */
 /* ---------------------------------------------------------------------- */
-const COPTIC_MONTHS = ['توت', 'بابه', 'هاتور', 'كيهك', 'طوبة', 'أمشير',
-  'برمهات', 'برمودة', 'بشنس', 'بؤونة', 'أبيب', 'مسرى', 'النسيء'];
+const COPTIC_MONTHS = ['توت', 'بابه', 'هاتور', 'كيهك', 'طوبه', 'أمشير',
+  'برمهات', 'برموده', 'بشنس', 'بؤونه', 'أبيب', 'مسرى', 'النسيء'];
 const GREG_MONTHS_AR = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
   'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 /* Index 0 = Sunday, matching calWeekday(). */
@@ -244,7 +244,7 @@ function calResolveFast(jdn, g, wd, offset, feasts, gyPeriods) {
   if (isWedFri) {
     const minorLord = feasts.some((f) => f.kind === 'lord' && f.rank === 'minor');
     return {
-      fasting: true, name: 'صوم الأربعاء والجمعة', degree: 1, fish: false,
+      fasting: true, name: 'صوم الأربعاء والجمعة', degree: 1, fish: false, weekly: true,
       abstinence: !minorLord,
       label: minorLord ? 'صوم — عيد سيدي (بدون انقطاع)' : 'صوم انقطاعي — الأربعاء والجمعة',
       detail: minorLord
@@ -488,7 +488,7 @@ const CalendarUI = {
         if (f.rank === 'major' || f.rank === 'minor' || f.kind === 'refa3') names.push(f.name);
       }
       if (day.season && day.season !== prevSeason) names.unshift(`بدء ${day.season}`);
-      const fastName = day.fast.fasting ? day.fast.name : null;
+      const fastName = (day.fast.fasting && !day.fast.weekly) ? day.fast.name : null;
       if (fastName && fastName !== prevFastName
           && !names.some((n) => n.includes(fastName.replace('صوم ', '')))) {
         names.push(`بدء ${fastName}`);
@@ -585,10 +585,6 @@ const CalendarUI = {
         <div id="calDetail">${selectedJdn && selectedJdn !== todayJdn ? this.dayCardHTML(calResolveDay(selectedJdn, D), 'اليوم المحدد') : ''}</div>
         ${this.upcomingHTML(todayJdn, D)}
         ${this.fastsHTML(gy, D)}
-        <section class="cal-card cal-sources">
-          <h3 class="cal-section-head">عن هذه البيانات</h3>
-          <p>مواعيد الأعياد والأصوام محسوبة من قاعدة عيد القيامة القبطي، ومدققة مع النتيجة القبطية السنوية لموقع الأنبا تكلا (st-takla.org). التفاصيل والمصادر الكاملة في ملف <code>calendar/README.md</code> المرفق مع الموقع.</p>
-        </section>
       </div>`;
     // In-page day picking (no extra routes): tapping a grid cell renders
     // its details right under the month grid.
