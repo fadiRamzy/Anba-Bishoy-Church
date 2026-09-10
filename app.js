@@ -480,7 +480,7 @@ async function renderLanding() {
         </a>
         <a href="#/bible" class="landing-card">
           <span class="icon-wrap">${ICONS.book}</span>
-          <span class="landing-card-title">الكتاب المقدس</span>
+          <span class="landing-card-title">الكتاب المقدس والتقويم الكنسي</span>
         </a>
       </div>
     </div>

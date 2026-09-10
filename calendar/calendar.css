@@ -316,6 +316,38 @@ button.cal-cell:hover {
   gap: 4px;
 }
 
+/* Daily Bible reading (above the calendar, compact). */
+.cal-daily { border-top: 4px solid var(--color-maroon); }
+.cal-daily-link {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-line);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.cal-daily-link:hover {
+  border-color: var(--color-gold);
+  box-shadow: var(--shadow-soft);
+}
+.cal-daily-title {
+  font-family: var(--font-display);
+  color: var(--color-maroon-dark);
+  font-size: 1.1rem;
+}
+.cal-daily-desc {
+  font-size: .85rem;
+  color: var(--color-ink-soft);
+  line-height: 1.9;
+}
+.cal-daily-ref {
+  font-size: .88rem;
+  font-weight: 800;
+  color: var(--color-maroon);
+}
+
 /* Small screens: tighter cells, smaller micro-text, no overflow. */
 @media (max-width: 560px) {
   .cal-card { padding: 16px 12px; }

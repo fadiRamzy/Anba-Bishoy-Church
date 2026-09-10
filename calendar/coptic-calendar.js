@@ -128,13 +128,13 @@ const CalendarStore = {
 
   load() {
     if (!this._promise) {
-      const files = ['feasts-fixed', 'feasts-movable', 'saints', 'fasts', 'readings'];
+      const files = ['feasts-fixed', 'feasts-movable', 'saints', 'fasts', 'readings', 'daily-readings'];
       this._promise = Promise.all(files.map(async (f) => {
         const res = await fetch(`calendar/data/${f}.json`);
         if (!res.ok) throw new Error('تعذر تحميل بيانات التقويم');
         return res.json();
-      })).then(([fixed, movable, saints, fasts, readings]) => {
-        this._data = { fixed, movable, saints, fasts, readings };
+      })).then(([fixed, movable, saints, fasts, readings, daily]) => {
+        this._data = { fixed, movable, saints, fasts, readings, daily };
         return this._data;
       }).catch((err) => {
         this._promise = null; // a later attempt may retry (e.g. back online)
@@ -387,8 +387,8 @@ const CalendarUI = {
     document.getElementById('topNav').innerHTML = `\n      <span><a href="#/bible" class="back-link">${CAL_ICONS.back}<span>رجوع للكتاب المقدس</span></a></span>\n      <span></span>`;
   },
 
-  /* One full day card (used for "today" and for the selected grid day). */
-  dayCardHTML(day, title) {
+  /* The single day card: shows today, or the tapped grid day. */
+  dayCardHTML(day, isToday) {
     const feastRows = day.feasts.map((f) => {
       const badge = f.kind === 'refa3'
         ? '<span class="cal-badge cal-badge-refa3">رفاع</span>'
@@ -409,7 +409,7 @@ const CalendarUI = {
       ? '<li class="cal-event cal-event-empty">لا توجد أعياد أو تذكارات مسجلة في هذا اليوم.</li>' : '';
     return `
       <section class="cal-card cal-today">
-        <p class="cal-card-kicker">${calEscape(title)}</p>
+        ${isToday ? '<p class="cal-card-kicker">اليوم</p>' : ''}
         <h3 class="cal-day-coptic">${calEscape(day.weekday)}، ${calEscape(calFormatCoptic(day.c))}</h3>
         <p class="cal-day-greg">${calEscape(calFormatGreg(day.g))}</p>
         <div class="cal-chips">
@@ -472,7 +472,7 @@ const CalendarUI = {
           <span><i class="cal-dot dot-saint"></i> تذكار قديس</span>
           <span><i class="cal-swatch sw-fast"></i> يوم صوم</span>
         </div>
-        <p class="cal-note">اضغط على أي يوم لعرض تفاصيله. <a href="#/bible/calendar">الرجوع لليوم الحالي</a></p>
+        <p class="cal-note"><a href="#/bible/calendar">الرجوع لليوم الحالي</a></p>
       </section>`;
   },
 
@@ -550,6 +550,25 @@ const CalendarUI = {
       </section>`;
   },
 
+  /* Daily Bible reading (above the calendar): deterministic rotation —
+     readings[JDN % N], so the same date always shows the same passage and
+     future years work with no yearly files. References only; the passage
+     itself opens in the existing Bible reader. */
+  dailyHTML(todayJdn, D) {
+    const list = (D.daily && D.daily.readings) || [];
+    if (!list.length) return '';
+    const r = list[todayJdn % list.length];
+    return `
+      <section class="cal-card cal-daily">
+        <p class="cal-card-kicker">${calEscape((D.daily && D.daily.title) || '📖 نقرأ النهارده مع بعض')}</p>
+        <a class="cal-daily-link" href="#/bible/read/${r.book}/${r.chapter}">
+          <strong class="cal-daily-title">${calEscape(r.title)}</strong>
+          <span class="cal-daily-desc">${calEscape(r.desc)}</span>
+          <span class="cal-daily-ref">اقرأ: ${calEscape(r.ref)} ←</span>
+        </a>
+      </section>`;
+  },
+
   /* #/bible/calendar — full page. */
   async main(params) {
     const page = this._page;
@@ -580,28 +599,26 @@ const CalendarUI = {
         <h2 class="section-title">التقويم الكنسي</h2>
         <p class="section-sub">الأعياد والأصوام والتذكارات والقراءات — بالتقويمين القبطي والميلادي</p>
         <div class="cross-divider">${CAL_ICONS.cross}</div>
-        ${this.dayCardHTML(todayDay, 'اليوم')}
+        ${this.dailyHTML(todayJdn, D)}
+        <div id="calMainCard">${this.dayCardHTML(selectedJdn && selectedJdn !== todayJdn ? calResolveDay(selectedJdn, D) : todayDay, !(selectedJdn && selectedJdn !== todayJdn))}</div>
         ${this.monthHTML(gy, gm, D, selectedJdn)}
-        <div id="calDetail">${selectedJdn && selectedJdn !== todayJdn ? this.dayCardHTML(calResolveDay(selectedJdn, D), 'اليوم المحدد') : ''}</div>
         ${this.upcomingHTML(todayJdn, D)}
         ${this.fastsHTML(gy, D)}
       </div>`;
-    // In-page day picking (no extra routes): tapping a grid cell renders
-    // its details right under the month grid.
+    // In-page day picking (no extra routes): tapping a grid cell updates
+    // the single day card at the top of the page.
     const grid = root.querySelector('.cal-grid');
-    const detail = document.getElementById('calDetail');
-    if (grid && detail) {
+    const mainCard = document.getElementById('calMainCard');
+    if (grid && mainCard) {
       grid.addEventListener('click', (ev) => {
         const btn = ev.target.closest('button.cal-cell[data-jdn]');
         if (!btn) return;
         const jdn = parseInt(btn.dataset.jdn, 10);
         root.querySelectorAll('.cal-cell.is-selected').forEach((el) => el.classList.remove('is-selected'));
         btn.classList.add('is-selected');
-        detail.innerHTML = jdn === todayJdn
-          ? ''
-          : this.dayCardHTML(calResolveDay(jdn, D), 'اليوم المحدد');
-        if (jdn !== todayJdn && typeof detail.scrollIntoView === 'function') {
-          try { detail.scrollIntoView({ block: 'nearest' }); } catch (e) { /* old browsers */ }
+        mainCard.innerHTML = this.dayCardHTML(calResolveDay(jdn, D), jdn === todayJdn);
+        if (typeof mainCard.scrollIntoView === 'function') {
+          try { mainCard.scrollIntoView({ block: 'nearest' }); } catch (e) { /* old browsers */ }
         }
       });
     }
