@@ -206,8 +206,8 @@ const MembersDB = {
     return JSON.stringify(all, null, 2);
   },
 
-  /* mode: 'merge' (append, never overwriting existing records) or
-     'replace' (clear then insert).
+  /* mode: 'merge' (append only genuinely-new names, never overwriting
+     existing records) or 'replace' (clear then insert unique names).
      Root cause of the old data-loss bug: separately exported JSON files
      (one per class/stage) each restart their own "id" numbering from 1.
      Since bulkPut() uses store.put(), which is an upsert keyed on "id",
@@ -216,19 +216,55 @@ const MembersDB = {
      Fix: in merge mode, never reuse the "id" values from the incoming
      file — assign each incoming record a fresh id continuing on from the
      highest id already in the store, guaranteeing no existing record can
-     ever be overwritten. */
+     ever be overwritten.
+     Duplicate rule (merge): an incoming record is a duplicate when its
+     Arabic-normalized name (normalizeArabic: trim, strip tashkeel/tatweel,
+     unify alef/ya/ta-marbuta, collapse spaces) already exists in the store
+     OR already appeared earlier in the same import batch. Duplicates are
+     skipped — never imported, never overwritten, no new id. The JSON "id"
+     is never used for duplicate detection.
+     Replace mode: dedupes the incoming batch by normalized name (first
+     occurrence wins) before replacing, so multi-file imports can't create
+     duplicates. Old records are never preserved in replace mode.
+     Returns { imported, skipped }. */
   async importJSON(jsonText, mode = 'merge') {
     const parsed = JSON.parse(jsonText);
-    if (!Array.isArray(parsed)) throw new Error('الملف لا يحتوي على مصفوفة بيانات صحيحة');
+    return this.importRecords(parsed, mode);
+  },
+
+  /* Batch import of already-parsed records (used for multi-file imports:
+     the caller combines all selected files into one array first, so
+     cross-file duplicates are detected). See importJSON docs for rules. */
+  async importRecords(records, mode = 'merge') {
+    if (!Array.isArray(records)) throw new Error('الملف لا يحتوي على مصفوفة بيانات صحيحة');
+    for (const r of records) {
+      if (!r || typeof r !== 'object' || Array.isArray(r)) throw new Error('الملف لا يحتوي على مصفوفة بيانات صحيحة');
+    }
     if (mode === 'replace') {
+      const { unique, skipped } = dedupeRecordsByNormalizedName(records);
+      const withIds = ensureUniqueNumericIds(unique);
       await this.clearAll();
-      await this.bulkPut(parsed);
-      return parsed.length;
+      await this.bulkPut(withIds);
+      return { imported: withIds.length, skipped };
+    }
+    const existing = await this.getAll();
+    const knownNames = new Set();
+    for (const m of existing) {
+      const n = normalizeArabic(m.name || '');
+      if (n) knownNames.add(n);
+    }
+    const toImport = [];
+    let skipped = 0;
+    for (const rec of records) {
+      const norm = normalizeArabic(rec.name || '');
+      if (norm && knownNames.has(norm)) { skipped += 1; continue; }
+      if (norm) knownNames.add(norm);
+      toImport.push(rec);
     }
     let nextId = await this.nextId();
-    const remapped = parsed.map((m) => ({ ...m, id: nextId++ }));
+    const remapped = toImport.map((m) => ({ ...m, id: nextId++ }));
     await this.bulkPut(remapped);
-    return remapped.length;
+    return { imported: remapped.length, skipped };
   },
 };
 
@@ -347,22 +383,52 @@ const VisitationDB = {
     return JSON.stringify(all, null, 2);
   },
 
-  /* mode: 'merge' (append, never overwriting existing records — incoming
-     records get fresh ids continuing on from the highest id already in the
-     store, same fix as MembersDB.importJSON) or 'replace' (clear then
-     insert). Only ever touches STORE_VISITATION. */
+  /* mode: 'merge' (append only genuinely-new names, never overwriting
+     existing records — incoming records get fresh ids continuing on from
+     the highest id already in the store, same fix as MembersDB.importJSON)
+     or 'replace' (clear then insert unique names). Only ever touches
+     STORE_VISITATION. Duplicate rule: same as MembersDB — Arabic-normalized
+     name already in this store (or earlier in the same batch) means skip;
+     the JSON "id" is never used for duplicate detection.
+     Returns { imported, skipped }. */
   async importJSON(jsonText, mode = 'merge') {
     const parsed = JSON.parse(jsonText);
-    if (!Array.isArray(parsed)) throw new Error('الملف لا يحتوي على مصفوفة بيانات صحيحة');
+    return this.importRecords(parsed, mode);
+  },
+
+  /* Batch import of already-parsed records (used for multi-file imports:
+     the caller combines all selected files into one array first, so
+     cross-file duplicates are detected). See importJSON docs for rules. */
+  async importRecords(records, mode = 'merge') {
+    if (!Array.isArray(records)) throw new Error('الملف لا يحتوي على مصفوفة بيانات صحيحة');
+    for (const r of records) {
+      if (!r || typeof r !== 'object' || Array.isArray(r)) throw new Error('الملف لا يحتوي على مصفوفة بيانات صحيحة');
+    }
     if (mode === 'replace') {
+      const { unique, skipped } = dedupeRecordsByNormalizedName(records);
+      const withIds = ensureUniqueNumericIds(unique);
       await this.clearAll();
-      await this.bulkPut(parsed);
-      return parsed.length;
+      await this.bulkPut(withIds);
+      return { imported: withIds.length, skipped };
+    }
+    const existing = await this.getAll();
+    const knownNames = new Set();
+    for (const f of existing) {
+      const n = normalizeArabic(f.name || '');
+      if (n) knownNames.add(n);
+    }
+    const toImport = [];
+    let skipped = 0;
+    for (const rec of records) {
+      const norm = normalizeArabic(rec.name || '');
+      if (norm && knownNames.has(norm)) { skipped += 1; continue; }
+      if (norm) knownNames.add(norm);
+      toImport.push(rec);
     }
     let nextId = await this.nextId();
-    const remapped = parsed.map((f) => ({ ...f, id: nextId++ }));
+    const remapped = toImport.map((f) => ({ ...f, id: nextId++ }));
     await this.bulkPut(remapped);
-    return remapped.length;
+    return { imported: remapped.length, skipped };
   },
 };
 
@@ -421,6 +487,52 @@ function recordMatchesQuery(record, norm, digits) {
     }
   }
   return false;
+}
+
+/* Dedupe an import batch by Arabic-normalized name (first occurrence wins).
+   Conservative exact match on normalizeArabic() only — no fuzzy matching,
+   so two genuinely different people are never merged. Records with an empty
+   normalized name are never treated as duplicates (always kept). */
+function dedupeRecordsByNormalizedName(records) {
+  const seen = new Set();
+  const unique = [];
+  let skipped = 0;
+  for (const rec of records) {
+    const norm = normalizeArabic(rec.name || '');
+    if (norm && seen.has(norm)) { skipped += 1; continue; }
+    if (norm) seen.add(norm);
+    unique.push(rec);
+  }
+  return { unique, skipped };
+}
+
+/* Ensure every record in a replace-batch has a unique positive integer id.
+   Preserves original ids when they are already valid + unique (single-file
+   replace keeps its ids); reassigns only missing/duplicate/invalid ids so
+   combined multi-file batches (which may restart numbering from 1) can't
+   overwrite each other via store.put() upsert. */
+function ensureUniqueNumericIds(records) {
+  const out = records.map((r) => ({ ...r }));
+  const used = new Set();
+  for (const r of out) {
+    const n = Number(r.id);
+    if (Number.isInteger(n) && n > 0 && !used.has(n)) {
+      r.id = n;
+      used.add(n);
+    } else {
+      r.id = null;
+    }
+  }
+  let next = used.size ? Math.max(...used) + 1 : 1;
+  for (const r of out) {
+    if (r.id === null || r.id === undefined) {
+      while (used.has(next)) next += 1;
+      r.id = next;
+      used.add(next);
+      next += 1;
+    }
+  }
+  return out;
 }
 
 /* Normalize Arabic text for tolerant search: strip tashkeel, unify alef/ya/ta-marbuta, collapse spaces. */

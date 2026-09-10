@@ -968,10 +968,10 @@ async function renderVisitationDataManagement() {
 
       <div class="admin-panel">
         <h3>${ICONS.upload} استيراد بيانات الافتقاد</h3>
-        <p>ارفع ملف بيانات افتقاد تم تصديره سابقًا من هذا التطبيق (من خادم آخر مثلًا) لإضافة أسره إلى هذا الجهاز.</p>
+        <p>ارفع ملف بيانات افتقاد تم تصديره سابقًا من هذا التطبيق (من خادم آخر مثلًا) لإضافة أسره إلى هذا الجهاز. يمكنك اختيار ملف واحد أو عدة ملفات دفعة واحدة.</p>
         <div class="admin-actions">
-          <label class="btn btn-outline" for="visitationImportFile" style="cursor:pointer;">${ICONS.upload}<span>اختيار ملف</span></label>
-          <input type="file" id="visitationImportFile" accept="application/json" style="display:none;" />
+          <label class="btn btn-outline" for="visitationImportFile" style="cursor:pointer;">${ICONS.upload}<span>اختيار ملف / ملفات</span></label>
+          <input type="file" id="visitationImportFile" accept=".json,application/json" multiple style="display:none;" />
           <select id="visitationImportMode" class="btn btn-outline" style="padding:11px 14px;">
             <option value="merge">دمج مع بيانات الافتقاد الحالية</option>
             <option value="replace">استبدال كل بيانات الافتقاد الحالية</option>
@@ -1003,13 +1003,45 @@ async function renderVisitationDataManagement() {
   });
 
   document.getElementById('visitationImportFile').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
     const mode = document.getElementById('visitationImportMode').value;
     try {
-      const text = await file.text();
-      const count = await VisitationDB.importJSON(text, mode);
-      showToast(`تم استيراد ${count} أسرة بنجاح`, 'success');
+      // Read + validate ALL selected files first; abort without touching the
+      // database if any file is invalid, so a bad file can't partially corrupt data.
+      const parsedFiles = [];
+      for (const file of files) {
+        let text;
+        try {
+          text = await file.text();
+        } catch (readErr) {
+          throw new Error(`تعذر قراءة الملف "${file.name}"`);
+        }
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+        } catch (parseErr) {
+          throw new Error(`الملف "${file.name}" غير صالح (ليس JSON صحيحًا)`);
+        }
+        if (!Array.isArray(parsed)) {
+          throw new Error(`الملف "${file.name}" لا يحتوي على مصفوفة بيانات صحيحة`);
+        }
+        parsedFiles.push(parsed);
+      }
+      const combined = parsedFiles.flat();
+      const result = await VisitationDB.importRecords(combined, mode);
+      const imported = (result && typeof result === 'object') ? result.imported : result;
+      const skipped = (result && typeof result === 'object') ? result.skipped : 0;
+      if (imported > 0) {
+        showToast(
+          skipped > 0
+            ? `تم استيراد ${imported} أسرة جديدة، وتخطي ${skipped} أسرة مكررة.`
+            : `تم استيراد ${imported} أسرة بنجاح`,
+          'success'
+        );
+      } else {
+        showToast(`لم يتم استيراد أسر جديدة. تم تخطي ${skipped} أسرة مكررة.`, 'success');
+      }
       router();
     } catch (err) {
       showToast('الملف غير صالح: ' + err.message, 'danger');
@@ -3153,10 +3185,10 @@ async function renderAdminPanel() {
 
       <div class="admin-panel">
         <h3>${ICONS.upload} استيراد بيانات</h3>
-        <p>ارفع ملف JSON تم تصديره سابقًا من هذا التطبيق لنقل البيانات لجهاز جديد.</p>
+        <p>ارفع ملف JSON تم تصديره سابقًا من هذا التطبيق لنقل البيانات لجهاز جديد. يمكنك اختيار ملف واحد أو عدة ملفات دفعة واحدة.</p>
         <div class="admin-actions">
-          <label class="btn btn-outline" for="importFile" style="cursor:pointer;">${ICONS.upload}<span>اختيار ملف</span></label>
-          <input type="file" id="importFile" accept="application/json" style="display:none;" />
+          <label class="btn btn-outline" for="importFile" style="cursor:pointer;">${ICONS.upload}<span>اختيار ملف / ملفات</span></label>
+          <input type="file" id="importFile" accept=".json,application/json" multiple style="display:none;" />
           <select id="importMode" class="btn btn-outline" style="padding:11px 14px;">
             <option value="merge">دمج مع البيانات الحالية</option>
             <option value="replace">استبدال كل البيانات الحالية</option>
@@ -3188,13 +3220,45 @@ async function renderAdminPanel() {
   });
 
   document.getElementById('importFile').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
     const mode = document.getElementById('importMode').value;
     try {
-      const text = await file.text();
-      const count = await MembersDB.importJSON(text, mode);
-      showToast(`تم استيراد ${count} سجل بنجاح`, 'success');
+      // Read + validate ALL selected files first; abort without touching the
+      // database if any file is invalid, so a bad file can't partially corrupt data.
+      const parsedFiles = [];
+      for (const file of files) {
+        let text;
+        try {
+          text = await file.text();
+        } catch (readErr) {
+          throw new Error(`تعذر قراءة الملف "${file.name}"`);
+        }
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+        } catch (parseErr) {
+          throw new Error(`الملف "${file.name}" غير صالح (ليس JSON صحيحًا)`);
+        }
+        if (!Array.isArray(parsed)) {
+          throw new Error(`الملف "${file.name}" لا يحتوي على مصفوفة بيانات صحيحة`);
+        }
+        parsedFiles.push(parsed);
+      }
+      const combined = parsedFiles.flat();
+      const result = await MembersDB.importRecords(combined, mode);
+      const imported = (result && typeof result === 'object') ? result.imported : result;
+      const skipped = (result && typeof result === 'object') ? result.skipped : 0;
+      if (imported > 0) {
+        showToast(
+          skipped > 0
+            ? `تم استيراد ${imported} سجل جديد، وتخطي ${skipped} سجل مكرر.`
+            : `تم استيراد ${imported} سجل بنجاح`,
+          'success'
+        );
+      } else {
+        showToast(`لم يتم استيراد سجلات جديدة. تم تخطي ${skipped} سجل مكرر.`, 'success');
+      }
       router();
     } catch (err) {
       showToast('الملف غير صالح: ' + err.message, 'danger');
