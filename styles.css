@@ -1327,3 +1327,17 @@ ul.kb-list { margin: 0 0 10px; padding-inline-start: 20px; line-height: 1.9; }
   font-weight: 600;
 }
 .kb-notation-link svg { width: 18px; height: 18px; }
+
+/* Hymn listening block (local audio asset). */
+.kb-audio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 0;
+}
+.kb-audio audio {
+  flex: 1 1 240px;
+  max-width: 100%;
+  min-width: 0;
+}

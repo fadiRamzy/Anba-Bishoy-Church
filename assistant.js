@@ -24,7 +24,7 @@
 /* ============================== 1. Constants ============================== */
 var KB_MANIFEST_URL = 'kb/manifest.json';
 var KB_TITLE = 'مساعد الخادم';
-var KB_PLACEHOLDER = 'اسأل عن درس، لحن، آية، قديس، كتاب أو أي موضوع كنسي...';
+var KB_PLACEHOLDER = 'ابحث عن لحن أو درس من دروس مدارس الأحد...';
 var KB_MAX_RESULTS = 50;
 
 /* Field weights for ranking. */
@@ -67,6 +67,14 @@ var KB_CAT_FALLBACK = {
   story: { label: 'قصص', icon: 'notes' },
   book: { label: 'كتب', icon: 'book' },
   topic: { label: 'موضوعات', icon: 'search' }
+};
+
+/* Phase-scoped visible sections. Only hymns and Sunday School lessons are
+   surfaced in the Assistant UI right now; every other category stays in the
+   KB files (unchanged) and is simply hidden from the user-facing UI. */
+var KB_VISIBLE = {
+  hymn: { label: 'ألحان كنيستنا', icon: 'music' },
+  lesson: { label: 'دروس مدارس الأحد', icon: 'notes' }
 };
 
 /* ============================== 2. Tokenizer ============================== */
@@ -154,6 +162,7 @@ function kbFlattenText(obj) {
    internal administration/legal tracking only. */
 var KB_SKIP_BODY_KEYS = {
   translation: 1, partial: 1, excerptNote: 1, verseStart: 1, verseEnd: 1,
+  notation: 1, audio: 1,
   notationRights: 1, textArabicRights: 1, textCopticRights: 1, transliterationRights: 1
 };
 function kbContentFlatten(value, acc) {
@@ -245,7 +254,7 @@ function kbSearch(rawQuery, catFilter) {
     if (hits > detHits) { detHits = hits; detected = cat; }
   });
   var normQ = normalizeArabic(q).replace(/\s+/g, ' ').trim();
-  var inScope = KB.docs.filter(function (d) { return !catFilter || d.cat === catFilter; });
+  var inScope = KB.docs.filter(function (d) { return KB_VISIBLE[d.cat] && (!catFilter || d.cat === catFilter); });
   /* Non-empty query with no valid tokens (e.g. Latin-only gibberish): no matches. */
   if (!tokens.length && q) {
     return { results: [], detected: null, tokens: tokens, total: 0, browse: false };
@@ -345,6 +354,7 @@ function kbSetTopNav(backHash, backLabel) {
 }
 
 function kbCatMeta(cat) {
+  if (KB_VISIBLE[cat]) return KB_VISIBLE[cat];
   var list = (KB.manifest && KB.manifest.categories) || [];
   for (var i = 0; i < list.length; i++) if (list[i].id === cat) return list[i];
   return KB_CAT_FALLBACK[cat] || { label: cat, icon: 'notes' };
@@ -418,7 +428,7 @@ async function kbRenderHome() {
     kbWireRetry(kbRenderHome);
     return;
   }
-  var cats = ((KB.manifest && KB.manifest.categories) || []).filter(function (c) { return (KB.counts[c.id] || 0) > 0; });
+  var cats = ((KB.manifest && KB.manifest.categories) || []).filter(function (c) { return KB_VISIBLE[c.id] && (KB.counts[c.id] || 0) > 0; });
   var cards = cats.map(function (c) {
     var n = KB.counts[c.id] || 0;
     return '<a href="#/assistant/category/' + encodeURIComponent(c.id) + '" class="nav-card">' +
@@ -429,7 +439,7 @@ async function kbRenderHome() {
   APP_ROOT.innerHTML = '<div class="container">' +
     '<p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>' + KB_TITLE + '</span></p>' +
     '<h2 class="section-title">' + KB_TITLE + '</h2>' +
-    '<p class="section-sub">مكتبة الكنيسة: دروس، ألحان، آيات، سنكسار وأعياد</p>' +
+    '<p class="section-sub">ألحان كنيستنا ودروس مدارس الأحد</p>' +
     kbSearchPanelHTML('kbHomeInput', '') +
     (cards ? '<div class="nav-grid">' + cards + '</div>' : '') +
     '</div>';
@@ -448,21 +458,21 @@ async function kbRenderSearch(params) {
     kbWireRetry(function () { kbRenderSearch(params); });
     return;
   }
-  if (cat && !KB_CAT_FALLBACK[cat] && !((KB.manifest.categories || []).some(function (c) { return c.id === cat; }))) cat = '';
+  if (cat && !KB_VISIBLE[cat]) cat = '';
   var res = kbSearch(q, cat);
-  var heading = q ? 'نتائج البحث' : ('قسم ' + kbCatLabel(cat));
-  var crumb = q ? ('نتائج البحث عن: ' + q) : ('قسم ' + kbCatLabel(cat));
-  var detectedHint = (res.detected && !res.browse)
+  var heading = q ? 'نتائج البحث' : (cat ? ('قسم ' + kbCatLabel(cat)) : 'تصفح الأقسام');
+  var crumb = q ? ('نتائج البحث عن: ' + q) : (cat ? ('قسم ' + kbCatLabel(cat)) : 'تصفح الأقسام');
+  var detectedHint = (res.detected && !res.browse && KB_VISIBLE[res.detected])
     ? '<p class="search-hint">رُصد أن سؤالك عن قسم: <strong>' + escapeHTML(kbCatLabel(res.detected)) + '</strong></p>'
     : '';
   var countHint = res.browse
     ? '<p class="search-hint">' + res.total + (res.total === 1 ? ' عنصر في هذا القسم' : ' عنصر في هذا القسم') + '</p>'
     : '<p class="search-hint">' + (res.total ? ('عدد النتائج: ' + res.total) : 'لا توجد نتائج مطابقة — جرّب كلمات أخرى') + '</p>';
   var catOptions = '<option value="">كل الأقسام</option>' + ((KB.manifest.categories || [])
-    .filter(function (c) { return (KB.counts[c.id] || 0) > 0; })
+    .filter(function (c) { return KB_VISIBLE[c.id] && (KB.counts[c.id] || 0) > 0; })
     .map(function (c) {
       return '<option value="' + escapeHTML(c.id) + '"' + (c.id === cat ? ' selected' : '') + '>' +
-        escapeHTML(c.label) + ' (' + (KB.counts[c.id] || 0) + ')</option>';
+        escapeHTML(kbCatLabel(c.id)) + ' (' + (KB.counts[c.id] || 0) + ')</option>';
     }).join(''));
   var listHTML = res.results.length
     ? '<div class="member-list">' + res.results.map(function (r) { return kbResultCardHTML(r.doc.item, r.snippet); }).join('') + '</div>'
@@ -566,33 +576,25 @@ function kbLessonBodyHTML(b) {
 }
 
 function kbHymnBodyHTML(b) {
-  var html = '<div class="info-section"><h3>' + ICONS.music + ' اسم اللحن</h3>' +
-    '<dl class="info-grid">' +
-    (b.nameAr ? kbMetaRow('الاسم', escapeHTML(b.nameAr)) : '') +
-    (b.nameCoptic ? kbMetaRow('الاسم بالقبطية', '<span class="kb-coptic">' + escapeHTML(b.nameCoptic) + '</span>') : '') +
-    (b.transliteration ? kbMetaRow('النطق', escapeHTML(b.transliteration)) : '') +
-    '</dl></div>';
-  html += kbHymnTextSection('النص القبطي', b.textCoptic, true);
-  html += kbHymnTextSection('النص العربي', b.textArabic, false);
-  html += kbNotationSection(b.notation);
-  html += '<div class="info-section"><h3>' + ICONS.music + ' المناسبة / الاستخدام</h3>' +
-    '<dl class="info-grid">' +
-    (kbArr(b.occasion).length ? kbMetaRow('المناسبة', kbJoinList(b.occasion)) : '') +
-    (kbArr(b.feast).length ? kbMetaRow('العيد / المناسبة المرتبطة', kbJoinList(b.feast), true) : '') +
-    (b.liturgicalContext ? kbMetaRow('السياق الطقسي', escapeHTML(b.liturgicalContext), true) : '') +
-    (b.whenSung ? kbMetaRow('متى يُقال', escapeHTML(b.whenSung), true) : '') +
-    (kbArr(b.relatedHymns).length ? kbMetaRow('ألحان مرتبطة', kbJoinList(b.relatedHymns), true) : '') +
-    '</dl></div>';
-  if (b.explanationOriginal) {
-    html += '<div class="info-section"><h3>' + ICONS.music + ' الشرح</h3><div class="kb-prose">' +
-      kbParas(b.explanationOriginal) + '</div></div>';
+  var html = '';
+  if (b.nameAr || b.nameCoptic) {
+    html += '<div class="info-section"><h3>' + ICONS.music + ' اسم اللحن</h3>' +
+      '<dl class="info-grid">' +
+      (b.nameAr ? kbMetaRow('الاسم', escapeHTML(b.nameAr)) : '') +
+      (b.nameCoptic ? kbMetaRow('الاسم القبطي', '<span class="kb-coptic">' + escapeHTML(b.nameCoptic) + '</span>') : '') +
+      '</dl></div>';
   }
+  html += kbHymnTextSection('كلمات اللحن', b.textArabic, false);
+  html += kbHymnTextSection('النص القبطي', b.textCoptic, true);
+  html += kbHymnTextSection('النطق', b.transliteration, false);
+  html += kbNotationSection(b.notation);
+  html += kbAudioSection(b.audio);
+  html += kbHymnAboutSection(b);
   return html;
 }
 
-/* Full hymn lyric text (Coptic or Arabic). Rendered only when the text is
-   actually present — nothing is shown to users when a text is still
-   awaiting a rights-cleared source. */
+/* Full hymn text block (Arabic lyrics / Coptic lyrics / transliteration).
+   Rendered only when the text actually exists — empty sections are omitted. */
 function kbHymnTextSection(label, text, coptic) {
   if (!text) return '';
   var lines = String(text).split(/\n+/).map(function (l) { return l.trim(); }).filter(Boolean);
@@ -619,6 +621,42 @@ function kbNotationSection(notation) {
   }
   return '<div class="info-section"><h3>' + ICONS.music + ' النوتة الموسيقية</h3>' +
     '<div class="kb-notation">' + inner + '</div></div>';
+}
+
+/* Audio / listening link — local static file (mp3 etc.). Omitted when no
+   recording exists yet. */
+function kbAudioSection(audio) {
+  if (!audio) return '';
+  var url = (typeof audio === 'string') ? audio : (audio && (audio.url || audio.src));
+  if (!url) return '';
+  return '<div class="info-section"><h3>' + ICONS.music + ' سماع اللحن</h3>' +
+    '<div class="kb-audio">' +
+    '<audio controls preload="none" src="' + escapeHTML(url) + '"></audio>' +
+    '<a class="kb-notation-link" href="' + escapeHTML(url) + '" target="_blank" rel="noopener">' +
+    ICONS.download + ' فتح الملف الصوتي</a>' +
+    '</div></div>';
+}
+
+/* "عن اللحن" — occasion, usage, who sings it, difficulty, liturgical
+   context, methods/variations, explanation/meditation, related hymns.
+   The whole section is omitted when none of these fields exist. */
+function kbHymnAboutSection(b) {
+  var vars = kbArr(b.variations || b.methods);
+  var rows = '';
+  rows += kbArr(b.occasion).length ? kbMetaRow('المناسبة', kbJoinList(b.occasion)) : '';
+  rows += kbArr(b.feast).length ? kbMetaRow('العيد / المناسبة المرتبطة', kbJoinList(b.feast), true) : '';
+  rows += b.whenSung ? kbMetaRow('متى يُقال', escapeHTML(b.whenSung), true) : '';
+  rows += (b.sungBy || b.whoSings) ? kbMetaRow('من يغنيه', escapeHTML(b.sungBy || b.whoSings), true) : '';
+  rows += b.difficulty ? kbMetaRow('مستوى الصعوبة', escapeHTML(b.difficulty)) : '';
+  rows += b.liturgicalContext ? kbMetaRow('السياق الطقسي', escapeHTML(b.liturgicalContext), true) : '';
+  rows += kbArr(b.relatedHymns).length ? kbMetaRow('ألحان مرتبطة', kbJoinList(b.relatedHymns), true) : '';
+  var prose = (vars.length ? '<h4>طرق اللحن</h4>' + kbBullets(vars) : '') +
+    (b.explanationOriginal ? '<h4>الشرح والتأمل</h4>' + kbParas(b.explanationOriginal) : '');
+  if (!rows && !prose) return '';
+  return '<div class="info-section"><h3>' + ICONS.music + ' عن اللحن</h3>' +
+    (rows ? '<dl class="info-grid">' + rows + '</dl>' : '') +
+    (prose ? '<div class="kb-prose"' + (rows ? ' style="margin-top:14px;"' : '') + '>' + prose + '</div>' : '') +
+    '</div>';
 }
 
 function kbSynaxariumBodyHTML(b) {
@@ -686,7 +724,7 @@ async function kbRenderItem(id) {
     return;
   }
   var item = KB.byId.get(id);
-  if (!item) {
+  if (!item || !KB_VISIBLE[item.type]) {
     APP_ROOT.innerHTML = '<div class="container">' +
       '<p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span>' +
       '<a href="#/assistant">' + KB_TITLE + '</a><span class="sep">/</span><span>غير موجود</span></p>' +
