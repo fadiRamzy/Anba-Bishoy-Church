@@ -1251,8 +1251,9 @@ main { min-height: 60vh; padding-bottom: 30px; }
   .landing-grid { grid-template-columns: 1fr; }
 }
 
-/* #/bible home — the four sub-section cards reuse .landing-card; only the
-   grid container and the small subtitle line are new. */
+/* #/bible home — the sub-section cards reuse .landing-card; only the
+   grid container, the small subtitle line, and the full-width
+   search card on top are new. */
 .bible-home-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1261,6 +1262,7 @@ main { min-height: 60vh; padding-bottom: 30px; }
   margin: 10px auto 40px;
 }
 .bible-home-grid .landing-card { padding: 32px 20px; }
+.bible-home-grid .bible-search-card { grid-column: 1 / -1; }
 .bible-card-sub {
   font-size: .85rem;
   color: var(--color-ink-soft);
@@ -1270,13 +1272,7 @@ main { min-height: 60vh; padding-bottom: 30px; }
   .bible-home-grid { grid-template-columns: 1fr; max-width: 360px; }
 }
 
-/* Book lists (testaments + commentary index). */
-.bible-group-title {
-  font-family: var(--font-display);
-  font-size: 1.2rem;
-  color: var(--color-maroon-dark);
-  margin: 26px 0 12px;
-}
+/* Book lists (testaments). */
 .bible-books-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -1333,7 +1329,6 @@ main { min-height: 60vh; padding-bottom: 30px; }
   transition: border-color .15s ease, background .15s ease;
 }
 .chapter-btn:hover { border-color: var(--color-gold); background: #fff; }
-.chapter-btn-pending { opacity: .45; }
 
 /* Chapter reading view. Generous line-height for vocalized Arabic text. */
 .chapter-nav {
@@ -1382,20 +1377,6 @@ main { min-height: 60vh; padding-bottom: 30px; }
   font-size: 1.12rem;
   line-height: 2.1;
   flex: 1;
-}
-
-/* Commentary (التفسير) entries. */
-.tafsir-section h3 { font-size: 1rem; }
-.tafsir-verses-label {
-  color: var(--color-maroon);
-  font-weight: 700;
-  font-size: .85rem;
-  margin: 0 0 8px;
-}
-.tafsir-text {
-  margin: 0;
-  font-size: 1.02rem;
-  line-height: 1.9;
 }
 
 /* Bible search results. */

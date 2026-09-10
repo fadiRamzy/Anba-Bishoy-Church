@@ -408,7 +408,7 @@ async function router() {
     return renderVisitationHome(params);
   }
 
-  // "الكتاب المقدس" — read-only Bible + commentary section. All rendering
+  // "الكتاب المقدس" — read-only Bible section. All rendering
   // lives in bible/bible.js (BibleUI); this branch only dispatches to it.
   if (segments[0] === 'bible') {
     applyHeaderChrome('bible');
