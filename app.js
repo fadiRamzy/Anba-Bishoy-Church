@@ -33,6 +33,7 @@ const ICONS = {
   cross: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M5 8h14"/><circle cx="12" cy="3" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="21" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="8" r="1" fill="currentColor" stroke="none"/></svg>',
   cake: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7a2 2 0 012-2h12a2 2 0 012 2v7M2 21h20M4 14a3 3 0 013-3h10a3 3 0 013 3M9 9V6M12 9V6M15 9V6M9 6c0-.8.5-1.2.5-2S9 2.5 9 2M12 6c0-.8.5-1.2.5-2S12 2.5 12 2M15 6c0-.8.5-1.2.5-2S15 2.5 15 2"/></svg>',
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>',
+  book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5c-2-1.5-5-2-8-2v16c3 0 6 .5 8 2 2-1.5 5-2 8-2V3c-3 0-6 .5-8 2z"/><path d="M12 5v16"/></svg>',
 };
 
 /* ---------------------------------------------------------------------- */
@@ -53,12 +54,17 @@ const BRAND_VERSES = {
     text: '«إِنْ كَانَ لِإِنْسَانٍ مِئَةُ خَرُوفٍ، وَضَلَّ وَاحِدٌ مِنْهَا، أَفَلَا يَتْرُكُ التِّسْعَةَ وَالتِّسْعِينَ عَلَى الْجِبَالِ، وَيَذْهَبُ يَطْلُبُ الضَّالَّ؟»',
     ref: 'مَتَّى ١٨: ١٢',
   },
+  bible: {
+    text: 'سِرَاجٌ لِرِجْلِي كَلَامُكَ وَنُورٌ لِسَبِيلِي.',
+    ref: 'اَلْمَزَامِيرُ ١١٩ : ١٠٥',
+  },
 };
 
 const BRAND_TAGLINES = {
   home: 'دليل الخدام لمتابعة الافتقاد',
   landing: 'دليل خدمات الكنيسة',
   visitation: 'دليل الكاهن لمتابعة الافتقاد',
+  bible: 'الكتاب المقدس',
 };
 
 function applyHeaderChrome(section) {
@@ -402,6 +408,13 @@ async function router() {
     return renderVisitationHome(params);
   }
 
+  // "الكتاب المقدس" — read-only Bible + commentary section. All rendering
+  // lives in bible/bible.js (BibleUI); this branch only dispatches to it.
+  if (segments[0] === 'bible') {
+    applyHeaderChrome('bible');
+    return BibleUI.route(segments, params);
+  }
+
   // "دليل الخدمات" — the original, existing website, unchanged, now living
   // under the /home (and its existing sub-routes) instead of the bare root.
   applyHeaderChrome('home');
@@ -464,6 +477,10 @@ async function renderLanding() {
         <a href="#/visitation" class="landing-card">
           <span class="icon-wrap">${ICONS.church}</span>
           <span class="landing-card-title">خدمات الافتقاد</span>
+        </a>
+        <a href="#/bible" class="landing-card">
+          <span class="icon-wrap">${ICONS.book}</span>
+          <span class="landing-card-title">الكتاب المقدس</span>
         </a>
       </div>
     </div>

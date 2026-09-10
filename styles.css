@@ -1230,3 +1230,193 @@ main { min-height: 60vh; padding-bottom: 30px; }
   font-size: .82rem;
   margin-top: 2px;
 }
+
+/* ==========================================================================
+   Bible section (الكتاب المقدس) — additive only. Reuses existing
+   .landing-card/.search-panel/.chip/.btn/.info-section/.empty-state styles
+   above as-is; no existing rule in this file was modified.
+   ========================================================================== */
+
+/* Landing page now holds three service cards (دليل الخدمات / خدمات الافتقاد /
+   الكتاب المقدس). Desktop shows 3 columns; behaviour below 720px is kept
+   exactly as before (single column). */
+.landing-grid {
+  grid-template-columns: repeat(3, 1fr);
+  max-width: 900px;
+}
+@media (max-width: 900px) {
+  .landing-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 720px) {
+  .landing-grid { grid-template-columns: 1fr; }
+}
+
+/* #/bible home — the four sub-section cards reuse .landing-card; only the
+   grid container and the small subtitle line are new. */
+.bible-home-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 22px;
+  max-width: 640px;
+  margin: 10px auto 40px;
+}
+.bible-home-grid .landing-card { padding: 32px 20px; }
+.bible-card-sub {
+  font-size: .85rem;
+  color: var(--color-ink-soft);
+  font-weight: 600;
+}
+@media (max-width: 640px) {
+  .bible-home-grid { grid-template-columns: 1fr; max-width: 360px; }
+}
+
+/* Book lists (testaments + commentary index). */
+.bible-group-title {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  color: var(--color-maroon-dark);
+  margin: 26px 0 12px;
+}
+.bible-books-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+.bible-book-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .12s ease;
+}
+.bible-book-card:hover {
+  border-color: var(--color-gold);
+  box-shadow: var(--shadow-soft);
+  transform: translateY(-2px);
+}
+.bible-book-order {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--color-maroon-tint);
+  color: var(--color-maroon);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: .85rem;
+  flex: none;
+}
+.bible-book-info { min-width: 0; display: flex; flex-direction: column; }
+.bible-book-name { font-weight: 700; font-size: .98rem; }
+.bible-book-meta { color: var(--color-ink-soft); font-size: .8rem; margin-top: 2px; }
+
+/* Chapter picker grid. */
+.chapter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 10px;
+  margin: 6px 0 30px;
+}
+.chapter-btn {
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  padding: 12px 6px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--color-maroon-dark);
+  transition: border-color .15s ease, background .15s ease;
+}
+.chapter-btn:hover { border-color: var(--color-gold); background: #fff; }
+.chapter-btn-pending { opacity: .45; }
+
+/* Chapter reading view. Generous line-height for vocalized Arabic text. */
+.chapter-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 16px 0 20px;
+}
+.chapter-nav-bottom { margin: 26px 0 10px; }
+.verse-list {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  padding: 10px 22px;
+}
+.verse-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+}
+.verse-row:last-child { border-bottom: none; }
+.verse-row.verse-hl { background: #FFF6E5; }
+.verse-num {
+  flex: none;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: var(--color-maroon-tint);
+  color: var(--color-maroon);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: .82rem;
+}
+.verse-text {
+  margin: 0;
+  font-size: 1.12rem;
+  line-height: 2.1;
+  flex: 1;
+}
+
+/* Commentary (التفسير) entries. */
+.tafsir-section h3 { font-size: 1rem; }
+.tafsir-verses-label {
+  color: var(--color-maroon);
+  font-weight: 700;
+  font-size: .85rem;
+  margin: 0 0 8px;
+}
+.tafsir-text {
+  margin: 0;
+  font-size: 1.02rem;
+  line-height: 1.9;
+}
+
+/* Bible search results. */
+button.chip { font-family: inherit; cursor: pointer; }
+.bible-results { display: flex; flex-direction: column; gap: 10px; }
+.bible-result {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.bible-result:hover { border-color: var(--color-gold); box-shadow: var(--shadow-soft); }
+.bible-result-ref { color: var(--color-maroon); font-weight: 700; font-size: .88rem; }
+.bible-result-text { font-size: 1rem; line-height: 1.9; }
+.bible-result-text mark {
+  background: #F7E8B0;
+  color: inherit;
+  border-radius: 4px;
+  padding: 0 2px;
+}
