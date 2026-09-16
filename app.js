@@ -2358,9 +2358,15 @@ async function _pdfRenderPages(pdf, pagesHTML, pageW, pageH) {
       const pageEl = stage.firstElementChild;
       // eslint-disable-next-line no-await-in-loop
       const canvas = await window.html2canvas(pageEl, { scale: 2, backgroundColor: '#FFFDF8', useCORS: true });
-      const imgData = canvas.toDataURL('image/png');
+      /* Size optimization only: embed a high-quality JPEG instead of lossless
+         PNG. jsPDF stores JPEG bytes as-is (DCTDecode — no re-encoding), which
+         shrinks pages ~10x while the scale-2 raster keeps Arabic glyphs and
+         table rules sharp when the page is viewed at 100% (mosquito-noise
+         threshold verified visually at 200 dpi against the old PNG output).
+         Page size, pagination, content, RTL shaping and filenames: untouched. */
+      const imgData = canvas.toDataURL('image/jpeg', 0.9);
       if (i > 0) pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, 0, pageW, pageH);
+      pdf.addImage(imgData, 'JPEG', 0, 0, pageW, pageH);
     }
   } finally {
     stage.remove();
