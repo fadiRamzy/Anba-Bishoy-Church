@@ -303,7 +303,6 @@ const BibleUI = {
       <div class="container">
         <p class="breadcrumbs"><a href="#/">الرئيسية</a><span class="sep">/</span><span>الكتاب المقدس</span></p>
         <h2 class="section-title">الكتاب المقدس</h2>
-        <p class="section-sub">${bibleEscape(statsLine)} — ترجمة سميث وفاندايك (ملكية عامة)</p>
         <div class="cross-divider">${BIBLE_ICONS.cross}</div>
         <div class="bible-home-grid">
           <a href="#/bible/search" class="landing-card bible-search-card">
