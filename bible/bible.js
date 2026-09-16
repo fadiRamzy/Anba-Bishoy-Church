@@ -2,7 +2,10 @@
    bible.js — قسم «الكتاب المقدس» (Anba-Bishoy-Church website).
    Static, client-only. No backend, no AI, no external services.
    Lazy-loads bible/*.json via fetch() only when the section is opened,
-   exactly like the existing seed.json pattern. Memory cache only.
+   exactly like the existing seed.json pattern. In-memory during the visit,
+   plus a device-local IndexedDB persistence for the one-time search index
+   preparation (dedicated 'bibleSearchCache' database — see BibleSearchIndex;
+   fully optional: any failure silently falls back to the plain in-memory build).
 
    Contents:
      1. Local helpers (self-contained; app.js/db.js globals are used only
