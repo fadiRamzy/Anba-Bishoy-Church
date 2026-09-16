@@ -110,9 +110,78 @@ const BibleStore = {
 /*     synchronously — no JSON refetching, no rescanning, no repeated     */
 /*     normalization.                                                     */
 /* ---------------------------------------------------------------------- */
+/* Device-local persistence for the one-time 66-book search preparation:
+   the built index is a pure, deterministic function of the Bible data, so
+   it is saved once into its OWN small IndexedDB ('bibleSearchCache' —
+   never 'churchMembersDB', so member/visitation data is untouchable) and
+   rehydrated instantly on later visits (same session or fresh page load).
+   A fingerprint (schema version + this script's deploy ?v + book ids and
+   chapter/verse totals from metadata) invalidates the cache whenever the
+   data or the index format changes. ANY failure (no IndexedDB, private
+   mode, corrupt/absent record, quota) silently falls back to the exact
+   original build path — search behavior never depends on the cache. */
+const BIBLE_CACHE_SCHEMA = 'bible-index-v1';
+const BIBLE_DEPLOY_V = (() => {
+  try { return (document.currentScript && document.currentScript.src) || 'bible'; }
+  catch (e) { return 'bible'; }
+})();
+
 const BibleSearchIndex = {
   _ready: null,   // Promise for the one-time build (shared by all callers)
   _entries: null, // [{ bookId, book, testament, chapter, verse, text, norm }]
+
+  _fp(meta) {
+    let ch = 0, v = 0;
+    const ids = (meta.books || []).map((bk) => { ch += bk.chapters || 0; v += bk.verses || 0; return bk.id; });
+    return `${BIBLE_CACHE_SCHEMA}|${BIBLE_DEPLOY_V}|${ids.length}:${ids.join(',')}:${ch}:${v}`;
+  },
+
+  _openDb() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB || !window.indexedDB.open) return reject(new Error('no indexedDB'));
+      let req;
+      try { req = window.indexedDB.open('bibleSearchCache', 1); } catch (e) { return reject(e); }
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('index')) db.createObjectStore('index');
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async _loadCache(fp) {
+    let db;
+    try {
+      db = await this._openDb();
+      const rec = await new Promise((resolve, reject) => {
+        const tx = db.transaction('index', 'readonly');
+        const rq = tx.objectStore('index').get('entries');
+        rq.onsuccess = () => resolve(rq.result);
+        rq.onerror = () => reject(rq.error);
+      });
+      if (rec && rec.fp === fp && Array.isArray(rec.entries) && rec.entries.length) return rec.entries;
+    } catch (e) { /* no cache — build fresh below */ }
+    finally { try { if (db) db.close(); } catch (e) { /* ignore */ } }
+    return null;
+  },
+
+  _saveCache(fp, entries) {
+    // Fire-and-forget: never awaited, never throws to the caller.
+    (async () => {
+      try {
+        const slim = entries.map((e) => ({ bookId: e.bookId, book: e.book, testament: e.testament, chapter: e.chapter, verse: e.verse, text: e.text }));
+        const db = await this._openDb();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction('index', 'readwrite');
+          tx.objectStore('index').put({ fp, built: Date.now(), entries: slim }, 'entries');
+          tx.oncomplete = resolve;
+          tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+      } catch (e) { /* storage unavailable or full — next visit just rebuilds */ }
+    })();
+  },
 
   /* Starts the one-time build if needed and returns a promise for it.
      Verses are loaded in canonical book order with progress callbacks. */
@@ -132,6 +201,15 @@ const BibleSearchIndex = {
   async _build(onProgress) {
     const meta = await BibleStore.metadata();
     const books = meta.books || [];
+    const fp = this._fp(meta);
+    const cached = await this._loadCache(fp);
+    if (cached) {
+      // Hydrate the previously prepared index — same deterministic entries,
+      // norm strings recomputed (microseconds) exactly as _build would.
+      for (let i = 0; i < cached.length; i += 1) cached[i].norm = bibleNormalize(cached[i].text);
+      this._entries = cached;
+      return cached;
+    }
     const entries = [];
     for (let i = 0; i < books.length; i += 1) {
       const b = books[i];
@@ -159,6 +237,7 @@ const BibleSearchIndex = {
       if (i % 6 === 5) await new Promise((r) => setTimeout(r, 0)); // eslint-disable-line no-await-in-loop
     }
     this._entries = entries;
+    this._saveCache(fp, entries);
     return entries;
   },
 
