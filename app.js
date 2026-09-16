@@ -494,123 +494,9 @@ async function renderLanding() {
 /*  site's components/styling/database patterns wherever possible.        */
 /* ---------------------------------------------------------------------- */
 function renderVisitationChrome(backHash, backLabel) {
-  // Close any reminder panel left open from a previous visitation page.
-  const openPanel = document.getElementById('visitationReminderPanel');
-  if (openPanel) openPanel.remove();
-
   document.getElementById('topNav').innerHTML = `
     <span><a href="#${backHash}" class="back-link">${ICONS.back}<span>${escapeHTML(backLabel)}</span></a></span>
-    <span>
-      <button type="button" class="visitation-reminder-btn" id="visitationReminderBtn">
-        ${ICONS.bell}<span>اُرعَ خرافي</span>
-        <span class="reminder-badge" id="visitationReminderBadge" hidden>0</span>
-      </button>
-    </span>
   `;
-  setupVisitationReminderButton();
-}
-
-/* ---------------------------------------------------------------------- */
-/*  "افتكر مخدومك" — in-page reminder of people overdue for visitation.    */
-/*  Visible only on #/visitation pages (rendered inside renderVisitationChrome). */
-/* ---------------------------------------------------------------------- */
-// Families with no visitation in this many days (or never visited) are
-// considered to currently "require visitation attention".
-const VISITATION_REMINDER_THRESHOLD_DAYS = 30;
-
-async function getVisitationReminders() {
-  const all = await VisitationDB.getAll();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const withGap = all.map((f) => {
-    const dates = Array.isArray(f.visitationDates) ? f.visitationDates.slice().sort((a, b) => b.localeCompare(a)) : [];
-    const latest = dates[0] || null;
-    let days;
-    if (latest) {
-      const ld = new Date(`${latest}T00:00:00`);
-      days = Math.floor((today - ld) / 86400000);
-    } else {
-      days = Infinity; // never visited — most urgent
-    }
-    return { family: f, latest, days };
-  });
-
-  return withGap
-    .filter((x) => x.days >= VISITATION_REMINDER_THRESHOLD_DAYS)
-    .sort((a, b) => {
-      if (a.days === b.days) return 0;
-      return a.days > b.days ? -1 : 1; // longest-overdue first
-    });
-}
-
-function visitationReminderRowHTML(item) {
-  const addressParts = [item.family.neighborhood, item.family.street].filter(Boolean);
-  const address = addressParts.join(' - ');
-  const firstName = (item.family.name || '').trim().split(/\s+/)[0] || item.family.name;
-  const elapsedLine = item.latest
-    ? `<div class="reminder-date-elapsed">لم يتم افتقاد ${escapeHTML(firstName)} منذ ${formatElapsedSince(item.latest)}</div>`
-    : '';
-  return `
-    <a class="reminder-row" href="#/visitation/member/${item.family.id}">
-      <div class="reminder-name">${escapeHTML(item.family.name)}</div>
-      <div class="reminder-address ${address ? '' : 'muted'}">${address ? escapeHTML(address) : 'العنوان غير مسجل'}</div>
-      <div class="reminder-date">تاريخ آخر افتقاد: ${item.latest ? formatDMY(item.latest) : 'لا يوجد افتقاد مسجل بعد'}</div>
-      ${elapsedLine}
-    </a>`;
-}
-
-function openVisitationReminderPanel(anchorBtn, reminders) {
-  const panel = document.createElement('div');
-  panel.id = 'visitationReminderPanel';
-  panel.className = 'reminder-panel';
-  panel.innerHTML = `
-    <div class="reminder-panel-header">
-      <h3>اُرعَ خرافي</h3>
-      <button type="button" class="reminder-panel-close" aria-label="إغلاق">&times;</button>
-    </div>
-    <div class="reminder-panel-body">
-      ${reminders.length ? reminders.map(visitationReminderRowHTML).join('') : `<div class="empty-state">${ICONS.empty}<p>لا يوجد مخدومين محتاجين افتقاد حاليًا</p></div>`}
-    </div>
-  `;
-  document.body.appendChild(panel);
-
-  const rect = anchorBtn.getBoundingClientRect();
-  panel.style.top = `${rect.bottom + window.scrollY + 8}px`;
-  panel.style.right = `${window.innerWidth - rect.right}px`;
-
-  const close = () => panel.remove();
-  panel.querySelector('.reminder-panel-close').addEventListener('click', close);
-  setTimeout(() => {
-    document.addEventListener('click', function onDocClick(e) {
-      if (!panel.isConnected) { document.removeEventListener('click', onDocClick); return; }
-      if (!panel.contains(e.target) && !anchorBtn.contains(e.target)) {
-        close();
-        document.removeEventListener('click', onDocClick);
-      }
-    });
-  }, 0);
-}
-
-async function setupVisitationReminderButton() {
-  const btn = document.getElementById('visitationReminderBtn');
-  const badge = document.getElementById('visitationReminderBadge');
-  if (!btn) return;
-
-  const reminders = await getVisitationReminders();
-  if (!btn.isConnected) return; // page navigated away while we were reading the DB
-  if (reminders.length) {
-    badge.textContent = String(reminders.length);
-    badge.hidden = false;
-  } else {
-    badge.hidden = true;
-  }
-
-  btn.addEventListener('click', () => {
-    const existing = document.getElementById('visitationReminderPanel');
-    if (existing) { existing.remove(); return; }
-    openVisitationReminderPanel(btn, reminders);
-  });
 }
 
 const MARITAL_STATUS_OPTIONS = ['أعزب', 'متزوج', 'متزوجة', 'أرمل', 'أرملة'];
@@ -781,13 +667,6 @@ async function renderVisitationFamilies() {
   const jobs = uniqueSortedValues(all.map((f) => f.job));
   const services = uniqueSortedValues(all.map((f) => f.service));
   const confessionFathers = uniqueSortedValues(all.map((f) => f.confessionFather));
-  /* All recorded visitation dates across the families (newest first) — the
-     options for the "اليوم" filter: "من تم افتقاده في اليوم ده؟". Read from
-     the existing visitationDates history only; nothing new is stored. */
-  const visitDates = Array.from(new Set(all.flatMap((f) => (Array.isArray(f.visitationDates) ? f.visitationDates : []))))
-    .filter((d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d))
-    .sort((a, b) => b.localeCompare(a));
-
   APP_ROOT.innerHTML = `
     <div class="container">
       <p class="breadcrumbs"><a href="#/visitation">خدمات الافتقاد</a><span class="sep">/</span><span>الأسر</span></p>
@@ -826,7 +705,7 @@ async function renderVisitationFamilies() {
         </div>
         <div class="field">
           <label for="filterVisitationDate">اليوم</label>
-          <select id="filterVisitationDate"><option value="">الكل</option>${visitDates.map((d) => `<option value="${escapeHTML(d)}">${formatDMY(d)}</option>`).join('')}</select>
+          <input type="date" id="filterVisitationDate" />
         </div>
         <div class="field filter-clear-field">
           <label>&nbsp;</label>
@@ -983,11 +862,132 @@ async function renderVisitationGuide() {
       <p class="breadcrumbs"><a href="#/visitation">خدمات الافتقاد</a><span class="sep">/</span><span>دليل الافتقاد</span></p>
       <h2 class="section-title">دليل الافتقاد</h2>
       <p class="section-sub">الأسر التي مرّت سنة كاملة أو أكثر منذ آخر زيارة لكل منها، مرتبة من الأطول غيابًا عن الافتقاد إلى الأحدث افتقادًا</p>
+      <div class="action-row">
+        <button type="button" class="btn btn-outline btn-sm" id="visitationGuidePdfBtn">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-inline-end:4px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>استخراج PDF
+        </button>
+      </div>
       <div id="visitationGuideResults">
         ${items.length ? `<div class="member-list">${items.map(guideCardHTML).join('')}</div>` : `<div class="empty-state">${ICONS.empty}<p>لا توجد أسر لم تُفتقد منذ سنة كاملة أو أكثر</p></div>`}
       </div>
     </div>
   `;
+
+  document.getElementById('visitationGuidePdfBtn').addEventListener('click', () => {
+    downloadVisitationGuidePDF(items);
+  });
+}
+
+/* #/visitation/guide PDF — exports exactly the eligible families currently
+   shown, in the shown order, one row each with اسم الأسرة / رقم التليفون /
+   العنوان. Reuses the shared PDF layer (_loadPdfLibs, PDF_PROBE_BASE,
+   PDF_TD_BASE/PDF_TH_BASE/PDF_FONT_STACK, _pdfRenderPages) — same offline
+   pipeline and Arabic rendering fixes as every other export; no new system. */
+async function downloadVisitationGuidePDF(items) {
+  const btn = document.getElementById('visitationGuidePdfBtn');
+  const rows = items.map((x) => ({
+    name: x.family.name || '',
+    phone: x.family.phone1 || x.family.phone2 || '—',
+    address: visitationFamilyAddress(x.family) || '—',
+  }));
+
+  if (!rows.length) {
+    showToast('لا توجد أسر مؤهلة في دليل الافتقاد لتصديرها', 'error');
+    return;
+  }
+
+  const originalLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = 'جاري التجهيز...';
+
+  const cleanupEls = [];
+  try {
+    await _loadPdfLibs();
+    const { jsPDF } = window.jspdf;
+
+    const PAGE_W = 595, PAGE_H = 842;
+    const MARGIN = 26;
+    const HEADER_H = 96;
+    const BLOCK_W = PAGE_W - MARGIN * 2;
+    const BLOCK_H = PAGE_H - HEADER_H - MARGIN * 2;
+    const HEAD_ROW_H = 24;
+    const MIN_ROW_H = 20;
+    const COLS = [
+      { key: 'name', label: 'اسم الأسرة', w: 0.34 },
+      { key: 'phone', label: 'رقم التليفون', w: 0.24 },
+      { key: 'address', label: 'العنوان', w: 0.42 },
+    ];
+
+    const probe = document.createElement('div');
+    probe.style.cssText = PDF_PROBE_BASE;
+    document.body.appendChild(probe);
+    cleanupEls.push(probe);
+    function measureH(text, width) {
+      probe.style.width = `${width}px`;
+      probe.textContent = text;
+      return probe.offsetHeight;
+    }
+    const measured = rows.map((r, idx) => {
+      const serial = idx + 1;
+      const cellH = COLS.map((c) => measureH(c.key === 'name' ? `${serial} - ${r[c.key]}` : String(r[c.key]), BLOCK_W * c.w - 2));
+      return { ...r, serial, rowH: Math.max(MIN_ROW_H, ...cellH) };
+    });
+
+    const blocks = [];
+    let current = [], currentH = HEAD_ROW_H;
+    for (const r of measured) {
+      if (currentH + r.rowH > BLOCK_H && current.length) {
+        blocks.push(current);
+        current = [];
+        currentH = HEAD_ROW_H;
+      }
+      current.push(r);
+      currentH += r.rowH;
+    }
+    if (current.length) blocks.push(current);
+
+    function tableHTML(blockRows) {
+      const colgroup = COLS.map((c) => `<col style="width:${c.w * 100}%;">`).join('');
+      const th = COLS.map((c) => `<th style="${PDF_TH_BASE}">${escapeHTML(c.label)}</th>`).join('');
+      const trs = blockRows.map((r) => `
+        <tr>
+${COLS.map((c) => {
+  if (c.key === 'name') return `          <td style="${PDF_TD_BASE}text-align:right;">${r.serial} - ${escapeHTML(r.name)}</td>`;
+  if (c.key === 'phone') return `          <td style="${PDF_TD_BASE}text-align:center;direction:ltr;">${escapeHTML(r.phone)}</td>`;
+  return `          <td style="${PDF_TD_BASE}text-align:right;">${escapeHTML(r.address)}</td>`;
+}).join('\n')}
+        </tr>`).join('');
+      return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><colgroup>${colgroup}</colgroup><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
+    }
+
+    function pageHTML(pageBlock) {
+      return `
+        <div style="width:${PAGE_W}px;height:${PAGE_H}px;background:#FFFDF8;box-sizing:border-box;position:relative;overflow:hidden;">
+          <div style="position:absolute;inset:0;background-image:url('site-bg.jpg');background-size:cover;background-position:center;opacity:0.08;"></div>
+          <div style="position:relative;padding:${MARGIN}px;direction:rtl;">
+            <div style="text-align:center;margin-bottom:10px;">
+              <div style="font-family:${PDF_HEAD_FONT}font-size:22px;color:#7C1F2C;font-weight:700;">دليل الافتقاد</div>
+              <div style="font-family:${PDF_FONT_STACK};font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
+              <div style="font-family:${PDF_FONT_STACK};font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
+            </div>
+            <div style="width:${BLOCK_W}px;">${tableHTML(pageBlock)}</div>
+          </div>
+        </div>`;
+    }
+
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+    await _pdfRenderPages(pdf, blocks.map((b) => pageHTML(b)), PAGE_W, PAGE_H);
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    pdf.save(`دليل_الافتقاد_${stamp}.pdf`);
+  } catch (err) {
+    console.error('PDF generation failed:', err);
+    showToast('حدث خطأ أثناء إنشاء ملف PDF', 'error');
+  } finally {
+    cleanupEls.forEach((el) => el.remove());
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
+  }
 }
 
 /* #/visitation/birthdays — "أعياد الميلاد": ONLY people whose birthday is
@@ -1051,15 +1051,12 @@ async function renderVisitationBirthdays() {
   APP_ROOT.innerHTML = `
     <div class="container">
       <p class="breadcrumbs"><a href="#/visitation">خدمات الافتقاد</a><span class="sep">/</span><span>أعياد الميلاد</span></p>
-      <h2 class="section-title">أعياد الميلاد</h2>
-      <p class="section-sub">مين عيد ميلاده النهارده؟ — أعياد ميلاد اليوم فقط داخل الأسر المسجلة</p>
-      <div class="filter-bar">
-        <div class="field filter-clear-field">
-          <label>&nbsp;</label>
-          <button type="button" class="btn btn-outline btn-sm" id="visitationBirthdaysPdfBtn">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-inline-end:4px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>استخراج PDF
-          </button>
-        </div>
+      <h2 class="section-title">أعياد ميلاد اليوم</h2>
+      <p class="section-sub">اليوم فقط — لا تظهر أعياد ميلاد قادمة أو شهرية</p>
+      <div class="action-row">
+        <button type="button" class="btn btn-outline btn-sm" id="visitationBirthdaysPdfBtn">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-inline-end:4px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>استخراج PDF
+        </button>
       </div>
       <div id="visitationBirthdaysResults">
         ${todaysBirthdays.length ? `<div class="member-list">${todaysBirthdays.map(birthdayPersonCardHTML).join('')}</div>` : `<div class="empty-state">${ICONS.empty}<p>لا توجد أعياد ميلاد اليوم</p></div>`}
@@ -1162,8 +1159,8 @@ ${COLS.map((c) => {
           <div style="position:relative;padding:${MARGIN}px;direction:rtl;">
             <div style="text-align:center;margin-bottom:10px;">
               <div style="font-family:${PDF_HEAD_FONT}font-size:22px;color:#7C1F2C;font-weight:700;">أعياد ميلاد اليوم — خدمات الافتقاد</div>
-              <div style="font-family:${PDF_FONT_STACK}font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
-              <div style="font-family:${PDF_FONT_STACK}font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
+              <div style="font-family:${PDF_FONT_STACK};font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
+              <div style="font-family:${PDF_FONT_STACK};font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
             </div>
             <div style="width:${BLOCK_W}px;">${tableHTML(pageBlock)}</div>
           </div>
@@ -2476,8 +2473,8 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
           <div style="position:relative;padding:${MARGIN}px;direction:rtl;">
             <div style="text-align:center;margin-bottom:10px;">
               <div style="font-family:${PDF_HEAD_FONT}font-size:22px;color:#7C1F2C;font-weight:700;">أعياد الميلاد</div>
-              <div style="font-family:${PDF_FONT_STACK}font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
-              <div style="font-family:${PDF_FONT_STACK}font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
+              <div style="font-family:${PDF_FONT_STACK};font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
+              <div style="font-family:${PDF_FONT_STACK};font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
             </div>
             <div style="display:flex;flex-direction:row;">${blocksHTML}</div>
           </div>
@@ -2627,8 +2624,8 @@ ${COLS.map((c) => tdHTML(c, r)).join('\n')}
           <div style="position:relative;padding:${MARGIN}px;direction:rtl;">
             <div style="text-align:center;margin-bottom:10px;">
               <div style="font-family:${PDF_HEAD_FONT}font-size:22px;color:#7C1F2C;font-weight:700;">الأسر</div>
-              <div style="font-family:${PDF_FONT_STACK}font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
-              <div style="font-family:${PDF_FONT_STACK}font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
+              <div style="font-family:${PDF_FONT_STACK};font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
+              <div style="font-family:${PDF_FONT_STACK};font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
             </div>
             <div style="width:${BLOCK_W}px;">${tableHTML(pageBlock)}</div>
           </div>
@@ -2778,8 +2775,8 @@ async function downloadSectorMembersPDF(members, sectorLabel) {
           <div style="position:relative;padding:${MARGIN}px;direction:rtl;">
             <div style="text-align:center;margin-bottom:10px;">
               <div style="font-family:${PDF_HEAD_FONT}font-size:22px;color:#7C1F2C;font-weight:700;">قطاع ${escapeHTML(cleanLabel(sectorLabel))}</div>
-              <div style="font-family:${PDF_FONT_STACK}font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
-              <div style="font-family:${PDF_FONT_STACK}font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
+              <div style="font-family:${PDF_FONT_STACK};font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
+              <div style="font-family:${PDF_FONT_STACK};font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
             </div>
             <div style="width:${BLOCK_W}px;">${tableHTML(pageBlock)}</div>
           </div>
