@@ -328,37 +328,49 @@ button {
   grid-column: 1 / -1;
   justify-self: center;
 }
-/* "الأسر" + "دليل الافتقاد" + "أعياد الميلاد": adopt the same
-   non-transparent card background/border already used by دليل الخدمات's
-   nav-card / landing-card buttons, instead of the transparent .btn-outline
-   look, and the same size for the whole middle row. */
-.visitation-home-actions > a:nth-child(2),
+/* "الأسر" + "دليل الافتقاد" + "أعياد الميلاد" (children 3-5 — child 2 is the
+   cross-divider below): adopt the same non-transparent card
+   background/border already used by دليل الخدمات's nav-card / landing-card
+   buttons, instead of the transparent .btn-outline look, and the same size
+   for the whole middle row. */
 .visitation-home-actions > a:nth-child(3),
-.visitation-home-actions > a:nth-child(4) {
+.visitation-home-actions > a:nth-child(4),
+.visitation-home-actions > a:nth-child(5) {
   background: var(--color-surface);
   border-color: var(--color-line);
   box-shadow: var(--shadow-soft);
   padding: 15px 26px;
   font-size: 1.02rem;
 }
-.visitation-home-actions > a:nth-child(2):hover,
 .visitation-home-actions > a:nth-child(3):hover,
-.visitation-home-actions > a:nth-child(4):hover {
+.visitation-home-actions > a:nth-child(4):hover,
+.visitation-home-actions > a:nth-child(5):hover {
   border-color: var(--color-gold);
+}
+
+/* Small separator between "إضافة أسرة" and the three grouped buttons —
+   the SAME .cross-divider (gold hairlines + cross) used on the دليل
+   الخدمات landing; only its row placement inside this grid is adjusted. */
+.visitation-home-actions .cross-divider,
+.visitation-home-actions .visitation-home-divider {
+  grid-column: 1 / -1;
+  justify-self: center;
+  margin: 2px 0 4px;
 }
 
 /* ≥ tablet: all three middle buttons (الأسر + دليل الافتقاد + أعياد
    الميلاد) sit on ONE row beside each other (same auto column sizing, so
-   sizes/spacing stay identical); below it the existing 2-column wrap keeps
-   its phone layout untouched. */
+   sizes/spacing stay identical). */
 @media (min-width: 760px) {
   .visitation-home-actions { grid-template-columns: repeat(3, auto); }
 }
 
-/* Phones keep the existing 2-column wrap; the birthdays card then spans its
-   row centered — same pattern as the full-row buttons above/below it. */
+/* Phones: the buttons stack in one centered column (auto width = each
+   button keeps its exact natural size/font/padding — only placement and
+   spacing change), so nothing wraps mid-label or sits lopsided in a row. */
 @media (max-width: 759px) {
-  .visitation-home-actions > a:nth-child(4) { grid-column: 1 / -1; justify-self: center; }
+  .visitation-home-actions { grid-template-columns: auto; }
+  .visitation-home-actions > a { justify-self: center; }
 }
 .visitation-home-actions > a:last-child {
   grid-column: 1 / -1;

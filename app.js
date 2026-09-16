@@ -607,6 +607,7 @@ async function renderVisitationHome() {
 
       <div class="visitation-home-actions">
         <a href="#/visitation/add" class="btn btn-primary">${ICONS.plus}<span>إضافة أسرة</span></a>
+        <div class="cross-divider visitation-home-divider">${ICONS.cross}</div>
         <a href="#/visitation/families" class="btn btn-outline">${ICONS.users}<span>الأسر</span></a>
         <a href="#/visitation/guide" class="btn btn-outline">${ICONS.calendar}<span>دليل الافتقاد</span></a>
         <a href="#/visitation/birthdays" class="btn btn-outline">${ICONS.cake}<span>أعياد الميلاد</span></a>
@@ -861,7 +862,7 @@ async function renderVisitationGuide() {
     <div class="container">
       <p class="breadcrumbs"><a href="#/visitation">خدمات الافتقاد</a><span class="sep">/</span><span>دليل الافتقاد</span></p>
       <h2 class="section-title">دليل الافتقاد</h2>
-      <p class="section-sub">الأسر التي مرّت سنة كاملة أو أكثر منذ آخر زيارة لكل منها، مرتبة من الأطول غيابًا عن الافتقاد إلى الأحدث افتقادًا</p>
+      <p class="section-sub">الأسر التي مرّت سنة كاملة أو أكثر منذ آخر زيارة لكل منها</p>
       <div class="action-row">
         <button type="button" class="btn btn-outline btn-sm" id="visitationGuidePdfBtn">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-inline-end:4px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>استخراج PDF
@@ -1052,7 +1053,6 @@ async function renderVisitationBirthdays() {
     <div class="container">
       <p class="breadcrumbs"><a href="#/visitation">خدمات الافتقاد</a><span class="sep">/</span><span>أعياد الميلاد</span></p>
       <h2 class="section-title">أعياد ميلاد اليوم</h2>
-      <p class="section-sub">اليوم فقط — لا تظهر أعياد ميلاد قادمة أو شهرية</p>
       <div class="action-row">
         <button type="button" class="btn btn-outline btn-sm" id="visitationBirthdaysPdfBtn">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-inline-end:4px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>استخراج PDF
@@ -1194,11 +1194,10 @@ async function renderVisitationDataManagement() {
     <div class="container">
       <p class="breadcrumbs"><a href="#/visitation">خدمات الافتقاد</a><span class="sep">/</span><span>إدارة بيانات الافتقاد</span></p>
       <h2 class="section-title">إدارة بيانات الافتقاد</h2>
-      <p class="section-sub">تخص بيانات "خدمات الافتقاد" فقط، منفصلة تمامًا عن بيانات "دليل الخدمات" (${total} أسرة مسجّلة على هذا الجهاز).</p>
+      <p class="section-sub">بيانات "خدمات الافتقاد" فقط (${total} أسرة مسجّلة على هذا الجهاز).</p>
 
       <div class="admin-panel">
         <h3>${ICONS.download.replace('width="19"', 'width="17"')} تصدير بيانات الافتقاد</h3>
-        <p>يحمّل ملف JSON يحتوي على كل أسر الافتقاد المسجلة على هذا الجهاز، بما في ذلك تاريخ الافتقاد الكامل لكل أسرة. شارك هذا الملف مع خادم آخر لنقل البيانات.</p>
         <div class="admin-actions">
           <button id="visitationExportBtn" class="btn btn-gold">${ICONS.download}<span>تنزيل بيانات الافتقاد</span></button>
         </div>
@@ -1206,7 +1205,7 @@ async function renderVisitationDataManagement() {
 
       <div class="admin-panel">
         <h3>${ICONS.upload} استيراد بيانات الافتقاد</h3>
-        <p>ارفع ملف بيانات افتقاد تم تصديره سابقًا من هذا التطبيق (من خادم آخر مثلًا) لإضافة أسره إلى هذا الجهاز. يمكنك اختيار ملف واحد أو عدة ملفات دفعة واحدة.</p>
+        <p>يمكنك اختيار ملف واحد أو عدة ملفات دفعة واحدة.</p>
         <div class="admin-actions">
           <label class="btn btn-outline" for="visitationImportFile" style="cursor:pointer;">${ICONS.upload}<span>اختيار ملف / ملفات</span></label>
           <input type="file" id="visitationImportFile" accept=".json,application/json" multiple style="display:none;" />
@@ -3449,11 +3448,10 @@ async function renderAdminPanel() {
     <div class="container">
       <p class="breadcrumbs"><a href="#/home">الرئيسية</a><span class="sep">/</span><span>إدارة البيانات</span></p>
       <h2 class="section-title">إدارة البيانات</h2>
-      <p class="section-sub">البيانات محفوظة داخل هذا المتصفح فقط على هذا الجهاز (${total} اسم). استخدم التصدير والاستيراد لنقل البيانات بين الأجهزة.</p>
+      <p class="section-sub">البيانات محفوظة داخل هذا المتصفح فقط على هذا الجهاز (${total} اسم).</p>
 
       <div class="admin-panel">
         <h3>${ICONS.download.replace('width="19"','width="17"')} تصدير نسخة كاملة من البيانات</h3>
-        <p>يحمّل ملف JSON يحتوي على كل الأسماء المسجلة على هذا الجهاز. احتفظ بنسخة بشكل دوري.</p>
         <div class="admin-actions">
           <button id="exportBtn" class="btn btn-gold">${ICONS.download}<span>تنزيل نسخة JSON</span></button>
         </div>
@@ -3461,7 +3459,7 @@ async function renderAdminPanel() {
 
       <div class="admin-panel">
         <h3>${ICONS.upload} استيراد بيانات</h3>
-        <p>ارفع ملف JSON تم تصديره سابقًا من هذا التطبيق لنقل البيانات لجهاز جديد. يمكنك اختيار ملف واحد أو عدة ملفات دفعة واحدة.</p>
+        <p>يمكنك اختيار ملف واحد أو عدة ملفات دفعة واحدة.</p>
         <div class="admin-actions">
           <label class="btn btn-outline" for="importFile" style="cursor:pointer;">${ICONS.upload}<span>اختيار ملف / ملفات</span></label>
           <input type="file" id="importFile" accept=".json,application/json" multiple style="display:none;" />
