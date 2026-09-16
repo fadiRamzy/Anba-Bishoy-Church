@@ -404,6 +404,7 @@ async function router() {
     if (segments[1] === 'member' && segments[2]) return renderVisitationProfile(segments[2]);
     if (segments[1] === 'families') return renderVisitationFamilies(params);
     if (segments[1] === 'guide') return renderVisitationGuide();
+    if (segments[1] === 'birthdays') return renderVisitationBirthdays();
     if (segments[1] === 'data') return renderVisitationDataManagement();
     return renderVisitationHome(params);
   }
@@ -697,7 +698,7 @@ function renderVisitationListOrEmpty(list, emptyMessage) {
 }
 
 /* #/visitation — search box + "إضافة أسرة" / "الأسر" / "دليل الافتقاد" /
-   "إدارة بيانات الافتقاد" entry buttons. The full registered list still
+   "أعياد الميلاد" / "إدارة بيانات الافتقاد" entry buttons. The full registered list still
    lives on #/visitation/families (with its own filters) — this page only
    shows matches while the user is actively searching. */
 async function renderVisitationHome() {
@@ -722,6 +723,7 @@ async function renderVisitationHome() {
         <a href="#/visitation/add" class="btn btn-primary">${ICONS.plus}<span>إضافة أسرة</span></a>
         <a href="#/visitation/families" class="btn btn-outline">${ICONS.users}<span>الأسر</span></a>
         <a href="#/visitation/guide" class="btn btn-outline">${ICONS.calendar}<span>دليل الافتقاد</span></a>
+        <a href="#/visitation/birthdays" class="btn btn-outline">${ICONS.cake}<span>أعياد الميلاد</span></a>
         <a href="#/visitation/data" class="btn btn-outline">${ICONS.download}<span>إدارة بيانات الافتقاد</span></a>
       </div>
 
@@ -767,6 +769,7 @@ function familyMatchesFilters(f, filters) {
     const month = parts.length === 3 ? Number(parts[1]) : null;
     if (month !== Number(filters.birthMonth)) return false;
   }
+  if (filters.visitationDate && !(Array.isArray(f.visitationDates) && f.visitationDates.includes(filters.visitationDate))) return false;
   return true;
 }
 
@@ -778,6 +781,12 @@ async function renderVisitationFamilies() {
   const jobs = uniqueSortedValues(all.map((f) => f.job));
   const services = uniqueSortedValues(all.map((f) => f.service));
   const confessionFathers = uniqueSortedValues(all.map((f) => f.confessionFather));
+  /* All recorded visitation dates across the families (newest first) — the
+     options for the "اليوم" filter: "من تم افتقاده في اليوم ده؟". Read from
+     the existing visitationDates history only; nothing new is stored. */
+  const visitDates = Array.from(new Set(all.flatMap((f) => (Array.isArray(f.visitationDates) ? f.visitationDates : []))))
+    .filter((d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d))
+    .sort((a, b) => b.localeCompare(a));
 
   APP_ROOT.innerHTML = `
     <div class="container">
@@ -815,6 +824,10 @@ async function renderVisitationFamilies() {
           <label for="filterBirthMonth">شهر الميلاد</label>
           <select id="filterBirthMonth"><option value="">الكل</option>${ARABIC_MONTHS.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('')}</select>
         </div>
+        <div class="field">
+          <label for="filterVisitationDate">اليوم</label>
+          <select id="filterVisitationDate"><option value="">الكل</option>${visitDates.map((d) => `<option value="${escapeHTML(d)}">${formatDMY(d)}</option>`).join('')}</select>
+        </div>
         <div class="field filter-clear-field">
           <label>&nbsp;</label>
           <button type="button" class="btn btn-outline btn-sm" id="clearFiltersBtn">مسح الفلتر</button>
@@ -840,6 +853,7 @@ async function renderVisitationFamilies() {
     service: document.getElementById('filterService'),
     confessionFather: document.getElementById('filterConfessionFather'),
     birthMonth: document.getElementById('filterBirthMonth'),
+    visitationDate: document.getElementById('filterVisitationDate'),
   };
 
   let currentFiltered = all; // kept in sync with the results currently shown, for PDF export (change 3)
@@ -853,6 +867,7 @@ async function renderVisitationFamilies() {
       service: filterEls.service.value,
       confessionFather: filterEls.confessionFather.value,
       birthMonth: filterEls.birthMonth.value,
+      visitationDate: filterEls.visitationDate.value,
     };
     const filtered = base.filter((f) => familyMatchesFilters(f, filters));
     currentFiltered = filtered;
@@ -874,7 +889,7 @@ async function renderVisitationFamilies() {
     refresh();
   });
   document.getElementById('visitationFamiliesPdfBtn').addEventListener('click', () => {
-    downloadVisitationFamiliesPDF(currentFiltered);
+    downloadVisitationFamiliesPDF(currentFiltered, filterEls.visitationDate.value);
   });
 
   refresh();
@@ -921,6 +936,20 @@ function latestVisitationDate(f) {
   return dates[0] || null;
 }
 
+/* "دليل الافتقاد" eligibility: a family qualifies only when its latest
+   recorded visitation date is at least one full year before today. Exactly
+   one year ago counts (2026-09-16 vs 2025-09-16 → shown); 11 months ago
+   does not. Computed from the stored visitationDates — nothing is stored. */
+function isVisitationOverdueAYear(latestIso) {
+  const d = new Date(`${latestIso}T00:00:00`);
+  if (isNaN(d.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const oneYearAgo = new Date(today);
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+  return d.getTime() <= oneYearAgo.getTime();
+}
+
 function guideCardHTML(item) {
   const f = item.family;
   const addressPart = [f.neighborhood, f.street].filter(Boolean).join(' - ');
@@ -943,7 +972,7 @@ async function renderVisitationGuide() {
 
   const withLatest = all
     .map((f) => ({ family: f, latest: latestVisitationDate(f) }))
-    .filter((x) => x.latest); // only people with at least one visitation date
+    .filter((x) => x.latest && isVisitationOverdueAYear(x.latest)); // only families not visited for at least one full year (no visit date at all → excluded, unchanged)
 
   withLatest.sort((a, b) => a.latest.localeCompare(b.latest)); // oldest last-visit first = longest overdue first
 
@@ -953,12 +982,207 @@ async function renderVisitationGuide() {
     <div class="container">
       <p class="breadcrumbs"><a href="#/visitation">خدمات الافتقاد</a><span class="sep">/</span><span>دليل الافتقاد</span></p>
       <h2 class="section-title">دليل الافتقاد</h2>
-      <p class="section-sub">الأسر مرتبة من الأطول غيابًا عن الافتقاد إلى الأحدث افتقادًا</p>
+      <p class="section-sub">الأسر التي مرّت سنة كاملة أو أكثر منذ آخر زيارة لكل منها، مرتبة من الأطول غيابًا عن الافتقاد إلى الأحدث افتقادًا</p>
       <div id="visitationGuideResults">
-        ${items.length ? `<div class="member-list">${items.map(guideCardHTML).join('')}</div>` : `<div class="empty-state">${ICONS.empty}<p>لا توجد أسر لها تاريخ افتقاد مسجل بعد</p></div>`}
+        ${items.length ? `<div class="member-list">${items.map(guideCardHTML).join('')}</div>` : `<div class="empty-state">${ICONS.empty}<p>لا توجد أسر لم تُفتقد منذ سنة كاملة أو أكثر</p></div>`}
       </div>
     </div>
   `;
+}
+
+/* #/visitation/birthdays — "أعياد الميلاد": ONLY people whose birthday is
+   TODAY (no month list, no upcoming, no date selector). Birthday matching
+   reuses the exact same getBirthMonthDay() helper and Feb-29 stand-in rule
+   as the "دليل الخدمات" birthdays page above; only the data source differs
+   (VisitationDB families: head + spouse + children). Cards keep this
+   section's member-card style and open the normal family profile. */
+function visitationBirthdayPeople(all) {
+  const people = [];
+  for (const f of all) {
+    const push = (person, relation) => {
+      if (!person) return;
+      const md = getBirthMonthDay(person);
+      if (md && person.name) people.push({ person, relation, family: f, month: md.month, day: md.day });
+    };
+    push({ name: f.name, birthDate: f.birthDate }, 'رب الأسرة');
+    push(f.husband, 'الزوج');
+    push(f.wife, 'الزوجة');
+    (Array.isArray(f.children) ? f.children : []).forEach((c) => push(c, c.type === 'ابنة' ? 'ابنة' : 'ابن'));
+  }
+  return people;
+}
+
+async function renderVisitationBirthdays() {
+  renderVisitationChrome('/visitation', 'رجوع لخدمات الافتقاد');
+  const all = await VisitationDB.getAll();
+  const withDates = visitationBirthdayPeople(all);
+
+  const today = new Date();
+  const todayMonth = today.getMonth();
+  const todayDay = today.getDate();
+  const isLeapYear = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  // Same Feb-29 rule as the directory birthdays page: on non-leap years
+  // Feb 28 stands in so those birthdays are never skipped.
+  const todayStandsInForFeb29 = todayMonth === 1 && todayDay === 28 && !isLeapYear(today.getFullYear());
+  const isTodayBirthday = (x) =>
+    (x.month === todayMonth && x.day === todayDay) ||
+    (todayStandsInForFeb29 && x.month === 1 && x.day === 29);
+  const todaysBirthdays = withDates.filter(isTodayBirthday);
+
+  function birthdayPersonCardHTML(x) {
+    const dob = formatBirthDate(x.person) || '—';
+    const age = computeAge(x.person);
+    const birthLine = `عيد الميلاد: ${dob}${age !== null ? ` — ${age} سنة` : ''}`;
+    const familyLine = (x.person.name || '') !== (x.family.name || '')
+      ? `<span class="member-address">أسرة: ${escapeHTML(x.family.name)}</span>`
+      : '';
+    return `
+      <a href="#/visitation/member/${x.family.id}" class="member-card visitation-card">
+        <span class="member-avatar">${escapeHTML(initials(x.person.name))}</span>
+        <span class="member-info">
+          <span class="member-name">${escapeHTML(x.person.name)}</span>
+          <span class="member-job">${escapeHTML(x.relation)}</span>
+          ${familyLine}
+          <span class="member-meta-visit">${escapeHTML(birthLine)}</span>
+        </span>
+      </a>`;
+  }
+
+  APP_ROOT.innerHTML = `
+    <div class="container">
+      <p class="breadcrumbs"><a href="#/visitation">خدمات الافتقاد</a><span class="sep">/</span><span>أعياد الميلاد</span></p>
+      <h2 class="section-title">أعياد الميلاد</h2>
+      <p class="section-sub">مين عيد ميلاده النهارده؟ — أعياد ميلاد اليوم فقط داخل الأسر المسجلة</p>
+      <div class="filter-bar">
+        <div class="field filter-clear-field">
+          <label>&nbsp;</label>
+          <button type="button" class="btn btn-outline btn-sm" id="visitationBirthdaysPdfBtn">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-inline-end:4px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>استخراج PDF
+          </button>
+        </div>
+      </div>
+      <div id="visitationBirthdaysResults">
+        ${todaysBirthdays.length ? `<div class="member-list">${todaysBirthdays.map(birthdayPersonCardHTML).join('')}</div>` : `<div class="empty-state">${ICONS.empty}<p>لا توجد أعياد ميلاد اليوم</p></div>`}
+      </div>
+    </div>
+  `;
+
+  document.getElementById('visitationBirthdaysPdfBtn').addEventListener('click', () => {
+    downloadVisitationBirthdaysPDF(todaysBirthdays);
+  });
+}
+
+/* Visitation birthdays PDF — same offline jsPDF/html2canvas pipeline and
+   visual template as the families/birthdays exports above; a single
+   full-width table with only TODAY's birthday people. */
+async function downloadVisitationBirthdaysPDF(people) {
+  const btn = document.getElementById('visitationBirthdaysPdfBtn');
+  const rows = people.map((x) => ({
+    name: x.person.name || '',
+    relation: x.relation,
+    familyName: x.family.name || '—',
+    birth: formatBirthDate(x.person) || '—',
+  }));
+
+  if (!rows.length) {
+    showToast('لا توجد أعياد ميلاد اليوم لتصديرها', 'error');
+    return;
+  }
+
+  const originalLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = 'جاري التجهيز...';
+
+  const cleanupEls = [];
+  try {
+    await _loadPdfLibs();
+    const { jsPDF } = window.jspdf;
+
+    const PAGE_W = 595, PAGE_H = 842;
+    const MARGIN = 26;
+    const HEADER_H = 96;
+    const BLOCK_W = PAGE_W - MARGIN * 2;
+    const BLOCK_H = PAGE_H - HEADER_H - MARGIN * 2;
+    const HEAD_ROW_H = 24;
+    const MIN_ROW_H = 20;
+    const COLS = [
+      { key: 'name', label: 'اسم الشخص', w: 0.30 },
+      { key: 'relation', label: 'الصلة', w: 0.14 },
+      { key: 'familyName', label: 'اسم الأسرة', w: 0.28 },
+      { key: 'birth', label: 'تاريخ الميلاد', w: 0.28 },
+    ];
+
+    const probe = document.createElement('div');
+    probe.style.cssText = PDF_PROBE_BASE; // same metrics as the rendered cells
+    document.body.appendChild(probe);
+    cleanupEls.push(probe);
+    function measureH(text, width) {
+      probe.style.width = `${width}px`;
+      probe.textContent = text;
+      return probe.offsetHeight;
+    }
+    const measured = rows.map((r, idx) => {
+      const serial = idx + 1;
+      const cellH = COLS.map((c) => measureH(c.key === 'name' ? `${serial} - ${r[c.key]}` : String(r[c.key]), BLOCK_W * c.w - 2));
+      return { ...r, serial, rowH: Math.max(MIN_ROW_H, ...cellH) };
+    });
+
+    const blocks = [];
+    let current = [], currentH = HEAD_ROW_H;
+    for (const r of measured) {
+      if (currentH + r.rowH > BLOCK_H && current.length) {
+        blocks.push(current);
+        current = [];
+        currentH = HEAD_ROW_H;
+      }
+      current.push(r);
+      currentH += r.rowH;
+    }
+    if (current.length) blocks.push(current);
+
+    const TD = PDF_TD_BASE;
+    function tableHTML(blockRows) {
+      const colgroup = COLS.map((c) => `<col style="width:${c.w * 100}%;">`).join('');
+      const th = COLS.map((c) => `<th style="${PDF_TH_BASE}">${escapeHTML(c.label)}</th>`).join('');
+      const trs = blockRows.map((r) => `
+        <tr>
+${COLS.map((c) => {
+  if (c.key === 'name') return `          <td style="${TD}text-align:right;">${r.serial} - ${escapeHTML(r.name)}</td>`;
+  if (c.key === 'birth') return `          <td style="${TD}text-align:center;">${escapeHTML(r.birth)}</td>`;
+  return `          <td style="${TD}text-align:center;">${escapeHTML(r[c.key])}</td>`;
+}).join('\n')}
+        </tr>`).join('');
+      return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><colgroup>${colgroup}</colgroup><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
+    }
+
+    function pageHTML(pageBlock) {
+      return `
+        <div style="width:${PAGE_W}px;height:${PAGE_H}px;background:#FFFDF8;box-sizing:border-box;position:relative;overflow:hidden;">
+          <div style="position:absolute;inset:0;background-image:url('site-bg.jpg');background-size:cover;background-position:center;opacity:0.08;"></div>
+          <div style="position:relative;padding:${MARGIN}px;direction:rtl;">
+            <div style="text-align:center;margin-bottom:10px;">
+              <div style="font-family:${PDF_HEAD_FONT}font-size:22px;color:#7C1F2C;font-weight:700;">أعياد ميلاد اليوم — خدمات الافتقاد</div>
+              <div style="font-family:${PDF_FONT_STACK}font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
+              <div style="font-family:${PDF_FONT_STACK}font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
+            </div>
+            <div style="width:${BLOCK_W}px;">${tableHTML(pageBlock)}</div>
+          </div>
+        </div>`;
+    }
+
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+    await _pdfRenderPages(pdf, blocks.map((b) => pageHTML(b)), PAGE_W, PAGE_H);
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    pdf.save(`أعياد_ميلاد_الافتقاد_${stamp}.pdf`);
+  } catch (err) {
+    console.error('PDF generation failed:', err);
+    showToast('حدث خطأ أثناء إنشاء ملف PDF', 'error');
+  } finally {
+    cleanupEls.forEach((el) => el.remove());
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
+  }
 }
 
 /* #/visitation/data — "إدارة بيانات الافتقاد": export/import for the
@@ -2084,6 +2308,69 @@ function _loadPdfLibs() {
   return _pdfLibsPromise;
 }
 
+/* ---------------------------------------------------------------------- */
+/*  Shared Arabic rendering layer — used by EVERY PDF export above/below. */
+/*  One font stack, one wrapping policy, one rasterization path, so all   */
+/*  buttons render Arabic identically and cleanly:                        */
+/*   • word-break:normal + overflow-wrap:break-word — Arabic words wrap     */
+/*     at space boundaries (the old break-word rule split words mid-write,  */
+/*     which visually disconnected glyphs and ate the spaces between        */
+/*     them). Only an unbreakable token longer than its column gets split.  */
+/*   • document.fonts.ready is awaited before rasterizing, so the swap-     */
+/*     loaded webfont (Cairo) is never caught half-applied — that race is   */
+/*     why output "sometimes" looked different between buttons. The 4s      */
+/*     timeout keeps exports working offline; the fallback stack below      */
+/*     (Tahoma/Arial/system-ui) has full Arabic coverage.                  */
+/*   • The row-height probe and the rendered cells share byte-identical     */
+/*     metrics (same stack, 10.5px/1.4), so measured heights match the      */
+/*     raster and no row is ever clipped or overlapped.                    */
+/*  No text content is touched: data goes through escapeHTML() unchanged.  */
+/* ---------------------------------------------------------------------- */
+const PDF_FONT_STACK = "'Cairo','Aref Ruqaa',system-ui,'Segoe UI',Tahoma,Arial,sans-serif";
+const PDF_TEXT_RULES = "font-size:10.5px;line-height:1.4;overflow-wrap:break-word;word-break:normal;hyphens:none;";
+const PDF_TD_BASE = `border:1px solid #C7CDD3;padding:5px 6px;vertical-align:middle;${PDF_TEXT_RULES}font-family:${PDF_FONT_STACK};`;
+/* Header labels are single short words; half-width tables (the birthdays
+   two-column layout) leave ~34px per column, so th padding must stay
+   minimal — otherwise a header like "الشهر" splits mid-word into "لش هر". */
+const PDF_TH_BASE = `border:1px solid #9AA7B2;background:#DCE6F1;color:#1F2A37;font-weight:700;padding:3px 3px;text-align:center;vertical-align:middle;${PDF_TEXT_RULES}font-family:${PDF_FONT_STACK};`;
+const PDF_PROBE_BASE = `position:fixed;visibility:hidden;left:-9999px;top:0;box-sizing:border-box;padding:5px 6px;${PDF_TEXT_RULES}font-family:${PDF_FONT_STACK};`;
+const PDF_HEAD_FONT = "'Aref Ruqaa',system-ui,'Segoe UI',Tahoma,Arial,serif;";
+
+/* Wait for webfonts (bounded) so rasterization never races a font swap. */
+async function _pdfFontsReady() {
+  try {
+    if (document.fonts && document.fonts.ready) {
+      await Promise.race([
+        document.fonts.ready,
+        new Promise((resolve) => { setTimeout(resolve, 4000); }),
+      ]);
+    }
+  } catch (e) { /* never block an export on font state */ }
+}
+
+/* Shared rasterizer: paints each fully-composed A4 page element with
+   html2canvas and stamps it onto a jsPDF A4 page. Pagination (blocks →
+   pages) stays in the calling functions — geometry untouched. */
+async function _pdfRenderPages(pdf, pagesHTML, pageW, pageH) {
+  await _pdfFontsReady();
+  const stage = document.createElement('div');
+  stage.style.cssText = 'position:fixed;left:-99999px;top:0;';
+  document.body.appendChild(stage);
+  try {
+    for (let i = 0; i < pagesHTML.length; i++) {
+      stage.innerHTML = pagesHTML[i];
+      const pageEl = stage.firstElementChild;
+      // eslint-disable-next-line no-await-in-loop
+      const canvas = await window.html2canvas(pageEl, { scale: 2, backgroundColor: '#FFFDF8', useCORS: true });
+      const imgData = canvas.toDataURL('image/png');
+      if (i > 0) pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, 0, pageW, pageH);
+    }
+  } finally {
+    stage.remove();
+  }
+}
+
 async function downloadBirthdaysPDF(monthIdx, withDates) {
   const btn = document.getElementById('birthdayPdfBtn');
   const rows = withDates
@@ -2120,11 +2407,14 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
     const BLOCK_H = PAGE_H - HEADER_H - MARGIN * 2;
     const HEAD_ROW_H = 24;
     const MIN_ROW_H = 20;
+    /* Month column gets enough width for the "الشهر" header word (in the
+       half-width two-column layout 0.13 cut words mid-letter). Labels and
+       data are unchanged — only column proportions. */
     const COLS = [
-      { key: 'name', label: 'اسم المخدوم', w: 0.55 },
-      { key: 'monthNum', label: 'الشهر', w: 0.13 },
-      { key: 'className', label: 'الفصل', w: 0.17 },
-      { key: 'age', label: 'السن', w: 0.15 },
+      { key: 'name', label: 'اسم المخدوم', w: 0.48 },
+      { key: 'monthNum', label: 'الشهر', w: 0.18 },
+      { key: 'className', label: 'الفصل', w: 0.18 },
+      { key: 'age', label: 'السن', w: 0.16 },
     ];
     const nameColW = BLOCK_W * COLS[0].w - 2;
     const classColW = BLOCK_W * COLS[2].w - 2;
@@ -2134,7 +2424,7 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
        (name, class, age) so no row is ever split across a block/page
        boundary and no column can silently overflow into the next row. */
     const probe = document.createElement('div');
-    probe.style.cssText = `position:fixed;visibility:hidden;left:-9999px;top:0;font-family:'Cairo',system-ui,sans-serif;font-size:10.5px;line-height:1.4;padding:5px 6px;box-sizing:border-box;word-break:break-word;`;
+    probe.style.cssText = PDF_PROBE_BASE; // same metrics as the rendered cells
     document.body.appendChild(probe);
     cleanupEls.push(probe);
     function measureH(text, width) {
@@ -2167,13 +2457,13 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
 
     function tableHTML(blockRows) {
       const colgroup = COLS.map((c) => `<col style="width:${c.w * 100}%;">`).join('');
-      const th = COLS.map((c) => `<th style="border:1px solid #9AA7B2;background:#DCE6F1;color:#1F2A37;font-family:'Cairo',sans-serif;font-weight:700;font-size:10.5px;line-height:1.35;padding:5px 6px;text-align:center;vertical-align:middle;">${escapeHTML(c.label)}</th>`).join('');
+      const th = COLS.map((c) => `<th style="${PDF_TH_BASE}">${escapeHTML(c.label)}</th>`).join('');
       const trs = blockRows.map((r) => `
         <tr>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;word-break:break-word;text-align:right;vertical-align:middle;">${r.serial} - ${escapeHTML(r.name)}</td>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${r.monthNum}</td>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${escapeHTML(r.className)}</td>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;">${r.age !== null ? r.age + ' سنة' : '—'}</td>
+          <td style="${PDF_TD_BASE}text-align:right;">${r.serial} - ${escapeHTML(r.name)}</td>
+          <td style="${PDF_TD_BASE}text-align:center;">${r.monthNum}</td>
+          <td style="${PDF_TD_BASE}text-align:center;">${escapeHTML(r.className)}</td>
+          <td style="${PDF_TD_BASE}text-align:center;">${r.age !== null ? r.age + ' سنة' : '—'}</td>
         </tr>`).join('');
       return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><colgroup>${colgroup}</colgroup><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
     }
@@ -2185,9 +2475,9 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
           <div style="position:absolute;inset:0;background-image:url('site-bg.jpg');background-size:cover;background-position:center;opacity:0.08;"></div>
           <div style="position:relative;padding:${MARGIN}px;direction:rtl;">
             <div style="text-align:center;margin-bottom:10px;">
-              <div style="font-family:'Aref Ruqaa',serif;font-size:22px;color:#7C1F2C;font-weight:700;">أعياد الميلاد</div>
-              <div style="font-family:'Cairo',sans-serif;font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
-              <div style="font-family:'Cairo',sans-serif;font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
+              <div style="font-family:${PDF_HEAD_FONT}font-size:22px;color:#7C1F2C;font-weight:700;">أعياد الميلاد</div>
+              <div style="font-family:${PDF_FONT_STACK}font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
+              <div style="font-family:${PDF_FONT_STACK}font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
             </div>
             <div style="display:flex;flex-direction:row;">${blocksHTML}</div>
           </div>
@@ -2199,21 +2489,8 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
       pages.push(blocks.slice(i, i + 2));
     }
 
-    const stage = document.createElement('div');
-    stage.style.cssText = 'position:fixed;left:-99999px;top:0;';
-    document.body.appendChild(stage);
-    cleanupEls.push(stage);
-
     const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
-    for (let i = 0; i < pages.length; i++) {
-      stage.innerHTML = pageHTML(pages[i]);
-      const pageEl = stage.firstElementChild;
-      // eslint-disable-next-line no-await-in-loop
-      const canvas = await window.html2canvas(pageEl, { scale: 2, backgroundColor: '#FFFDF8', useCORS: true });
-      const imgData = canvas.toDataURL('image/png');
-      if (i > 0) pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, 0, PAGE_W, PAGE_H);
-    }
+    await _pdfRenderPages(pdf, pages.map((pg) => pageHTML(pg)), PAGE_W, PAGE_H);
 
     pdf.save(`اعياد_الميلاد_${ARABIC_MONTHS[monthIdx]}.pdf`);
   } catch (err) {
@@ -2240,14 +2517,21 @@ function visitationFamilyAddress(f) {
   return [f.city, f.neighborhood, f.street].filter(Boolean).join(' - ');
 }
 
-async function downloadVisitationFamiliesPDF(families) {
+async function downloadVisitationFamiliesPDF(families, visitationDateFilter = '') {
   const btn = document.getElementById('visitationFamiliesPdfBtn');
-  const rows = families.map((f) => ({
-    name: f.name || '',
-    confessionFather: f.confessionFather || '—',
-    phone: f.phone1 || f.phone2 || '—',
-    address: visitationFamilyAddress(f) || '—',
-  }));
+  /* When the "اليوم" (visitation-date) filter is active the export shows
+     اسم الأسرة / تاريخ آخر افتقاد / العنوان / رقم الهاتف; otherwise the
+     existing columns are kept exactly as they were. */
+  const showLastVisit = Boolean(visitationDateFilter);
+  const rows = families.map((f) => {
+    const latest = latestVisitationDate(f);
+    return {
+      name: f.name || '',
+      middle: showLastVisit ? (latest ? formatDMY(latest) : '—') : (f.confessionFather || '—'),
+      phone: f.phone1 || f.phone2 || '—',
+      address: visitationFamilyAddress(f) || '—',
+    };
+  });
 
   if (!rows.length) {
     showToast('لا توجد أسر مطابقة للفلاتر الحالية لتصديرها', 'error');
@@ -2273,22 +2557,25 @@ async function downloadVisitationFamiliesPDF(families) {
     const BLOCK_H = PAGE_H - HEADER_H - MARGIN * 2;
     const HEAD_ROW_H = 24;
     const MIN_ROW_H = 20;
-    const COLS = [
-      { key: 'name', label: 'اسم الشخص', w: 0.30 },
-      { key: 'confessionFather', label: 'أب الاعتراف', w: 0.22 },
-      { key: 'phone', label: 'رقم الهاتف', w: 0.18 },
-      { key: 'address', label: 'العنوان', w: 0.30 },
-    ];
-    const nameColW = BLOCK_W * COLS[0].w - 2;
-    const fatherColW = BLOCK_W * COLS[1].w - 2;
-    const phoneColW = BLOCK_W * COLS[2].w - 2;
-    const addressColW = BLOCK_W * COLS[3].w - 2;
+    const COLS = showLastVisit
+      ? [
+          { key: 'name', label: 'اسم الأسرة', w: 0.30 },
+          { key: 'middle', label: 'تاريخ آخر افتقاد', w: 0.20 },
+          { key: 'address', label: 'العنوان', w: 0.30 },
+          { key: 'phone', label: 'رقم الهاتف', w: 0.20 },
+        ]
+      : [
+          { key: 'name', label: 'اسم الشخص', w: 0.30 },
+          { key: 'middle', label: 'أب الاعتراف', w: 0.22 },
+          { key: 'phone', label: 'رقم الهاتف', w: 0.18 },
+          { key: 'address', label: 'العنوان', w: 0.30 },
+        ];
 
     /* Measure wrapped height per row across every column so no row is ever
        split across a block/page boundary (same technique as the birthdays
        export). */
     const probe = document.createElement('div');
-    probe.style.cssText = `position:fixed;visibility:hidden;left:-9999px;top:0;font-family:'Cairo',system-ui,sans-serif;font-size:10.5px;line-height:1.4;padding:5px 6px;box-sizing:border-box;word-break:break-word;`;
+    probe.style.cssText = PDF_PROBE_BASE; // same metrics as the rendered cells
     document.body.appendChild(probe);
     cleanupEls.push(probe);
     function measureH(text, width) {
@@ -2298,11 +2585,8 @@ async function downloadVisitationFamiliesPDF(families) {
     }
     const measured = rows.map((r, idx) => {
       const serial = idx + 1;
-      const nameH = measureH(`${serial} - ${r.name}`, nameColW);
-      const fatherH = measureH(r.confessionFather, fatherColW);
-      const phoneH = measureH(r.phone, phoneColW);
-      const addressH = measureH(r.address, addressColW);
-      return { ...r, serial, rowH: Math.max(MIN_ROW_H, nameH, fatherH, phoneH, addressH) };
+      const cellH = COLS.map((c) => measureH(c.key === 'name' ? `${serial} - ${r[c.key]}` : String(r[c.key]), BLOCK_W * c.w - 2));
+      return { ...r, serial, rowH: Math.max(MIN_ROW_H, ...cellH) };
     });
 
     /* Bin-pack rows into blocks that each fit within BLOCK_H. */
@@ -2321,13 +2605,17 @@ async function downloadVisitationFamiliesPDF(families) {
 
     function tableHTML(blockRows) {
       const colgroup = COLS.map((c) => `<col style="width:${c.w * 100}%;">`).join('');
-      const th = COLS.map((c) => `<th style="border:1px solid #9AA7B2;background:#DCE6F1;color:#1F2A37;font-family:'Cairo',sans-serif;font-weight:700;font-size:10.5px;line-height:1.35;padding:5px 6px;text-align:center;vertical-align:middle;">${escapeHTML(c.label)}</th>`).join('');
+      const th = COLS.map((c) => `<th style="${PDF_TH_BASE}">${escapeHTML(c.label)}</th>`).join('');
+      const TD = PDF_TD_BASE;
+      const tdHTML = (c, r) => {
+        if (c.key === 'name') return `          <td style="${TD}text-align:right;">${r.serial} - ${escapeHTML(r.name)}</td>`;
+        if (c.key === 'phone') return `          <td style="${TD}text-align:center;direction:ltr;">${escapeHTML(r.phone)}</td>`;
+        if (c.key === 'address') return `          <td style="${TD}text-align:right;">${escapeHTML(r.address)}</td>`;
+        return `          <td style="${TD}text-align:center;">${escapeHTML(r.middle)}</td>`;
+      };
       const trs = blockRows.map((r) => `
         <tr>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;word-break:break-word;text-align:right;vertical-align:middle;">${r.serial} - ${escapeHTML(r.name)}</td>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;word-break:break-word;text-align:center;vertical-align:middle;">${escapeHTML(r.confessionFather)}</td>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;direction:ltr;">${escapeHTML(r.phone)}</td>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;word-break:break-word;text-align:right;vertical-align:middle;">${escapeHTML(r.address)}</td>
+${COLS.map((c) => tdHTML(c, r)).join('\n')}
         </tr>`).join('');
       return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><colgroup>${colgroup}</colgroup><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
     }
@@ -2338,33 +2626,20 @@ async function downloadVisitationFamiliesPDF(families) {
           <div style="position:absolute;inset:0;background-image:url('site-bg.jpg');background-size:cover;background-position:center;opacity:0.08;"></div>
           <div style="position:relative;padding:${MARGIN}px;direction:rtl;">
             <div style="text-align:center;margin-bottom:10px;">
-              <div style="font-family:'Aref Ruqaa',serif;font-size:22px;color:#7C1F2C;font-weight:700;">الأسر</div>
-              <div style="font-family:'Cairo',sans-serif;font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
-              <div style="font-family:'Cairo',sans-serif;font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
+              <div style="font-family:${PDF_HEAD_FONT}font-size:22px;color:#7C1F2C;font-weight:700;">الأسر</div>
+              <div style="font-family:${PDF_FONT_STACK}font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
+              <div style="font-family:${PDF_FONT_STACK}font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
             </div>
             <div style="width:${BLOCK_W}px;">${tableHTML(pageBlock)}</div>
           </div>
         </div>`;
     }
 
-    const stage = document.createElement('div');
-    stage.style.cssText = 'position:fixed;left:-99999px;top:0;';
-    document.body.appendChild(stage);
-    cleanupEls.push(stage);
-
     const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
-    for (let i = 0; i < blocks.length; i++) {
-      stage.innerHTML = pageHTML(blocks[i]);
-      const pageEl = stage.firstElementChild;
-      // eslint-disable-next-line no-await-in-loop
-      const canvas = await window.html2canvas(pageEl, { scale: 2, backgroundColor: '#FFFDF8', useCORS: true });
-      const imgData = canvas.toDataURL('image/png');
-      if (i > 0) pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, 0, PAGE_W, PAGE_H);
-    }
+    await _pdfRenderPages(pdf, blocks.map((b) => pageHTML(b)), PAGE_W, PAGE_H);
 
     const stamp = new Date().toISOString().slice(0, 10);
-    pdf.save(`الأسر_${stamp}.pdf`);
+    pdf.save(showLastVisit ? `الأسر_${visitationDateFilter}_${stamp}.pdf` : `الأسر_${stamp}.pdf`); // ISO in the name — a formatted date would put '/' in the filename
   } catch (err) {
     console.error('PDF generation failed:', err);
     showToast('حدث خطأ أثناء إنشاء ملف PDF', 'error');
@@ -2452,7 +2727,7 @@ async function downloadSectorMembersPDF(members, sectorLabel) {
        split across a block/page boundary (same technique as the existing
        exports). */
     const probe = document.createElement('div');
-    probe.style.cssText = `position:fixed;visibility:hidden;left:-9999px;top:0;font-family:'Cairo',system-ui,sans-serif;font-size:10.5px;line-height:1.4;padding:5px 6px;box-sizing:border-box;word-break:break-word;`;
+    probe.style.cssText = PDF_PROBE_BASE; // same metrics as the rendered cells
     document.body.appendChild(probe);
     cleanupEls.push(probe);
     function measureH(text, width) {
@@ -2485,13 +2760,13 @@ async function downloadSectorMembersPDF(members, sectorLabel) {
 
     function tableHTML(blockRows) {
       const colgroup = COLS.map((c) => `<col style="width:${c.w * 100}%;">`).join('');
-      const th = COLS.map((c) => `<th style="border:1px solid #9AA7B2;background:#DCE6F1;color:#1F2A37;font-family:'Cairo',sans-serif;font-weight:700;font-size:10.5px;line-height:1.35;padding:5px 6px;text-align:center;vertical-align:middle;">${escapeHTML(c.label)}</th>`).join('');
+      const th = COLS.map((c) => `<th style="${PDF_TH_BASE}">${escapeHTML(c.label)}</th>`).join('');
       const trs = blockRows.map((r) => `
         <tr>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;word-break:break-word;text-align:right;vertical-align:middle;">${r.serial} - ${escapeHTML(r.name)}</td>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;text-align:center;vertical-align:middle;direction:ltr;">${escapeHTML(r.phone)}</td>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;word-break:break-word;text-align:center;vertical-align:middle;">${escapeHTML(r.className)}</td>
-          <td style="border:1px solid #C7CDD3;padding:5px 6px;font-size:10.5px;line-height:1.35;font-family:'Cairo',sans-serif;word-break:break-word;text-align:right;vertical-align:middle;">${escapeHTML(r.address)}</td>
+          <td style="${PDF_TD_BASE}text-align:right;">${r.serial} - ${escapeHTML(r.name)}</td>
+          <td style="${PDF_TD_BASE}text-align:center;direction:ltr;">${escapeHTML(r.phone)}</td>
+          <td style="${PDF_TD_BASE}text-align:center;">${escapeHTML(r.className)}</td>
+          <td style="${PDF_TD_BASE}text-align:right;">${escapeHTML(r.address)}</td>
         </tr>`).join('');
       return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><colgroup>${colgroup}</colgroup><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
     }
@@ -2502,30 +2777,17 @@ async function downloadSectorMembersPDF(members, sectorLabel) {
           <div style="position:absolute;inset:0;background-image:url('site-bg.jpg');background-size:cover;background-position:center;opacity:0.08;"></div>
           <div style="position:relative;padding:${MARGIN}px;direction:rtl;">
             <div style="text-align:center;margin-bottom:10px;">
-              <div style="font-family:'Aref Ruqaa',serif;font-size:22px;color:#7C1F2C;font-weight:700;">قطاع ${escapeHTML(cleanLabel(sectorLabel))}</div>
-              <div style="font-family:'Cairo',sans-serif;font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
-              <div style="font-family:'Cairo',sans-serif;font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
+              <div style="font-family:${PDF_HEAD_FONT}font-size:22px;color:#7C1F2C;font-weight:700;">قطاع ${escapeHTML(cleanLabel(sectorLabel))}</div>
+              <div style="font-family:${PDF_FONT_STACK}font-size:10px;color:#AD8332;font-weight:700;margin-top:2px;">إيبارشية شرق المنيا للأقباط الأرثوذكس</div>
+              <div style="font-family:${PDF_FONT_STACK}font-size:11px;color:#591420;font-weight:700;margin-top:1px;">كنيسة الأنبا بيشوي بالمنيا الجديدة</div>
             </div>
             <div style="width:${BLOCK_W}px;">${tableHTML(pageBlock)}</div>
           </div>
         </div>`;
     }
 
-    const stage = document.createElement('div');
-    stage.style.cssText = 'position:fixed;left:-99999px;top:0;';
-    document.body.appendChild(stage);
-    cleanupEls.push(stage);
-
     const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
-    for (let i = 0; i < blocks.length; i++) {
-      stage.innerHTML = pageHTML(blocks[i]);
-      const pageEl = stage.firstElementChild;
-      // eslint-disable-next-line no-await-in-loop
-      const canvas = await window.html2canvas(pageEl, { scale: 2, backgroundColor: '#FFFDF8', useCORS: true });
-      const imgData = canvas.toDataURL('image/png');
-      if (i > 0) pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, 0, PAGE_W, PAGE_H);
-    }
+    await _pdfRenderPages(pdf, blocks.map((b) => pageHTML(b)), PAGE_W, PAGE_H);
 
     const stamp = new Date().toISOString().slice(0, 10);
     pdf.save(`قطاع_${cleanLabel(sectorLabel)}_${stamp}.pdf`);
