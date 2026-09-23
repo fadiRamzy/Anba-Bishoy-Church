@@ -3468,7 +3468,7 @@ function debounce(fn, wait) {
    simple failure message as any other error, so nothing about the backend is
    ever exposed to the user.
    ========================================================================== */
-const TELEGRAM_RELAY_ENDPOINT = 'https://anba-bishoy-telegram-relay.YOUR_SUBDOMAIN.workers.dev/api/telegram/share';
+const TELEGRAM_RELAY_ENDPOINT = 'https://anba-bishoy-telegram-relay.fadi6298.workers.dev/api/telegram/share';
 
 const TELEGRAM_SHARE = {
   endpoint() {
