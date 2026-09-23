@@ -45,7 +45,6 @@ const DEFAULT_TELEGRAM_API_BASE = 'https://api.telegram.org';
 const DEFAULT_MAX_JSON_BYTES = 4 * 1024 * 1024; // 4 MB (Telegram allows 50 MB per bot upload)
 const SHARE_PATH = '/api/telegram/share';
 const HEALTH_PATH = '/api/telegram/health';
-const DIAG_PATH = '/api/telegram/diag'; // TEMPORARY diagnostic route
 
 /* Origins allowed to call the relay. The relay is public infrastructure, so
    this is defence-in-depth (Origin can be forged from a non-browser client),
@@ -268,75 +267,6 @@ async function handleRelayRequest(input, deps = {}) {
     }, cors);
   }
 
-  /* ==========================================================================
-     TEMPORARY DIAGNOSTIC — remove once the 404 is explained.
-     GET /api/telegram/diag
-
-     Answers exactly one question: can THIS Worker use its own
-     TELEGRAM_BOT_TOKEN against Telegram? It calls getMe from inside the
-     runtime and reports the HTTP status / Telegram error.
-
-     It returns only *metadata* about the secret — length, whitespace and
-     control-character flags, a shape check, and a non-reversible SHA-256
-     fingerprint prefix so the stored value can be compared against a known
-     good one. The token itself, and any URL containing it, are never
-     returned, logged or echoed.
-     ========================================================================== */
-  if (path.replace(/\/+$/, '') === DIAG_PATH) {
-    const rawToken = typeof env.TELEGRAM_BOT_TOKEN === 'string' ? env.TELEGRAM_BOT_TOKEN : '';
-    const trimmedToken = rawToken.trim();
-    const base = (env.TELEGRAM_API_BASE || DEFAULT_TELEGRAM_API_BASE).replace(/\/+$/, '');
-    const rawChat = String(env.TELEGRAM_CHAT_ID == null ? '' : env.TELEGRAM_CHAT_ID);
-
-    let fingerprint = 'unavailable';
-    try {
-      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawToken));
-      fingerprint = Array.from(new Uint8Array(digest))
-        .map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
-    } catch (e) { /* leave as 'unavailable' */ }
-
-    let getMe = { attempted: false };
-    if (rawToken) {
-      try {
-        const r = await fetchImpl(`${base}/bot${rawToken}/getMe`);
-        let body = null;
-        try { body = await r.json(); } catch (e) { body = null; }
-        getMe = {
-          attempted: true,
-          httpStatus: r.status,
-          ok: Boolean(body && body.ok === true),
-          error_code: body ? body.error_code : null,
-          description: body && body.description ? String(body.description).slice(0, 120) : null,
-          /* The bot's public @username only — proves WHICH token is loaded
-             without revealing any part of the token itself. */
-          botUsername: body && body.ok && body.result ? body.result.username : null,
-        };
-      } catch (e) {
-        getMe = {
-          attempted: true, httpStatus: null, ok: false, error_code: null,
-          description: 'fetch threw: ' + String(e && e.message).slice(0, 120),
-        };
-      }
-    }
-
-    return json(200, {
-      ok: true,
-      diagnostic: true,
-      apiBase: base,
-      tokenPresent: rawToken.length > 0,
-      tokenLength: rawToken.length,
-      tokenLengthTrimmed: trimmedToken.length,
-      hasLeadingOrTrailingWhitespace: rawToken !== trimmedToken,
-      containsNewlineOrControlChar: /[\r\n\t\u0000-\u001f\u007f]/.test(rawToken),
-      containsQuoteChar: /["']/.test(rawToken),
-      matchesExpectedTokenShape: /^[0-9]{8,10}:[A-Za-z0-9_-]{35}$/.test(trimmedToken),
-      tokenFingerprintSha256_16: fingerprint,
-      chatIdPresent: rawChat.trim().length > 0,
-      chatIdLooksNumeric: /^-?\d{5,}$/.test(rawChat.trim()),
-      getMe,
-    }, cors);
-  }
-
   if (path.replace(/\/+$/, '') !== SHARE_PATH) {
     return json(404, { ok: false, error: 'غير موجود' }, cors);
   }
@@ -458,7 +388,6 @@ export {
   isOriginAllowed,
   SHARE_PATH,
   HEALTH_PATH,
-  DIAG_PATH,
   DEFAULT_TELEGRAM_API_BASE,
   DEFAULT_MAX_JSON_BYTES,
   DEFAULT_ALLOWED_ORIGINS,
