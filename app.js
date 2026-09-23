@@ -34,6 +34,7 @@ const ICONS = {
   cake: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7a2 2 0 012-2h12a2 2 0 012 2v7M2 21h20M4 14a3 3 0 013-3h10a3 3 0 013 3M9 9V6M12 9V6M15 9V6M9 6c0-.8.5-1.2.5-2S9 2.5 9 2M12 6c0-.8.5-1.2.5-2S12 2.5 12 2M15 6c0-.8.5-1.2.5-2S15 2.5 15 2"/></svg>',
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>',
   book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5c-2-1.5-5-2-8-2v16c3 0 6 .5 8 2 2-1.5 5-2 8-2V3c-3 0-6 .5-8 2z"/><path d="M12 5v16"/></svg>',
+  send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
 };
 
 /* ---------------------------------------------------------------------- */
@@ -3446,6 +3447,123 @@ function debounce(fn, wait) {
 /* ---------------------------------------------------------------------- */
 /*  Admin panel (export / import / data tools)                            */
 /* ---------------------------------------------------------------------- */
+
+/* ==========================================================================
+   "مشاركة البيانات" — send the Services Directory (دليل الخدمات) backup to
+   the Telegram group as a document.
+
+   SECURITY
+   --------
+   This site is 100% static (GitHub Pages), so a Telegram bot token must never
+   live here: anything shipped to the browser is public. The browser therefore
+   only ever talks to a small serverless relay (see telegram-relay/) which
+   holds the token as a server-side secret and does the actual upload.
+   No token, no chat_id and no Telegram API call exist in this file.
+
+   CONFIG (the only thing to set after deploying the relay)
+   -------------------------------------------------------
+   Put the relay URL below, or skip editing this file entirely by defining
+   window.TELEGRAM_SHARE_CONFIG = { endpoint: 'https://...' } before app.js
+   loads. Until it points at a deployed relay the button reports the same
+   simple failure message as any other error, so nothing about the backend is
+   ever exposed to the user.
+   ========================================================================== */
+const TELEGRAM_RELAY_ENDPOINT = 'https://anba-bishoy-telegram-relay.YOUR_SUBDOMAIN.workers.dev/api/telegram/share';
+
+const TELEGRAM_SHARE = {
+  endpoint() {
+    const override = window.TELEGRAM_SHARE_CONFIG && window.TELEGRAM_SHARE_CONFIG.endpoint;
+    return (typeof override === 'string' && override.trim()) ? override.trim() : TELEGRAM_RELAY_ENDPOINT;
+  },
+
+  isConfigured() {
+    const ep = this.endpoint();
+    return /^https?:\/\//i.test(ep) && !ep.includes('YOUR_SUBDOMAIN');
+  },
+};
+
+/* Guard against double submissions (button is also disabled visually). */
+let telegramShareInFlight = false;
+
+/* The only two strings this feature ever shows the user. Deliberately free of
+   any mention of the destination, the backend, a record count or an HTTP
+   detail — where the backup goes is an implementation detail the servant does
+   not need to see. */
+const SHARE_SUCCESS_MESSAGE = 'تم مشاركة اخر تحديث للبيانات لديك';
+const SHARE_FAILURE_MESSAGE = 'تعذّرت مشاركة البيانات. حاول مرة أخرى.';
+
+/* Password required before this feature builds or sends anything. Stored as a
+   SHA-256 hash, exactly like the existing ADMIN_PIN_HASH pattern, and kept in
+   its own constant so the existing admin PIN / unlock behaviour is untouched.
+   Verified on every click — deliberately NOT cached in sessionStorage, so an
+   unlocked admin session never skips it. */
+const SHARE_PIN_HASH = '65956c853f2004feac38894fe8ed6a047126f326cb8312e56acb9839633c296b';
+
+/* Reuses the app's standard PIN dialog (openPinModal). Resolves true only when
+   the password matches; false when it is wrong or the dialog is dismissed.
+   Nothing is read from the database before this resolves. */
+function requireSharePassword() {
+  return new Promise((resolve) => {
+    openPinModal({
+      title: 'كلمة المرور',
+      message: 'من فضلك ادخل كلمة المرور للمتابعة.',
+      confirmLabel: 'متابعة',
+      onSubmit: async (pin, close) => {
+        const hash = await sha256Hex(pin || '');
+        if (hash !== SHARE_PIN_HASH) return 'كلمة المرور غير صحيحة';
+        close();
+        resolve(true);
+      },
+      onCancel: () => resolve(false),
+    });
+  });
+}
+
+/* Builds the SAME JSON as the existing "تنزيل نسخة JSON" button (it reuses
+   MembersDB.exportJSON(), which reads only the "members" store — i.e. the
+   Services Directory and nothing else: no Bible data, no settings store, no
+   admin PIN, no visitation families) and hands it to the relay.
+   Resolves with { ok, records, message_id } / { ok:false, error }. */
+async function buildAndSendServicesDirectory() {
+  if (!TELEGRAM_SHARE.isConfigured()) {
+    throw new Error('خدمة المشاركة غير مُعدّة بعد');
+  }
+
+  /* Reuse the existing export logic verbatim. */
+  const json = await MembersDB.exportJSON();
+  const records = JSON.parse(json);
+  if (!Array.isArray(records)) throw new Error('تعذر قراءة بيانات دليل الخدمات');
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  const filename = `church-services-directory-${stamp}.json`;
+
+  const res = await fetch(TELEGRAM_SHARE.endpoint(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      filename,
+      caption: `نسخة احتياطية من دليل الخدمات — ${records.length} سجل — ${stamp}`,
+      json,
+    }),
+  });
+
+  let payload = null;
+  try {
+    payload = await res.json();
+  } catch (e) {
+    payload = null;
+  }
+
+  if (!res.ok || !payload || payload.ok !== true) {
+    const detail = payload && payload.error ? payload.error : `رمز الخطأ ${res.status}`;
+    const err = new Error(detail);
+    err.status = res.status;
+    throw err;
+  }
+
+  return { ok: true, records: records.length, message_id: payload.message_id, filename };
+}
+
 async function renderAdminPanel() {
   renderChrome(true);
   const total = await MembersDB.count();
@@ -3460,6 +3578,7 @@ async function renderAdminPanel() {
         <h3>${ICONS.download.replace('width="19"','width="17"')} تصدير نسخة كاملة من البيانات</h3>
         <div class="admin-actions">
           <button id="exportBtn" class="btn btn-gold">${ICONS.download}<span>تنزيل نسخة JSON</span></button>
+          <button id="shareBtn" class="btn btn-primary">${ICONS.send}<span>مشاركة البيانات المحدثه</span></button>
         </div>
       </div>
 
@@ -3497,6 +3616,38 @@ async function renderAdminPanel() {
     a.click();
     URL.revokeObjectURL(url);
     showToast('تم تنزيل النسخة الاحتياطية', 'success');
+  });
+
+  /* "مشاركة البيانات المحدثه" — asks for the password first, and only then
+     builds the Services Directory data and uploads it through the existing
+     secure relay. Wrong or cancelled password means nothing is read, built or
+     sent. The user sees one short message and stays on this page either way. */
+  document.getElementById('shareBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('shareBtn');
+    if (!btn || telegramShareInFlight) return; // block duplicate clicks
+    if (!(await requireSharePassword())) return; // gate BEFORE any data access
+    telegramShareInFlight = true;
+    const idleHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    btn.innerHTML = `${ICONS.send}<span>جارٍ الإرسال…</span>`;
+    try {
+      await buildAndSendServicesDirectory();
+      showToast(SHARE_SUCCESS_MESSAGE, 'success');
+    } catch (err) {
+      /* Detail goes to the console for whoever maintains the site — never to
+         the screen. */
+      console.warn('[share] failed:', err && err.message ? err.message : err);
+      showToast(SHARE_FAILURE_MESSAGE, 'danger');
+    } finally {
+      telegramShareInFlight = false;
+      const restored = document.getElementById('shareBtn');
+      if (restored) {
+        restored.disabled = false;
+        restored.removeAttribute('aria-busy');
+        restored.innerHTML = idleHTML;
+      }
+    }
   });
 
   document.getElementById('importFile').addEventListener('change', async (e) => {
