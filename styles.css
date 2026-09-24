@@ -1274,7 +1274,7 @@ button.chip { font-family: inherit; cursor: pointer; }
   max-width: none;
   gap: 0;
   margin: 16px auto 30px;
-  touch-action: pan-y;          /* rotate horizontally, still scroll the page */
+  touch-action: none;           /* every drag direction turns the dial freely */
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;

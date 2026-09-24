@@ -503,69 +503,165 @@ function initServiceWheel(wheel) {
 
   const nodes = Array.prototype.slice.call(wheel.querySelectorAll('.wheel-node'));
   if (!nodes.length) return;
-  const STEP = 360 / nodes.length;
-  const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  let rot = 0, raf = 0;
-  let dragging = false, moved = false, swallowClick = false;
-  let lastAngle = 0, lastTime = 0, velocity = 0;
+  const STEP = 360 / nodes.length;     /* where a service sits on the rim */
+  const MAX_V = 2.2;                   /* deg/ms — hard flick ≈ two turns  */
+  const FRICTION = 0.997;              /* per ms — long, natural slow-down */
+  const HAND_OVER = 0.06;              /* deg/ms — when the landing begins */
+  const OMEGA = 0.013;                 /* critically damped landing spring */
+  const calm = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
-  function apply(value) {
-    rot = value;
-    wheel.style.setProperty('--wheel-rot', value.toFixed(2) + 'deg');
+  let rot = 0;                         /* current angle, always 0–360      */
+  let vel = 0;                         /* deg/ms                           */
+  let raf = 0, mode = '';              /* '', 'free', 'land'               */
+  let target = 0;
+  let dragging = false, moved = false, swallowClick = false, stoppedSpin = false;
+  let pointerId = null, cx = 0, cy = 0, lastAngle = 0, lastTime = 0, topIndex = -1;
+
+  const now = (window.performance && performance.now)
+    ? function () { return performance.now(); }
+    : function () { return Date.now(); };
+
+  /* --- render ---------------------------------------------------------- */
+  function draw(value) {
+    rot = ((value % 360) + 360) % 360;                 /* endless 360° turn */
+    wheel.style.setProperty('--wheel-rot', rot.toFixed(2) + 'deg');
     let top = 0, best = Infinity;
     for (let i = 0; i < nodes.length; i++) {
-      const a = (((i * STEP + value) % 360) + 360) % 360;
-      const d = Math.min(a, 360 - a);
+      const a = (((i * STEP + rot) % 360) + 360) % 360;
+      const d = a > 180 ? 360 - a : a;
       if (d < best) { best = d; top = i; }
     }
-    for (let i = 0; i < nodes.length; i++) nodes[i].classList.toggle('is-top', i === top);
+    if (top !== topIndex) {                            /* only touch the DOM
+                                                          when it changes   */
+      if (topIndex >= 0) nodes[topIndex].classList.remove('is-top');
+      nodes[top].classList.add('is-top');
+      topIndex = top;
+    }
   }
 
-  function angleAt(e) {
+  /* --- geometry (measured once per drag, not on every move) ------------- */
+  function measure() {
     const r = wheel.getBoundingClientRect();
-    return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI;
+    cx = r.left + r.width / 2;
+    cy = r.top + r.height / 2;
+  }
+  function angleAt(e) {
+    return Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI;
+  }
+  function onScroll() { measure(); }
+
+  /* --- physics: one shared rAF loop, stopped whenever it is not needed --- */
+  function stop() {
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+    mode = '';
+    wheel.classList.remove('is-turning');
   }
 
-  function settle(target) {
-    const snapped = Math.round(target / STEP) * STEP;
-    const from = rot;
-    const delta = snapped - from;
-    if (calm || Math.abs(delta) < 0.05) {
-      apply(snapped);
-      wheel.classList.remove('is-turning');
+  function nearestStop(from, direction) {
+    /* the detent the wheel is drifting towards, so it never jerks backwards */
+    const look = from + direction * STEP * 0.35;
+    return Math.round(look / STEP) * STEP;
+  }
+
+  function run() {
+    let last = now();
+    const startedAt = last;
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(function tick() {
+      if (!wheel.isConnected) { stop(); return; }      /* route changed     */
+      const t = now();
+      const dt = Math.min(48, t - last) || 16;
+      last = t;
+
+      if (mode === 'free') {
+        draw(rot + vel * dt);
+        vel *= Math.pow(FRICTION, dt);
+        if (Math.abs(vel) <= HAND_OVER) {
+          mode = 'land';
+          target = nearestStop(rot, vel >= 0 ? 1 : -1);
+        }
+      } else if (mode === 'land') {
+        /* critically damped spring — carries the remaining speed smoothly
+           into the nearest service instead of snapping onto it */
+        let diff = target - rot;
+        while (diff > 180) diff -= 360;
+        while (diff < -180) diff += 360;
+        vel += (OMEGA * OMEGA * diff - 2 * OMEGA * vel) * dt;
+        draw(rot + vel * dt);
+        diff = target - rot;
+        while (diff > 180) diff -= 360;
+        while (diff < -180) diff += 360;
+        if (Math.abs(diff) < 0.06 && Math.abs(vel) < 0.004) {
+          draw(target);
+          vel = 0;
+          stop();
+          return;
+        }
+      } else { stop(); return; }
+
+      if (t - startedAt > 8000) { draw(target || rot); stop(); return; }  /* safety */
+      raf = requestAnimationFrame(tick);
+    });
+  }
+
+  function release() {
+    if (!dragging) return;
+    dragging = false;
+    pointerId = null;
+    window.removeEventListener('scroll', onScroll, true);
+    if (!moved) {
+      /* a hand laid on a spinning wheel stops it; that touch must not also
+         open a service — the next, deliberate tap does */
+      if (stoppedSpin) swallowClick = true;
+      /* glide to the nearest service so the dial always comes to rest on
+         one of the three */
+      if (calm) { draw(Math.round(rot / STEP) * STEP); stop(); return; }
+      vel = 0;
+      target = Math.round(rot / STEP) * STEP;
+      if (Math.abs(((target - rot + 540) % 360) - 180) < 0.05) { stop(); return; }
+      mode = 'land';
+      wheel.classList.add('is-turning');
+      run();
       return;
     }
-    const dur = Math.min(640, 240 + Math.abs(delta) * 3.2);
-    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
-    (function tick(now) {
-      const p = Math.min(1, ((now || t0) - t0) / dur);
-      apply(from + delta * (1 - Math.pow(1 - p, 3)));      /* easeOutCubic */
-      if (p < 1) raf = requestAnimationFrame(tick);
-      else wheel.classList.remove('is-turning');
-    })(t0);
+    swallowClick = true;                     /* a turn must never navigate */
+    if (now() - lastTime > 90) vel = 0;      /* held still before letting go */
+    if (calm) { draw(Math.round(rot / STEP) * STEP); stop(); return; }
+    vel = Math.max(-MAX_V, Math.min(MAX_V, vel));
+    mode = Math.abs(vel) > HAND_OVER ? 'free' : 'land';
+    if (mode === 'land') target = nearestStop(rot, vel >= 0 ? 1 : -1);
+    run();
   }
 
+  /* --- input ------------------------------------------------------------ */
   wheel.addEventListener('pointerdown', function (e) {
     if (e.button && e.button !== 0) return;
-    cancelAnimationFrame(raf);
+    if (pointerId !== null) return;                    /* ignore 2nd finger */
+    pointerId = e.pointerId;
+    stoppedSpin = !!raf;                               /* caught in motion? */
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }   /* grab it mid-spin: */
+    mode = '';                                         /* freeze right here */
+    vel = 0;
     dragging = true;
     moved = false;
     swallowClick = false;
-    velocity = 0;
+    measure();
     lastAngle = angleAt(e);
     lastTime = e.timeStamp;
+    window.addEventListener('scroll', onScroll, true);
     /* the pointer is captured only once it really starts to turn, so a plain
        tap keeps its normal click target and navigates exactly as before */
   });
 
   wheel.addEventListener('pointermove', function (e) {
-    if (!dragging) return;
+    if (!dragging || e.pointerId !== pointerId) return;
     const a = angleAt(e);
     let d = a - lastAngle;
     if (d > 180) d -= 360; else if (d < -180) d += 360;
     const dt = Math.max(1, e.timeStamp - lastTime);
-    velocity = d / dt;
+    vel = vel * 0.2 + (d / dt) * 0.8;                  /* follows the hand  */
     lastAngle = a;
     lastTime = e.timeStamp;
     if (!moved && Math.abs(d) > 0.8) {
@@ -573,18 +669,10 @@ function initServiceWheel(wheel) {
       wheel.classList.add('is-turning');
       try { wheel.setPointerCapture(e.pointerId); } catch (err) {}
     }
-    apply(rot + d);
+    draw(rot + d);
     if (moved) e.preventDefault();
   });
 
-  function release() {
-    if (!dragging) return;
-    dragging = false;
-    if (!moved) { wheel.classList.remove('is-turning'); settle(rot); return; }
-    swallowClick = true;                       /* a turn must not navigate */
-    const glide = Math.max(-STEP, Math.min(STEP, velocity * 130));
-    settle(rot + glide);
-  }
   wheel.addEventListener('pointerup', release);
   wheel.addEventListener('pointercancel', release);
   wheel.addEventListener('lostpointercapture', release);
@@ -598,16 +686,21 @@ function initServiceWheel(wheel) {
 
   wheel.addEventListener('dragstart', function (e) { e.preventDefault(); });
 
-  /* laptops: the arrow keys turn the dial too */
+  /* laptops: the arrow keys turn the dial by one service */
   wheel.addEventListener('keydown', function (e) {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
-    cancelAnimationFrame(raf);
+    const dir = e.key === 'ArrowLeft' ? -1 : 1;
+    if (calm) { draw(Math.round(rot / STEP) * STEP + dir * STEP); return; }
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    vel = 0;
+    target = Math.round(rot / STEP) * STEP + dir * STEP;
+    mode = 'land';
     wheel.classList.add('is-turning');
-    settle(rot + (e.key === 'ArrowLeft' ? -STEP : STEP));
+    run();
   });
 
-  apply(0);
+  draw(0);
 }
 
 /* ---------------------------------------------------------------------- */
