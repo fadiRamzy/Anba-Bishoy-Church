@@ -1241,6 +1241,173 @@ button.chip { font-family: inherit; cursor: pointer; }
   .landing-grid > a:last-child:nth-child(odd) { grid-column: auto; }
 }
 
+/* --------------------------------------------------------------------------
+   Home — the three main service cards (دليل الخدمات / خدمات الافتقاد /
+   الكتاب المقدس والتقويم).
+
+   Visual refinement only: same markup, same links, same text. Everything
+   here is scoped to `.landing-grid` so the Bible home cards
+   (`.bible-home-grid .landing-card`) and every other screen keep the
+   styling they already have.
+
+   The look stays inside the church identity (ivory surface, maroon, gold
+   hairlines) but is presented with iOS-style polish: squircle app-icon
+   tiles, layered soft elevation, a light inner highlight, a warm gold
+   glow and a springy press feedback.
+   -------------------------------------------------------------------------- */
+.landing-grid {
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.landing-grid > .landing-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 28px 20px 26px;
+  gap: 16px;
+  border-radius: 26px;
+  border: 1px solid rgba(173, 131, 50, 0.3);
+  background:
+    linear-gradient(180deg, #FFFFFF 0%, #FEFCF7 55%, #FBF6EA 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 1px 2px rgba(42, 33, 27, 0.05),
+    0 16px 32px -20px rgba(42, 33, 27, 0.38);
+  transition:
+    transform var(--dur) var(--ease-spring),
+    box-shadow var(--dur) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+
+/* soft golden light falling from the top of the card */
+.landing-grid > .landing-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background:
+    radial-gradient(130% 80% at 50% -15%, rgba(173, 131, 50, 0.16), rgba(173, 131, 50, 0) 62%),
+    linear-gradient(180deg, rgba(124, 31, 44, 0.05), rgba(124, 31, 44, 0) 45%);
+  opacity: .85;
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease);
+}
+
+/* app-icon style tile */
+.landing-grid > .landing-card .icon-wrap {
+  width: 62px;
+  height: 62px;
+  border-radius: 21px;
+  flex: none;
+  color: #FFF8EC;
+  background:
+    linear-gradient(160deg, var(--color-maroon-bright) 0%, var(--color-maroon) 52%, var(--color-maroon-dark) 100%);
+  border: 1px solid rgba(89, 20, 32, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -6px 12px rgba(89, 20, 32, 0.35),
+    0 0 0 4px rgba(231, 214, 168, 0.32),
+    0 10px 20px -10px rgba(124, 31, 44, 0.75);
+  transition:
+    transform var(--dur) var(--ease-spring),
+    box-shadow var(--dur) var(--ease);
+}
+.landing-grid > .landing-card .icon-wrap svg {
+  width: 29px;
+  height: 29px;
+  stroke-width: 1.7;
+  filter: drop-shadow(0 1px 1px rgba(89, 20, 32, 0.45));
+}
+
+.landing-grid > .landing-card .landing-card-title {
+  display: block;
+  font-size: 1.2rem;
+  color: var(--color-maroon-dark);
+  letter-spacing: .2px;
+  line-height: 1.55;
+}
+
+/* thin gold rule under the title — echoes the hero/section ornaments */
+.landing-grid > .landing-card .landing-card-title::after {
+  content: '';
+  display: block;
+  width: 46px;
+  height: 2px;
+  margin: 10px auto 0;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, rgba(173, 131, 50, 0), var(--color-gold), rgba(173, 131, 50, 0));
+  opacity: .6;
+  transition: width var(--dur) var(--ease), opacity var(--dur) var(--ease);
+}
+
+.landing-grid > .landing-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(173, 131, 50, 0.62);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 2px 4px rgba(42, 33, 27, 0.06),
+    0 26px 44px -24px rgba(42, 33, 27, 0.48);
+}
+.landing-grid > .landing-card:hover::before { opacity: 1; }
+.landing-grid > .landing-card:hover .icon-wrap {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -6px 12px rgba(89, 20, 32, 0.35),
+    0 0 0 5px rgba(231, 214, 168, 0.45),
+    0 14px 24px -10px rgba(124, 31, 44, 0.8);
+}
+.landing-grid > .landing-card:hover .landing-card-title::after { width: 66px; opacity: .95; }
+
+.landing-grid > .landing-card:active {
+  transform: scale(.975);
+  transition-duration: var(--dur-fast);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 2px rgba(42, 33, 27, 0.06),
+    0 8px 16px -12px rgba(42, 33, 27, 0.4);
+}
+.landing-grid > .landing-card:active .icon-wrap { transform: scale(.97); }
+
+.landing-grid > .landing-card:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 3px;
+}
+
+/* Phones: the app-style row keeps the same refinements, tightened up */
+@media (max-width: 719px) {
+  .landing-grid { gap: 12px; }
+  .landing-grid > .landing-card {
+    padding: 15px 16px;
+    gap: 14px;
+    border-radius: 22px;
+  }
+  .landing-grid > .landing-card .icon-wrap {
+    width: 54px;
+    height: 54px;
+    border-radius: 18px;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.34),
+      inset 0 -5px 10px rgba(89, 20, 32, 0.35),
+      0 0 0 3px rgba(231, 214, 168, 0.32),
+      0 8px 16px -9px rgba(124, 31, 44, 0.7);
+  }
+  .landing-grid > .landing-card .icon-wrap svg { width: 26px; height: 26px; }
+  .landing-grid > .landing-card .landing-card-title { font-size: 1.06rem; }
+  /* the gold rule belongs to the centred layout only */
+  .landing-grid > .landing-card .landing-card-title::after { display: none; }
+  .landing-grid > .landing-card::after {
+    width: 15px;
+    height: 15px;
+    opacity: .5;
+    transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
+  }
+  .landing-grid > .landing-card:hover { transform: translateY(-2px); }
+  .landing-grid > .landing-card:active::after { transform: translateX(-3px); opacity: .9; }
+}
+
 /* ==========================================================================
    13. Empty states
    ========================================================================== */
