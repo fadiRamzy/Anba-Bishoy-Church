@@ -1,0 +1,27 @@
+# Generated web bundle for Capacitor (rebuilt by `npm run sync:web`)
+www/
+
+# Local build artifacts (rebuilt by npm run build:*)
+dist/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Android build outputs
+android/.gradle/
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/build/
+android/*.iml
+android/app/*.iml
+android/local.properties
+
+# Release signing secrets — NEVER commit these
+android/keystore.properties
+*.keystore
+*.jks
+
+# OS / editor
+.DS_Store
+Thumbs.db

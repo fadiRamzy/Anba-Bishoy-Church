@@ -3,15 +3,22 @@ name: Build Android
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ Main ]
     paths:
       - 'index.html'
       - 'app.js'
+      - 'app-shell.js'
       - 'db.js'
+      - 'capacitor-bridge.js'
       - 'styles.css'
       - 'seed.json'
+      - 'service-worker.js'
       - '*.jpg'
       - '*.webp'
+      - 'bible/**'
+      - 'calendar/**'
+      - 'vendor/**'
+      - 'scripts/**'
       - 'android/**'
       - 'capacitor.config.json'
       - 'package.json'

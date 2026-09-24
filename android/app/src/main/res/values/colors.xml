@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App theme colors referenced by styles.xml (gold/cream church theme). -->
+    <color name="colorPrimary">#8C6926</color>
+    <color name="colorPrimaryDark">#6E541D</color>
+    <color name="colorAccent">#AD8332</color>
+</resources>

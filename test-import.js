@@ -1,10 +1,11 @@
 /* Verification harness for the JSON-import change.
- * Mocks IndexedDB in-memory, loads the REAL /home/user/db.js, and runs the
+ * Mocks IndexedDB in-memory, loads the REAL db.js, and runs the
  * task's verification matrix against BOTH MembersDB and VisitationDB.
- * Also runs static checks against /home/user/app.js (multiple attr, handlers).
+ * Also runs static checks against app.js (multiple attr, handlers).
  */
 const fs = require('fs');
 const vm = require('vm');
+const path = require('path');
 
 // ---------- in-memory IndexedDB mock (just enough for db.js) ----------
 const _maps = {
@@ -80,7 +81,7 @@ const fakeIndexedDB = {
 };
 
 // ---------- load real db.js ----------
-const dbCode = fs.readFileSync('/home/user/db.js', 'utf8');
+const dbCode = fs.readFileSync(path.join(__dirname, 'db.js'), 'utf8');
 const sandbox = { console, setTimeout, indexedDB: fakeIndexedDB };
 vm.createContext(sandbox);
 vm.runInContext(
@@ -280,7 +281,7 @@ function names(list) { return list.map(r => r.name); }
   // ================================================================
   // APP.JS static checks
   // ================================================================
-  const app = fs.readFileSync('/home/user/app.js', 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8');
   const has = (s) => app.includes(s);
   ok(has('id="importFile" accept=".json,application/json" multiple'), 'app.js: Members import input has multiple');
   ok(has('id="visitationImportFile" accept=".json,application/json" multiple'), 'app.js: Visitation import input has multiple');
