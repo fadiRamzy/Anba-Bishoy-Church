@@ -81,7 +81,7 @@
 
   /* --- app shell metrics --- */
   --tab-bar-h: 62px;
-  --app-bar-h: 58px;
+  --app-bar-h: 54px;
   --sat: env(safe-area-inset-top, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px);
@@ -203,8 +203,8 @@ main {
   align-items: center;
   gap: 10px;
   min-height: var(--app-bar-h);
-  padding-top: 6px;
-  padding-bottom: 6px;
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
 /* subtle liturgical accent line at the very bottom of the bar */
@@ -375,7 +375,7 @@ main {
    5. Brand hero — eparchy line + the section's verse
    ========================================================================== */
 .brand-hero {
-  padding: 14px 0 4px;
+  padding: 10px 0 2px;
   animation: heroIn var(--dur-slow) var(--ease) both;
 }
 .brand-hero[hidden] { display: none; }
@@ -482,10 +482,19 @@ body[data-section="visitation"] .brand-verse {
 }
 
 @media (max-width: 720px) {
-  .brand-hero { padding-top: 10px; }
-  .brand-eparchy { font-size: 0.94rem; }
-  .hero-verse-card { padding: 20px 16px 16px; border-radius: var(--radius-lg); }
-  .brand-verse { font-size: 1rem; line-height: 2; }
+  /* Compact identity block: same content, tighter vertical rhythm so the
+     first real content sits visibly higher on a phone screen. */
+  .brand-hero { padding-top: 6px; }
+  .brand-eparchy {
+    font-size: 0.92rem;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+  }
+  .hero-verse-card { padding: 14px 14px 12px; border-radius: var(--radius-lg); }
+  .hero-ornament { height: 24px; margin-bottom: 0; }
+  .hero-ornament svg { width: 17px; height: 17px; }
+  .brand-verse { font-size: 0.95rem; line-height: 1.85; margin-top: 2px; }
+  .brand-verse-ref { margin-top: 6px; padding: 2px 12px; font-size: 0.72rem; }
 }
 
 /* Inner screens: hide the identity banner so content starts immediately. */
@@ -558,6 +567,15 @@ body[data-depth="page"] .brand-hero { display: none; }
   font-weight: 700;
   letter-spacing: 0;
   white-space: nowrap;
+}
+.tab-item { min-width: 0; }
+/* The services-directory tab carries a longer label: let it wrap onto two
+   tidy lines instead of shrinking every other tab. */
+.tab-item[data-tab="directory"] .tab-label {
+  white-space: normal;
+  line-height: 1.15;
+  font-size: 0.6rem;
+  text-align: center;
 }
 .tab-item:active .tab-icon { transform: scale(.88); }
 .tab-item.active { color: var(--color-maroon); }
@@ -661,7 +679,7 @@ body.has-modal .tab-bar { pointer-events: none; }
    8. Layout, section headings, breadcrumbs
    ========================================================================== */
 main > .container:first-child,
-#app > .container { padding-top: 18px; }
+#app > .container { padding-top: 14px; }
 
 .section-title {
   font-family: var(--font-display);
@@ -1936,6 +1954,9 @@ label[for="importFile"] svg { width: 16px; height: 16px; }
 /* ==========================================================================
    19. Footer
    ========================================================================== */
+/* The footer only ever held the "صفحة إدارة البيانات" button; data management
+   is reachable from the bottom navigation (الإدارة), so the button is hidden. */
+#siteFooter { display: none; }
 .site-footer {
   text-align: center;
   padding: 22px 20px 30px;
