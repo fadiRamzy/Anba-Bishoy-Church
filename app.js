@@ -1681,7 +1681,7 @@ async function renderVisitationForm(idStr) {
     const matches = await VisitationDB.searchByName(name);
     const relevant = matches.filter((m) => !isEdit || m.id !== v.id);
     if (relevant.length) {
-      dupBox.innerHTML = `⚠️ يوجد بالفعل ${relevant.length} أسرة مشابهة في قاعدة البيانات: ` +
+      dupBox.innerHTML = `يوجد بالفعل ${relevant.length} أسرة مشابهة في قاعدة البيانات: ` +
         relevant.slice(0, 4).map((m) => escapeHTML(m.name)).join('، ') +
         ' — تأكد إن الأسرة مش مسجلة قبل كده.';
       dupBox.classList.add('show');
@@ -2825,7 +2825,7 @@ async function renderBrowse(key, valueRaw, params) {
           const c = all.filter((m) => (m[section.field] || '') === v).length;
           const label = (section.field === 'stage' || section.field === 'sector') ? cleanLabel(v) : v;
           return `<a href="#/browse/${key}/${encodeURIComponent(v)}" class="member-card">
-            <span class="icon-wrap" style="width:44px;height:44px;border-radius:50%;background:var(--color-maroon-tint);color:var(--color-maroon);display:flex;align-items:center;justify-content:center;flex:none;">${ICONS[section.icon]}</span>
+            <span class="icon-wrap browse-tile">${ICONS[section.icon]}</span>
             <span class="member-info"><span class="member-name">${escapeHTML(label)}</span><span class="member-meta">${c} اسم</span></span>
           </a>`;
         }).join('')}</div>` : `<div class="empty-state">${ICONS.empty}<p>لا توجد بيانات مسجلة بعد لـ ${section.label}</p></div>`}
@@ -3328,7 +3328,7 @@ async function renderForm(idStr) {
     const matches = await MembersDB.searchByName(name);
     const relevant = matches.filter((m) => !isEdit || m.id !== v.id);
     if (relevant.length) {
-      dupBox.innerHTML = `⚠️ يوجد بالفعل ${relevant.length} اسم مشابه في قاعدة البيانات: ` +
+      dupBox.innerHTML = `يوجد بالفعل ${relevant.length} اسم مشابه في قاعدة البيانات: ` +
         relevant.slice(0, 4).map((m) => escapeHTML(m.name)).join('، ') +
         ' — تأكد إن الاسم مش مسجل قبل كده.';
       dupBox.classList.add('show');
