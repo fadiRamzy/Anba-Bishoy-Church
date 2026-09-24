@@ -1242,170 +1242,219 @@ button.chip { font-family: inherit; cursor: pointer; }
 }
 
 /* --------------------------------------------------------------------------
-   Home — the three main service cards (دليل الخدمات / خدمات الافتقاد /
-   الكتاب المقدس والتقويم).
+   Home — rotatable circular service wheel (the app's three main services)
 
-   Visual refinement only: same markup, same links, same text. Everything
-   here is scoped to `.landing-grid` so the Bible home cards
-   (`.bible-home-grid .landing-card`) and every other screen keep the
-   styling they already have.
+   Markup (app.js → renderLanding), links/text unchanged:
+     .landing-grid.service-wheel
+       > a.landing-card.wheel-node.wheel-node-1    → #/home       دليل الخدمات
+       > a.landing-card.wheel-node.wheel-node-2    → #/visitation  خدمات الافتقاد
+       > a.landing-card.wheel-node.wheel-node-3    → #/bible       الكتاب المقدس…
 
-   The look stays inside the church identity (ivory surface, maroon, gold
-   hairlines) but is presented with iOS-style polish: squircle app-icon
-   tiles, layered soft elevation, a light inner highlight, a warm gold
-   glow and a springy press feedback.
+   Each service is a compact medallion carrying its own icon AND its name; the
+   three sit on an invisible orbit with a clean, empty centre. The dial can be
+   dragged/swiped round (initServiceWheel in app.js only writes --wheel-rot),
+   and each medallion counter-rotates so its label always stays upright.
+   Colours stay inside the church palette: ivory faces, gold hairlines, and
+   maroon / antique-gold / warm-brown icon chips.
+
+   The generic .landing-card / .landing-grid rules above are still used by the
+   Bible home screen, so they are kept intact and only neutralised here.
    -------------------------------------------------------------------------- */
-.landing-grid {
-  gap: 14px;
-  margin-top: 10px;
-}
+.landing-grid.service-wheel {
+  /* geometry — everything below is a fraction of the dial */
+  --wheel-size: min(290px, 42vh, calc(100vw - 64px));
+  --orbit: calc(var(--wheel-size) * 0.30);    /* medallion distance from centre */
+  --node: calc(var(--wheel-size) * 0.40);     /* medallion diameter             */
+  --wheel-rot: 0deg;                          /* written by the drag handler    */
 
-.landing-grid > .landing-card {
   position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  padding: 28px 20px 26px;
-  gap: 16px;
-  border-radius: 26px;
-  border: 1px solid rgba(173, 131, 50, 0.3);
-  background:
-    linear-gradient(180deg, #FFFFFF 0%, #FEFCF7 55%, #FBF6EA 100%);
+  display: block;
+  width: var(--wheel-size);
+  height: var(--wheel-size);
+  max-width: none;
+  gap: 0;
+  margin: 16px auto 30px;
+  touch-action: pan-y;          /* rotate horizontally, still scroll the page */
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.landing-grid.service-wheel.is-turning { cursor: grabbing; }
+
+/* --- the three service medallions --- */
+.service-wheel .wheel-node {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  width: var(--node);
+  height: var(--node);
+  margin: calc(var(--node) / -2) 0 0 calc(var(--node) / -2);
+  /* orbit position, then counter-rotation so the content stays upright */
+  --angle: calc(var(--base-angle) + var(--wheel-rot));
+  --node-scale: 1;
+  transform:
+    rotate(var(--angle))
+    translateY(calc(var(--orbit) * -1))
+    rotate(calc(var(--angle) * -1))
+    scale(var(--node-scale));
+  padding: 0 calc(var(--node) * 0.1);
+  gap: calc(var(--node) * 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border-radius: 50%;
+  background: linear-gradient(168deg, #FFFDF8 0%, #FBF5E8 52%, #F2E9D4 100%);
+  border: 1px solid rgba(173, 131, 50, 0.4);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    0 1px 2px rgba(42, 33, 27, 0.05),
-    0 16px 32px -20px rgba(42, 33, 27, 0.38);
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.95),
+    inset 0 0 0 4px rgba(255, 255, 255, 0.6),
+    inset 0 0 0 5px rgba(173, 131, 50, 0.16),
+    inset 0 -10px 18px rgba(173, 131, 50, 0.07),
+    0 0 0 5px rgba(255, 255, 255, 0.55),
+    0 14px 26px -16px rgba(42, 33, 27, 0.5);
   transition:
     transform var(--dur) var(--ease-spring),
     box-shadow var(--dur) var(--ease),
-    border-color var(--dur-fast) var(--ease);
+    border-color var(--dur) var(--ease);
+  animation: wheel-node-in .5s var(--ease-spring) backwards;
+  -webkit-user-drag: none;
+}
+.service-wheel .wheel-node::after { content: none; }   /* no list chevron here */
+
+/* while the dial is being turned the transform must follow the finger 1:1 */
+.service-wheel.is-turning .wheel-node {
+  transition: box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
 
-/* soft golden light falling from the top of the card */
-.landing-grid > .landing-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  background:
-    radial-gradient(130% 80% at 50% -15%, rgba(173, 131, 50, 0.16), rgba(173, 131, 50, 0) 62%),
-    linear-gradient(180deg, rgba(124, 31, 44, 0.05), rgba(124, 31, 44, 0) 45%);
-  opacity: .85;
-  pointer-events: none;
-  transition: opacity var(--dur) var(--ease);
+@keyframes wheel-node-in {
+  from {
+    opacity: 0;
+    transform:
+      rotate(var(--angle)) translateY(calc(var(--orbit) * -1)) rotate(calc(var(--angle) * -1)) scale(.74);
+  }
+  to {
+    opacity: 1;
+    transform:
+      rotate(var(--angle)) translateY(calc(var(--orbit) * -1)) rotate(calc(var(--angle) * -1)) scale(var(--node-scale));
+  }
 }
 
-/* app-icon style tile */
-.landing-grid > .landing-card .icon-wrap {
-  width: 62px;
-  height: 62px;
-  border-radius: 21px;
+/* start angles: top, then clockwise in RTL reading order (right, then left) */
+.service-wheel .wheel-node-1 { --base-angle: 0deg;   animation-delay: .05s; }
+.service-wheel .wheel-node-2 { --base-angle: 120deg; animation-delay: .13s; }
+.service-wheel .wheel-node-3 { --base-angle: 240deg; animation-delay: .21s; }
+
+/* per-service icon tones — maroon, antique gold, warm brown */
+.service-wheel .wheel-node-1 { --tone-a: #93283A; --tone-b: #7C1F2C; --tone-c: #591420; --tone-shadow: rgba(124, 31, 44, 0.5); }
+.service-wheel .wheel-node-2 { --tone-a: #C0A055; --tone-b: #AD8332; --tone-c: #8C6926; --tone-shadow: rgba(140, 105, 38, 0.5); }
+.service-wheel .wheel-node-3 { --tone-a: #6E5641; --tone-b: #574230; --tone-c: #3C2C1E; --tone-shadow: rgba(60, 44, 30, 0.5); }
+
+/* icon chip inside the medallion */
+.service-wheel .wheel-node .icon-wrap {
+  width: calc(var(--node) * 0.30);
+  height: calc(var(--node) * 0.30);
   flex: none;
+  border-radius: 50%;
+  background: linear-gradient(158deg, var(--tone-a) 0%, var(--tone-b) 55%, var(--tone-c) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.35);
   color: #FFF8EC;
-  background:
-    linear-gradient(160deg, var(--color-maroon-bright) 0%, var(--color-maroon) 52%, var(--color-maroon-dark) 100%);
-  border: 1px solid rgba(89, 20, 32, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.34),
-    inset 0 -6px 12px rgba(89, 20, 32, 0.35),
-    0 0 0 4px rgba(231, 214, 168, 0.32),
-    0 10px 20px -10px rgba(124, 31, 44, 0.75);
-  transition:
-    transform var(--dur) var(--ease-spring),
-    box-shadow var(--dur) var(--ease);
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 0 0 3px rgba(255, 255, 255, 0.55),
+    0 6px 12px -6px var(--tone-shadow);
+  transition: transform var(--dur) var(--ease-spring), box-shadow var(--dur) var(--ease);
 }
-.landing-grid > .landing-card .icon-wrap svg {
-  width: 29px;
-  height: 29px;
-  stroke-width: 1.7;
-  filter: drop-shadow(0 1px 1px rgba(89, 20, 32, 0.45));
+.service-wheel .wheel-node .icon-wrap svg {
+  width: 54%;
+  height: 54%;
+  stroke-width: 1.8;
 }
 
-.landing-grid > .landing-card .landing-card-title {
-  display: block;
-  font-size: 1.2rem;
+/* service name — inside its own medallion */
+.service-wheel .wheel-node .landing-card-title {
+  position: static;
+  width: auto;
+  max-width: 100%;
+  transform: none;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: max(10.5px, calc(var(--node) * 0.105));
+  line-height: 1.4;
+  letter-spacing: -0.1px;
   color: var(--color-maroon-dark);
-  letter-spacing: .2px;
-  line-height: 1.55;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.85);
+  transition: color var(--dur-fast) var(--ease);
 }
+.service-wheel .wheel-node-3 .landing-card-title { font-size: max(10px, calc(var(--node) * 0.094)); line-height: 1.35; }
 
-/* thin gold rule under the title — echoes the hero/section ornaments */
-.landing-grid > .landing-card .landing-card-title::after {
-  content: '';
-  display: block;
-  width: 46px;
-  height: 2px;
-  margin: 10px auto 0;
-  border-radius: var(--radius-pill);
-  background: linear-gradient(90deg, rgba(173, 131, 50, 0), var(--color-gold), rgba(173, 131, 50, 0));
-  opacity: .6;
-  transition: width var(--dur) var(--ease), opacity var(--dur) var(--ease);
-}
-
-.landing-grid > .landing-card:hover {
-  transform: translateY(-4px);
+/* the medallion currently at the top of the dial reads as the selected one */
+.service-wheel .wheel-node.is-top {
+  --node-scale: 1.05;
   border-color: rgba(173, 131, 50, 0.62);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    0 2px 4px rgba(42, 33, 27, 0.06),
-    0 26px 44px -24px rgba(42, 33, 27, 0.48);
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.95),
+    inset 0 0 0 4px rgba(255, 255, 255, 0.65),
+    inset 0 0 0 5px rgba(173, 131, 50, 0.24),
+    inset 0 -10px 18px rgba(173, 131, 50, 0.1),
+    0 0 0 5px rgba(255, 255, 255, 0.72),
+    0 0 0 6px rgba(173, 131, 50, 0.22),
+    0 18px 30px -16px rgba(42, 33, 27, 0.55);
 }
-.landing-grid > .landing-card:hover::before { opacity: 1; }
-.landing-grid > .landing-card:hover .icon-wrap {
-  transform: translateY(-1px) scale(1.04);
+.service-wheel .wheel-node.is-top .icon-wrap {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    inset 0 -6px 12px rgba(89, 20, 32, 0.35),
-    0 0 0 5px rgba(231, 214, 168, 0.45),
-    0 14px 24px -10px rgba(124, 31, 44, 0.8);
+    0 0 0 3px rgba(255, 255, 255, 0.7),
+    0 0 0 4px rgba(173, 131, 50, 0.22),
+    0 8px 16px -6px var(--tone-shadow);
 }
-.landing-grid > .landing-card:hover .landing-card-title::after { width: 66px; opacity: .95; }
 
-.landing-grid > .landing-card:active {
-  transform: scale(.975);
+/* --- interaction: subtle, springy, iOS-like --- */
+@media (hover: hover) and (pointer: fine) {
+  .service-wheel .wheel-node:hover {
+    --node-scale: 1.06;
+    border-color: rgba(173, 131, 50, 0.7);
+    box-shadow:
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.95),
+      inset 0 0 0 4px rgba(255, 255, 255, 0.65),
+      inset 0 0 0 5px rgba(173, 131, 50, 0.26),
+      inset 0 -10px 18px rgba(173, 131, 50, 0.1),
+      0 0 0 6px rgba(255, 255, 255, 0.8),
+      0 0 0 7px rgba(173, 131, 50, 0.3),
+      0 20px 32px -16px rgba(42, 33, 27, 0.58);
+  }
+  .service-wheel .wheel-node:hover .icon-wrap { transform: scale(1.05); }
+  .service-wheel .wheel-node:hover .landing-card-title { color: var(--color-maroon); }
+}
+
+.service-wheel .wheel-node:active {
+  --node-scale: .965;
   transition-duration: var(--dur-fast);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 1px 2px rgba(42, 33, 27, 0.06),
-    0 8px 16px -12px rgba(42, 33, 27, 0.4);
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -8px 16px rgba(173, 131, 50, 0.12),
+    0 0 0 4px rgba(255, 255, 255, 0.6),
+    0 8px 16px -12px rgba(42, 33, 27, 0.5);
 }
-.landing-grid > .landing-card:active .icon-wrap { transform: scale(.97); }
+.service-wheel.is-turning .wheel-node:active { --node-scale: 1; }
 
-.landing-grid > .landing-card:focus-visible {
-  outline: 2px solid var(--color-gold);
-  outline-offset: 3px;
+.service-wheel .wheel-node:focus-visible {
+  outline: 2px solid var(--color-gold-dark);
+  outline-offset: 5px;
 }
 
-/* Phones: the app-style row keeps the same refinements, tightened up */
-@media (max-width: 719px) {
-  .landing-grid { gap: 12px; }
-  .landing-grid > .landing-card {
-    padding: 15px 16px;
-    gap: 14px;
-    border-radius: 22px;
+/* larger screens: the same dial, simply bigger */
+@media (min-width: 720px) {
+  .landing-grid.service-wheel {
+    --wheel-size: min(330px, 40vh);
+    margin: 18px auto 34px;
   }
-  .landing-grid > .landing-card .icon-wrap {
-    width: 54px;
-    height: 54px;
-    border-radius: 18px;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.34),
-      inset 0 -5px 10px rgba(89, 20, 32, 0.35),
-      0 0 0 3px rgba(231, 214, 168, 0.32),
-      0 8px 16px -9px rgba(124, 31, 44, 0.7);
-  }
-  .landing-grid > .landing-card .icon-wrap svg { width: 26px; height: 26px; }
-  .landing-grid > .landing-card .landing-card-title { font-size: 1.06rem; }
-  /* the gold rule belongs to the centred layout only */
-  .landing-grid > .landing-card .landing-card-title::after { display: none; }
-  .landing-grid > .landing-card::after {
-    width: 15px;
-    height: 15px;
-    opacity: .5;
-    transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
-  }
-  .landing-grid > .landing-card:hover { transform: translateY(-2px); }
-  .landing-grid > .landing-card:active::after { transform: translateX(-3px); opacity: .9; }
 }
 
 /* ==========================================================================

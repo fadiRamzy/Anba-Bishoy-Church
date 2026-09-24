@@ -471,22 +471,143 @@ async function renderLanding() {
   APP_ROOT.innerHTML = `
     <div class="container">
       <div class="cross-divider">${ICONS.cross}</div>
-      <div class="landing-grid">
-        <a href="#/home" class="landing-card">
+      <div class="landing-grid service-wheel">
+        <a href="#/home" class="landing-card wheel-node wheel-node-1">
           <span class="icon-wrap">${ICONS.notes}</span>
           <span class="landing-card-title">دليل الخدمات</span>
         </a>
-        <a href="#/visitation" class="landing-card">
+        <a href="#/visitation" class="landing-card wheel-node wheel-node-2">
           <span class="icon-wrap">${ICONS.church}</span>
           <span class="landing-card-title">خدمات الافتقاد</span>
         </a>
-        <a href="#/bible" class="landing-card">
+        <a href="#/bible" class="landing-card wheel-node wheel-node-3">
           <span class="icon-wrap">${ICONS.book}</span>
           <span class="landing-card-title">الكتاب المقدس والتقويم الكنسي</span>
         </a>
       </div>
     </div>
   `;
+  initServiceWheel(APP_ROOT.querySelector('.service-wheel'));
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Service wheel — drag / swipe rotation.                                 */
+/*  Purely presentational: it only writes the --wheel-rot custom property  */
+/*  (and an .is-top / .is-turning class) so the dial can be turned with a  */
+/*  finger or the mouse. Links, routes and click behaviour are untouched:  */
+/*  a tap that did not turn the dial navigates exactly as before.          */
+/* ---------------------------------------------------------------------- */
+function initServiceWheel(wheel) {
+  if (!wheel || wheel.dataset.wheelReady === '1') return;
+  wheel.dataset.wheelReady = '1';
+
+  const nodes = Array.prototype.slice.call(wheel.querySelectorAll('.wheel-node'));
+  if (!nodes.length) return;
+  const STEP = 360 / nodes.length;
+  const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let rot = 0, raf = 0;
+  let dragging = false, moved = false, swallowClick = false;
+  let lastAngle = 0, lastTime = 0, velocity = 0;
+
+  function apply(value) {
+    rot = value;
+    wheel.style.setProperty('--wheel-rot', value.toFixed(2) + 'deg');
+    let top = 0, best = Infinity;
+    for (let i = 0; i < nodes.length; i++) {
+      const a = (((i * STEP + value) % 360) + 360) % 360;
+      const d = Math.min(a, 360 - a);
+      if (d < best) { best = d; top = i; }
+    }
+    for (let i = 0; i < nodes.length; i++) nodes[i].classList.toggle('is-top', i === top);
+  }
+
+  function angleAt(e) {
+    const r = wheel.getBoundingClientRect();
+    return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI;
+  }
+
+  function settle(target) {
+    const snapped = Math.round(target / STEP) * STEP;
+    const from = rot;
+    const delta = snapped - from;
+    if (calm || Math.abs(delta) < 0.05) {
+      apply(snapped);
+      wheel.classList.remove('is-turning');
+      return;
+    }
+    const dur = Math.min(640, 240 + Math.abs(delta) * 3.2);
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    (function tick(now) {
+      const p = Math.min(1, ((now || t0) - t0) / dur);
+      apply(from + delta * (1 - Math.pow(1 - p, 3)));      /* easeOutCubic */
+      if (p < 1) raf = requestAnimationFrame(tick);
+      else wheel.classList.remove('is-turning');
+    })(t0);
+  }
+
+  wheel.addEventListener('pointerdown', function (e) {
+    if (e.button && e.button !== 0) return;
+    cancelAnimationFrame(raf);
+    dragging = true;
+    moved = false;
+    swallowClick = false;
+    velocity = 0;
+    lastAngle = angleAt(e);
+    lastTime = e.timeStamp;
+    /* the pointer is captured only once it really starts to turn, so a plain
+       tap keeps its normal click target and navigates exactly as before */
+  });
+
+  wheel.addEventListener('pointermove', function (e) {
+    if (!dragging) return;
+    const a = angleAt(e);
+    let d = a - lastAngle;
+    if (d > 180) d -= 360; else if (d < -180) d += 360;
+    const dt = Math.max(1, e.timeStamp - lastTime);
+    velocity = d / dt;
+    lastAngle = a;
+    lastTime = e.timeStamp;
+    if (!moved && Math.abs(d) > 0.8) {
+      moved = true;
+      wheel.classList.add('is-turning');
+      try { wheel.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    apply(rot + d);
+    if (moved) e.preventDefault();
+  });
+
+  function release() {
+    if (!dragging) return;
+    dragging = false;
+    if (!moved) { wheel.classList.remove('is-turning'); settle(rot); return; }
+    swallowClick = true;                       /* a turn must not navigate */
+    const glide = Math.max(-STEP, Math.min(STEP, velocity * 130));
+    settle(rot + glide);
+  }
+  wheel.addEventListener('pointerup', release);
+  wheel.addEventListener('pointercancel', release);
+  wheel.addEventListener('lostpointercapture', release);
+
+  wheel.addEventListener('click', function (e) {
+    if (!swallowClick) return;
+    swallowClick = false;
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
+
+  wheel.addEventListener('dragstart', function (e) { e.preventDefault(); });
+
+  /* laptops: the arrow keys turn the dial too */
+  wheel.addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    cancelAnimationFrame(raf);
+    wheel.classList.add('is-turning');
+    settle(rot + (e.key === 'ArrowLeft' ? -STEP : STEP));
+  });
+
+  apply(0);
 }
 
 /* ---------------------------------------------------------------------- */
