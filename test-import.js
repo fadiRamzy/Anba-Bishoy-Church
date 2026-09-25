@@ -306,9 +306,9 @@ function names(list) { return list.map(r => r.name); }
     'app.js: admin panel contains APK download button');
   const apkHandlerIdx = adminFn.indexOf("getElementById('apkDownloadBtn')");
   const apkHandler = apkHandlerIdx >= 0 ? adminFn.slice(apkHandlerIdx, apkHandlerIdx + 900) : '';
-  ok(apkHandler.includes('preventDefault') && apkHandler.includes('await Admin.require()') &&
+  ok(apkHandler.includes('preventDefault') && !apkHandler.includes('Admin.require') &&
      apkHandler.includes("a.href = 'Anba-Bishoy-Church.apk'"),
-    'app.js: APK download requires admin PIN before download');
+    'app.js: APK download is direct (no PIN gate) yet still downloads');
 
   console.log(lines.join('\n'));
   console.log(`\n==== RESULT: ${pass} passed, ${fail} failed ====`);

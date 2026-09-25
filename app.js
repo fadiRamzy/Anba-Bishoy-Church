@@ -872,6 +872,16 @@ function familyMatchesFilters(f, filters) {
     if (month !== Number(filters.birthMonth)) return false;
   }
   if (filters.visitationDate && !(Array.isArray(f.visitationDates) && f.visitationDates.includes(filters.visitationDate))) return false;
+  /* Range on the family's LAST visitation date, inclusive on both ends
+     (visitationFrom <= lastVisitDate <= visitationTo). Independent of the
+     "اليوم" filter above; families with no visitation date are excluded
+     while either bound is set. */
+  if (filters.visitationFrom || filters.visitationTo) {
+    const latest = latestVisitationDate(f);
+    if (!latest) return false;
+    if (filters.visitationFrom && latest < filters.visitationFrom) return false;
+    if (filters.visitationTo && latest > filters.visitationTo) return false;
+  }
   return true;
 }
 
@@ -923,6 +933,14 @@ async function renderVisitationFamilies() {
           <label for="filterVisitationDate">اليوم</label>
           <input type="date" id="filterVisitationDate" />
         </div>
+        <div class="field">
+          <label for="filterVisitationFrom">تاريخ آخر افتقاد (من)</label>
+          <input type="date" id="filterVisitationFrom" />
+        </div>
+        <div class="field">
+          <label for="filterVisitationTo">تاريخ آخر افتقاد (إلى)</label>
+          <input type="date" id="filterVisitationTo" />
+        </div>
         <div class="field filter-clear-field">
           <label>&nbsp;</label>
           <button type="button" class="btn btn-outline btn-sm" id="clearFiltersBtn">مسح الفلتر</button>
@@ -949,6 +967,8 @@ async function renderVisitationFamilies() {
     confessionFather: document.getElementById('filterConfessionFather'),
     birthMonth: document.getElementById('filterBirthMonth'),
     visitationDate: document.getElementById('filterVisitationDate'),
+    visitationFrom: document.getElementById('filterVisitationFrom'),
+    visitationTo: document.getElementById('filterVisitationTo'),
   };
 
   let currentFiltered = all; // kept in sync with the results currently shown, for PDF export (change 3)
@@ -963,6 +983,8 @@ async function renderVisitationFamilies() {
       confessionFather: filterEls.confessionFather.value,
       birthMonth: filterEls.birthMonth.value,
       visitationDate: filterEls.visitationDate.value,
+      visitationFrom: filterEls.visitationFrom.value,
+      visitationTo: filterEls.visitationTo.value,
     };
     const filtered = base.filter((f) => familyMatchesFilters(f, filters));
     currentFiltered = filtered;
@@ -3840,14 +3862,12 @@ async function renderAdminPanel() {
     showToast('تم تنزيل النسخة الاحتياطية', 'success');
   });
 
-  /* "Download / Update Church App" — PIN-gated like the other protected
-     admin actions: nothing downloads until Admin.require() succeeds. The
-     anchor itself is preventDefaulted; after auth a temporary in-DOM anchor
-     performs the real same-origin download (Firefox ignores clicks on
+  /* "Download / Update Church App" — no PIN required: the tap downloads
+     immediately. The anchor itself is preventDefaulted; a temporary in-DOM
+     anchor performs the real same-origin download (Firefox ignores clicks on
      detached anchors). */
-  document.getElementById('apkDownloadBtn').addEventListener('click', async (e) => {
+  document.getElementById('apkDownloadBtn').addEventListener('click', (e) => {
     e.preventDefault();
-    if (!(await Admin.require())) return;
     const a = document.createElement('a');
     a.href = 'Anba-Bishoy-Church.apk';
     a.download = 'Anba-Bishoy-Church.apk';
