@@ -3791,7 +3791,7 @@ const SHARE_FAILURE_MESSAGE = 'تعذّرت مشاركة البيانات. حا�
    its own constant so the existing admin PIN / unlock behaviour is untouched.
    Verified on every click — deliberately NOT cached in sessionStorage, so an
    unlocked admin session never skips it. */
-const SHARE_PIN_HASH = '65956c853f2004feac38894fe8ed6a047126f326cb8312e56acb9839633c296b';
+const SHARE_PIN_HASH = 'b51e45a12fbae3d0ee2bf77f1a4f80cbf642e2b4d1c237d2c0f7053a54f6b388';
 
 /* Reuses the app's standard PIN dialog (openPinModal). Resolves true only when
    the password matches; false when it is wrong or the dialog is dismissed.
