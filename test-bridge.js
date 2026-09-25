@@ -7,6 +7,10 @@
  *   - jsPDF PDF export:     dispatchEvent(new MouseEvent('click'))
  *   - hardware back button: App backButton listener
  *   - admin APK button:     href rewritten to the live GitHub Pages APK
+ * Also boots service-worker.js to prove the in-app mirror never serves the
+ * app shell / the bridge from the live site — the bundled index.html is the
+ * only copy that loads capacitor-bridge.js, so mirroring it would silently
+ * break in-app downloads (PDF + JSON) and the back button.
  * Zero dependencies — runs with plain node. Mirrors test-import.js style.
  */
 const fs = require('fs');
@@ -359,6 +363,75 @@ function makeWorld({ native, prepare }) {
     webApk.getAttribute('href') === 'Anba-Bishoy-Church.apk', webApk.getAttribute('href'));
   check('web: APK click passes through to original', web.calls.origClick.length === webClicks0 + 1);
   check('web: no capture-phase click listener registered', web.calls.clickListeners.length === 0);
+
+  /* ============ service-worker.js: the app shell must stay bundled ============ */
+  /* In the Android app the bridge only loads through the packaged index.html
+     (the live site's copy has no capacitor-bridge.js tag on purpose), so the
+     mirror must serve the shell + the bridge from the bundle and mirror only
+     the app's assets. */
+  const SW_SRC = fs.readFileSync(path.join(__dirname, 'service-worker.js'), 'utf8');
+  function bootSW({ hostname, protocol }) {
+    const listeners = {}, net = [];
+    const cacheStub = (name) => ({
+      put: () => Promise.resolve(),
+      match: () => Promise.resolve({ fromBundle: true, cacheName: name }),
+      addAll: () => Promise.resolve(),
+    });
+    const ctx = vm.createContext({
+      self: {
+        location: { hostname, protocol, origin: protocol + '//' + hostname },
+        addEventListener: (type, cb) => (listeners[type] = cb),
+        skipWaiting: () => Promise.resolve(),
+        clients: { claim: () => Promise.resolve() },
+      },
+      caches: {
+        open: (n) => Promise.resolve(cacheStub(n)),
+        match: () => Promise.resolve({ fromBundle: true }),
+        keys: () => Promise.resolve([]),
+        delete: () => Promise.resolve(true),
+      },
+      fetch: (input) => {
+        net.push(typeof input === 'string' ? input : input.url);
+        return Promise.resolve({ ok: true, status: 200, clone() { return this; } });
+      },
+      URL, Promise, console, Error,
+    });
+    vm.runInContext(SW_SRC, ctx, { filename: 'service-worker.js' });
+    return {
+      net,
+      request(url, extra) {
+        let p;
+        const event = Object.assign({ request: { method: 'GET', url, mode: 'no-cors' }, respondWith: (r) => (p = r) }, extra);
+        listeners.fetch(event);
+        return p;
+      },
+    };
+  }
+
+  const APP_ORIGIN = 'https://localhost';
+  const appSW = bootSW({ hostname: 'localhost', protocol: 'https:' });
+  const shell = await appSW.request(APP_ORIGIN + '/', { mode: 'navigate', destination: 'document' });
+  check('sw: app shell document is served from the bundle, never mirrored',
+    !!shell && appSW.net.length === 0, JSON.stringify(appSW.net));
+  await appSW.request(APP_ORIGIN + '/index.html', { destination: 'document' });
+  check('sw: index.html is never mirrored (bridge tag must survive)',
+    appSW.net.length === 0, JSON.stringify(appSW.net));
+  await appSW.request(APP_ORIGIN + '/capacitor-bridge.js');
+  check('sw: capacitor-bridge.js always comes from the bundle',
+    appSW.net.length === 0, JSON.stringify(appSW.net));
+  await appSW.request(APP_ORIGIN + '/app.js?v=17');
+  check('sw: app assets are still mirrored from the live site',
+    appSW.net.length === 1 &&
+    appSW.net[0] === 'https://fadiramzy.github.io/Anba-Bishoy-Church/app.js?v=17', appSW.net[0]);
+  const capCall = appSW.request(APP_ORIGIN + '/_capacitor_http_interceptor_/x');
+  check('sw: /_capacitor_* handed back to the native bridge untouched', capCall === undefined);
+  check('sw: nothing else reached the network', appSW.net.length === 1, JSON.stringify(appSW.net));
+
+  const webSW = bootSW({ hostname: 'fadiramzy.github.io', protocol: 'https:' });
+  const webResp = await webSW.request('https://fadiramzy.github.io/Anba-Bishoy-Church/app.js?v=17');
+  check('sw: website origin is unchanged (cache-first, never mirrored)',
+    !!webResp && webSW.net.every((u) => u === 'https://fadiramzy.github.io/Anba-Bishoy-Church/app.js?v=17'),
+    JSON.stringify(webSW.net));
 
   console.log(`\n==== RESULT: ${passed} passed, ${failed} failed ====`);
   process.exitCode = failed ? 1 : 0;

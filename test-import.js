@@ -310,6 +310,32 @@ function names(list) { return list.map(r => r.name); }
      apkHandler.includes("a.href = 'Anba-Bishoy-Church.apk'"),
     'app.js: APK download is direct (no PIN gate) yet still downloads');
 
+  // --- Birthdays PDF: the added "تاريخ الميلاد" column (this export only) ---
+  const bdayFn = app.slice(app.indexOf('async function downloadBirthdaysPDF('),
+                           app.indexOf('async function downloadVisitationFamiliesPDF('));
+  ok(bdayFn.includes("{ key: 'birthDate', label: 'تاريخ الميلاد'"),
+    'app.js: birthdays PDF has the تاريخ الميلاد column');
+  ok((bdayFn.match(/\{ key: '/g) || []).length === 5 &&
+     bdayFn.indexOf("label: 'اسم المخدوم'") < bdayFn.indexOf("label: 'الشهر'") &&
+     bdayFn.indexOf("label: 'الشهر'") < bdayFn.indexOf("label: 'الفصل'") &&
+     bdayFn.indexOf("label: 'الفصل'") < bdayFn.indexOf("label: 'السن'") &&
+     bdayFn.indexOf("label: 'السن'") < bdayFn.indexOf("label: 'تاريخ الميلاد'"),
+    'app.js: birthdays PDF keeps the 4 original columns in order, new one appended');
+  ok((bdayFn.match(/PDF_TD_BASE/g) || []).length === 5,
+    'app.js: birthdays PDF renders one cell per column (5)');
+  ok(bdayFn.includes("birthDate: x.member.birthDate || ''") &&
+     bdayFn.includes('const birthText = formatDMY(r.birthDate)'),
+    'app.js: birth date comes from the stored member profile (not from age/month)');
+  ok(bdayFn.includes("<td style=\"${PDF_TD_BASE}text-align:center;\">${escapeHTML(r.birthText)}</td>"),
+    'app.js: birthdays PDF renders the birth-date cell');
+  ok(bdayFn.includes('Math.max(MIN_ROW_H, nameH, classH, ageH, birthH)') &&
+     bdayFn.includes('measureH(birthText, birthDateColW)'),
+    'app.js: row height still measured for every column (no overflow/split rows)');
+  const famPdfFn = app.slice(app.indexOf('async function downloadVisitationFamiliesPDF('),
+                             app.indexOf('async function downloadSectorMembersPDF('));
+  ok(!famPdfFn.includes("{ key: 'birthDate'"),
+    'app.js: other PDF exports keep their columns unchanged');
+
   console.log(lines.join('\n'));
   console.log(`\n==== RESULT: ${pass} passed, ${fail} failed ====`);
   process.exit(fail ? 1 : 0);

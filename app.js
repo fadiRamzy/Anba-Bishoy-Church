@@ -2620,6 +2620,8 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
       monthNum: monthIdx + 1,
       className: cleanLabel(x.member.class) || '—',
       age: computeAge(x.member),
+      /* Straight from the profile — never derived from the age/month. */
+      birthDate: x.member.birthDate || '',
     }));
 
   if (!rows.length) {
@@ -2646,22 +2648,26 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
     const BLOCK_H = PAGE_H - HEADER_H - MARGIN * 2;
     const HEAD_ROW_H = 24;
     const MIN_ROW_H = 20;
-    /* Month column gets enough width for the "الشهر" header word (in the
-       half-width two-column layout 0.13 cut words mid-letter). Labels and
-       data are unchanged — only column proportions. */
+    /* Column proportions for the half-width two-column layout: the five
+       columns still share 100%. "تاريخ الميلاد" is appended after "السن" so
+       the existing four keep their order, and it gets enough width for a
+       stored date like 13/04/2007 to stay on one line. Month/class keep room
+       for their header words (0.13 used to cut words mid-letter). */
     const COLS = [
-      { key: 'name', label: 'اسم المخدوم', w: 0.48 },
-      { key: 'monthNum', label: 'الشهر', w: 0.18 },
-      { key: 'className', label: 'الفصل', w: 0.18 },
-      { key: 'age', label: 'السن', w: 0.16 },
+      { key: 'name', label: 'اسم المخدوم', w: 0.28 },
+      { key: 'monthNum', label: 'الشهر', w: 0.15 },
+      { key: 'className', label: 'الفصل', w: 0.16 },
+      { key: 'age', label: 'السن', w: 0.15 },
+      { key: 'birthDate', label: 'تاريخ الميلاد', w: 0.26 },
     ];
     const nameColW = BLOCK_W * COLS[0].w - 2;
     const classColW = BLOCK_W * COLS[2].w - 2;
     const ageColW = BLOCK_W * COLS[3].w - 2;
+    const birthDateColW = BLOCK_W * COLS[4].w - 2;
 
     /* Measure wrapped height per row across every column that could wrap
-       (name, class, age) so no row is ever split across a block/page
-       boundary and no column can silently overflow into the next row. */
+       (name, class, age, birth date) so no row is ever split across a block/
+       page boundary and no column can silently overflow into the next row. */
     const probe = document.createElement('div');
     probe.style.cssText = PDF_PROBE_BASE; // same metrics as the rendered cells
     document.body.appendChild(probe);
@@ -2677,7 +2683,10 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
       const classH = measureH(r.className, classColW);
       const ageText = r.age !== null ? `${r.age} سنة` : '—';
       const ageH = measureH(ageText, ageColW);
-      return { ...r, serial, rowH: Math.max(MIN_ROW_H, nameH, classH, ageH) };
+      /* Same fallback the other cells use when the profile has no value. */
+      const birthText = formatDMY(r.birthDate) || '—';
+      const birthH = measureH(birthText, birthDateColW);
+      return { ...r, serial, birthText, rowH: Math.max(MIN_ROW_H, nameH, classH, ageH, birthH) };
     });
 
     /* Bin-pack rows into blocks that each fit within BLOCK_H. */
@@ -2703,6 +2712,7 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
           <td style="${PDF_TD_BASE}text-align:center;">${r.monthNum}</td>
           <td style="${PDF_TD_BASE}text-align:center;">${escapeHTML(r.className)}</td>
           <td style="${PDF_TD_BASE}text-align:center;">${r.age !== null ? r.age + ' سنة' : '—'}</td>
+          <td style="${PDF_TD_BASE}text-align:center;">${escapeHTML(r.birthText)}</td>
         </tr>`).join('');
       return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><colgroup>${colgroup}</colgroup><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
     }

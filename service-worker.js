@@ -74,6 +74,20 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+/* Inside the Android app a few files must still come from the packaged www/
+   bundle and never from the live site:
+   - the shell document (index.html): it is the only copy that carries the
+     <script src="capacitor-bridge.js"> tag, so mirroring it would leave the
+     app without the native bridge (back button, file downloads, APK link);
+   - capacitor-bridge.js itself: app-only code the website never serves.
+   Everything else keeps being mirrored, so a web deploy still reaches
+   installed apps without building a new APK. */
+function isBundledOnly(request, url) {
+  if (request.mode === 'navigate' || request.destination === 'document') return true;
+  if (url.pathname === '/' || url.pathname === '/index.html') return true;
+  return url.pathname === '/capacitor-bridge.js';
+}
+
 /* Android app only: serve the file at the same path on the live website.
    `no-cache` revalidates with the server on every launch (Pages answers 304
    when nothing changed, so it stays cheap) and a new deploy is picked up
@@ -111,11 +125,16 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   /* Android app: mirror the live website. Capacitor's own paths
-     (/_capacitor_*) are handed back to the native bridge untouched. */
+     (/_capacitor_*) are handed back to the native bridge untouched, and the
+     app shell + the bridge are served from the bundle (see isBundledOnly) so
+     the native bridge is always loaded. */
   if (IS_APP) {
     if (url.pathname.indexOf('/_capacitor_') === 0) return;
-    event.respondWith(fetchMirrored(req));
-    return;
+    if (!isBundledOnly(req, url)) {
+      event.respondWith(fetchMirrored(req));
+      return;
+    }
+    /* else: fall through — the bundled copy is served cache-first below. */
   }
 
   event.respondWith(
