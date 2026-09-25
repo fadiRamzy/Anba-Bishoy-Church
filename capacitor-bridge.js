@@ -25,6 +25,13 @@
       intent (dialer / Maps app / browser). Geolocation permission prompts
       and <input type="file"> import pickers are likewise handled natively
       by Capacitor's WebChromeClient.
+   4. APK download button (Admin) stays visible and keeps working: the APK is
+      served by the live website, not bundled in www/ (see the *.apk
+      exclusion in scripts/sync-web.js), and a WebView cannot save a
+      relative-href download (no DownloadListener). Every APK link is
+      therefore rewritten to the absolute GitHub Pages URL, so the tap
+      leaves the WebView and Capacitor opens it in the external browser,
+      which downloads / installs the newest APK.
 
    Uses only the auto-injected Capacitor core runtime
    (window.Capacitor.registerPlugin) — no bundler, no extra JS framework.
@@ -88,6 +95,61 @@
         });
       } catch (e) {}
     }
+
+    /* ---------------- 1b. APK download button ---------------- */
+    /* The APK lives on the live website, not in www/ (see the *.apk
+       exclusion in scripts/sync-web.js). A WebView cannot save a
+       relative-href download (no DownloadListener), so the button's link is
+       rewritten to the absolute GitHub Pages URL: the tap then leaves the
+       WebView and Capacitor opens the external browser, which downloads the
+       newest APK. The button itself stays visible. */
+    var APK_URL = 'https://fadiramzy.github.io/Anba-Bishoy-Church/Anba-Bishoy-Church.apk';
+
+    function isApkAnchor(a) {
+      if (!a || a.tagName !== 'A' || !a.getAttribute) return false;
+      if (a.getAttribute('data-apk-download') !== null) return true;
+      return /\.apk($|[?#])/i.test(a.getAttribute('href') || '');
+    }
+
+    function rewriteApkAnchor(a) {
+      if (!isApkAnchor(a)) return false;
+      try {
+        if (a.getAttribute('href') !== APK_URL) a.setAttribute('href', APK_URL);
+      } catch (e) {}
+      return true;
+    }
+
+    /* Already-rendered buttons (and any future ones tapped in the WebView). */
+    try {
+      if (typeof document !== 'undefined' && document.querySelectorAll) {
+        var apkList = document.querySelectorAll('[data-apk-download]');
+        for (var i = 0; i < apkList.length; i++) rewriteApkAnchor(apkList[i]);
+      }
+    } catch (e) {}
+
+    try {
+      if (typeof document !== 'undefined' && document.addEventListener) {
+        document.addEventListener('click', function (ev) {
+          var t = ev && ev.target;
+          if (t && !isApkAnchor(t) && t.closest) t = t.closest('[data-apk-download]');
+          rewriteApkAnchor(t);
+        }, true);
+      }
+    } catch (e) {}
+
+    /* app.js clicks the button's temporary anchor programmatically. */
+    try {
+      var origApkClick = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function () {
+        rewriteApkAnchor(this);
+        return origApkClick.apply(this, arguments);
+      };
+      var origApkDispatch = HTMLAnchorElement.prototype.dispatchEvent;
+      HTMLAnchorElement.prototype.dispatchEvent = function (ev) {
+        rewriteApkAnchor(this);
+        return origApkDispatch.apply(this, arguments);
+      };
+    } catch (e) {}
 
     /* ---------------- 2. blob: downloads → save + share ---------------- */
     var Filesystem = resolvePlugin(C, 'Filesystem');

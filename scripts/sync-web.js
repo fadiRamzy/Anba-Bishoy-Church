@@ -9,12 +9,14 @@
 
    Android-only transforms applied to the www/ COPY (website untouched):
    1. Injects <script src="capacitor-bridge.js"> into www/index.html so the
-      native back-button / download bridge loads inside the app only.
-   2. Skips service-worker registration when running on Capacitor: app
-      assets are bundled locally, so the worker is unnecessary there (and
-      its precache list would go stale). The website keeps using it.
-   3. Strips the two Cloudflare challenge <script> blocks that were saved
+      native back-button / download / APK bridge loads inside the app only.
+   2. Strips the two Cloudflare challenge <script> blocks that were saved
       into index.html by mistake — they only 404 inside the app.
+
+   The service-worker registration is deliberately LEFT IN PLACE in the www/
+   copy: inside the app the worker mirrors the live website (see
+   service-worker.js), which is what lets a web deploy reach installed apps
+   without building a new APK. Bundled files stay as the offline fallback.
 
    Usage:  npm run sync:web
    ========================================================================== */
@@ -48,6 +50,7 @@ function isExcludedTopLevel(name) {
   if (EXCLUDED.has(name)) return true;
   if (name.startsWith('.')) return true; // any other dotfile
   if (name.toLowerCase().endsWith('.md')) return true; // docs (e.g. RELEASE.md)
+  if (name.toLowerCase().endsWith('.apk')) return true; // app packages are served by the site, never bundled in it
   return false;
 }
 
@@ -80,18 +83,7 @@ function transformIndexHtml() {
     notes.push('injected capacitor-bridge.js script tag');
   }
 
-  // 2. Skip service-worker registration on Capacitor (assets are local).
-  const swCall = "navigator.serviceWorker.register('service-worker.js')";
-  if (html.includes(swCall) && !html.includes('__capSWGuard')) {
-    const guarded =
-      "(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() " +
-      "? { register: function () { window.__capSWGuard = true; return Promise.resolve(); } } " +
-      ": navigator.serviceWorker).register('service-worker.js')";
-    html = html.replace(swCall, guarded);
-    notes.push('service-worker registration now skipped on native');
-  }
-
-  // 3. Strip Cloudflare challenge scripts accidentally saved into index.html.
+  // 2. Strip Cloudflare challenge scripts accidentally saved into index.html.
   const cfPattern = /<script>\(function\(\)\{function c\(\)\{var b=a\.contentDocument[\s\S]*?<\/script>/g;
   const cfMatches = html.match(cfPattern) || [];
   if (cfMatches.length > 0) {
@@ -135,6 +127,10 @@ function verify() {
     throw new Error('root index.html must stay untouched (bridge tag leaked into website)');
   }
   if (wwwHtml.includes('contentDocument')) throw new Error('www/index.html still contains CF scripts');
+  // The app must keep the worker registered — it is the live-site mirror.
+  if (wwwHtml.includes('__capSWGuard')) {
+    throw new Error('www/index.html still no-ops the service-worker registration');
+  }
 }
 
 function main() {

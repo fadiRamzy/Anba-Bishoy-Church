@@ -1,18 +1,20 @@
 /* Verification harness for capacitor-bridge.js (the Android-only native bridge).
- * Loads the REAL /home/user/capacitor-bridge.js in a vm sandbox with mocked
+ * Loads the REAL capacitor-bridge.js (from __dirname) in a vm sandbox with mocked
  * browser globals (HTMLAnchorElement, URL, FileReader, fetch) and a mocked
  * Capacitor runtime (App/Filesystem/Share plugins), then drives the exact
  * flows the app uses:
  *   - app.js JSON export:   a.click() + synchronous revokeObjectURL
  *   - jsPDF PDF export:     dispatchEvent(new MouseEvent('click'))
  *   - hardware back button: App backButton listener
+ *   - admin APK button:     href rewritten to the live GitHub Pages APK
  * Zero dependencies — runs with plain node. Mirrors test-import.js style.
  */
 const fs = require('fs');
-const vm = require('vm');
 const path = require('path');
+const vm = require('vm');
 
 const BRIDGE_SRC = fs.readFileSync(path.join(__dirname, 'capacitor-bridge.js'), 'utf8');
+const APK_URL = 'https://fadiramzy.github.io/Anba-Bishoy-Church/Anba-Bishoy-Church.apk';
 
 let passed = 0;
 let failed = 0;
@@ -35,12 +37,36 @@ async function settle(world, tries = 40) {
 }
 
 /* ---------------- mocked browser world ---------------- */
-function makeWorld({ native }) {
+function makeWorld({ native, prepare }) {
   const calls = {
     origClick: [], origDispatch: [],
     backListeners: {}, minimizeApp: 0,
     fsWrite: [], fsUri: [], share: [], toast: [],
     createdURLs: [], revokedURLs: [], fetch: [],
+    styleInjected: [], clickListeners: [],
+  };
+
+  /* Nodes the bridge's [data-apk-download] lookup should find. */
+  const docState = { apkAnchors: [] };
+
+  const document = {
+    head: {
+      appendChild(el) { calls.styleInjected.push(el); },
+    },
+    createElement(tag) {
+      return {
+        tag,
+        attrs: {},
+        textContent: '',
+        setAttribute(n, v) { this.attrs[n] = String(v); },
+      };
+    },
+    querySelectorAll(selector) {
+      return selector === '[data-apk-download]' ? docState.apkAnchors.slice() : [];
+    },
+    addEventListener(type, cb, capture) {
+      calls.clickListeners.push({ type, cb, capture: !!capture });
+    },
   };
 
   class HTMLAnchorElement {
@@ -139,23 +165,22 @@ function makeWorld({ native }) {
   const sandbox = {
     window,
     URL: URLMock,
-    Blob,
+    Blob, // Node's real Blob — same identity on both sides of `instanceof`
     FileReader: FakeFileReader,
     fetch: (...args) => {
       calls.fetch.push(args);
       return Promise.reject(new Error('fetch must not be called (registry should satisfy)'));
     },
     HTMLAnchorElement,
+    document,
     console,
     setTimeout,
     clearTimeout,
   };
   const ctx = vm.createContext(sandbox);
-  vm.runInContext(BRIDGE_SRC, ctx, { filename: 'capacitor-bridge.js' });
-
-  return {
-    ctx, calls, historyBack, window, HTMLAnchorElement,
-    URL: vm.runInContext('URL', ctx),
+  const world = {
+    ctx, calls, historyBack, window, HTMLAnchorElement, docState,
+    URL: vm.runInContext('URL', ctx), // patched registry version
     makeAnchor(download, href) {
       const a = vm.runInContext('new HTMLAnchorElement()', ctx);
       if (download !== null && download !== undefined) a.download = download;
@@ -163,6 +188,11 @@ function makeWorld({ native }) {
       return a;
     },
   };
+  /* Runs after the context exists but BEFORE the bridge boots, so a test can
+     pre-render DOM the bridge is expected to pick up at startup. */
+  if (prepare) prepare(world);
+  vm.runInContext(BRIDGE_SRC, ctx, { filename: 'capacitor-bridge.js' });
+  return world;
 }
 
 (async () => {
@@ -183,13 +213,17 @@ function makeWorld({ native }) {
   check('back button on home → minimizeApp()', w.calls.minimizeApp === 1);
   check('back button on home → no history.back()', w.historyBack.length === 1);
 
+  /* ---- APK button: no longer hidden in the native app ---- */
+  check('native: no APK-hide style injected (button stays visible)',
+    w.calls.styleInjected.length === 0, JSON.stringify(w.calls.styleInjected));
+
   /* ---- 2. app.js JSON-export pattern: a.click() + immediate revoke ---- */
-  const jsonBytes = '{"members":[{"id":1,"name":"مخدوم"}]}';
+  const jsonBytes = '{"members":[{"id":1,"name":"\u0645\u062e\u062f\u0648\u0645"}]}';
   const blob = new Blob([jsonBytes], { type: 'application/json' });
-  const url = w.URL.createObjectURL(blob);
+  const url = w.URL.createObjectURL(blob); // patched: registers blob
   const a = w.makeAnchor('church-members-backup-2026-09-24.json', url);
   a.click();
-  w.URL.revokeObjectURL(url);
+  w.URL.revokeObjectURL(url); // app.js revokes synchronously — must not break us
   await settle(w);
 
   const expectedB64 = Buffer.from(jsonBytes, 'utf8').toString('base64');
@@ -214,7 +248,7 @@ function makeWorld({ native }) {
   const pdfBlob = new Blob(['%PDF-1.4 fake-bytes'], { type: 'application/pdf' });
   const pdfUrl = w.URL.createObjectURL(pdfBlob);
   const pa = w.makeAnchor('birthdays.pdf', pdfUrl);
-  const ret = pa.dispatchEvent({ type: 'click' });
+  const ret = pa.dispatchEvent({ type: 'click' }); // jsPDF dispatches, never .click()
   await settle(w);
   check('dispatchEvent interception returns true', ret === true);
   check('dispatched click suppressed from original', w.calls.origDispatch.length === n0.disp);
@@ -226,9 +260,9 @@ function makeWorld({ native }) {
   /* ---- 4. non-download anchors pass through untouched ---- */
   const c0 = w.calls.origClick.length;
   const s0 = w.calls.share.length;
-  w.makeAnchor(null, 'https://www.google.com/maps?q=1,2').click();
-  w.makeAnchor(null, 'tel:+201234567890').click();
-  const dlHttp = w.makeAnchor('file.json', 'https://example.com/file.json');
+  w.makeAnchor(null, 'https://www.google.com/maps?q=1,2').click(); // maps link
+  w.makeAnchor(null, 'tel:+201234567890').click(); // phone link
+  const dlHttp = w.makeAnchor('file.json', 'https://example.com/file.json'); // download attr, http href
   dlHttp.click();
   await settle(w);
   check('plain links use original click', w.calls.origClick.length === c0 + 3);
@@ -243,9 +277,56 @@ function makeWorld({ native }) {
     w.calls.fsWrite.length === f0 + 1 && w.calls.fsWrite[f0].path === 'download',
     w.calls.fsWrite[f0] && w.calls.fsWrite[f0].path);
 
+  /* ---- 5b. APK download links → live APK on GitHub Pages ---- */
+  // (a) app.js's temporary anchor, clicked programmatically after the PIN gate.
+  const apkTemp = w.makeAnchor('Anba-Bishoy-Church.apk', 'Anba-Bishoy-Church.apk');
+  const apkClicks0 = w.calls.origClick.length;
+  const apkShare0 = w.calls.share.length;
+  apkTemp.click();
+  await settle(w);
+  check('native: APK click → href rewritten to the live Pages URL',
+    apkTemp.getAttribute('href') === APK_URL, apkTemp.getAttribute('href'));
+  check('native: APK click reaches the original click (external browser)',
+    w.calls.origClick.length === apkClicks0 + 1);
+  check('native: APK click is not treated as a blob download',
+    w.calls.share.length === apkShare0);
+
+  // (b) the rendered admin button (data-apk-download) via dispatchEvent.
+  const apkRendered = w.makeAnchor('Anba-Bishoy-Church.apk', 'Anba-Bishoy-Church.apk');
+  apkRendered.setAttribute('data-apk-download', '');
+  apkRendered.dispatchEvent({ type: 'click' });
+  await settle(w);
+  check('native: [data-apk-download] button rewritten on dispatchEvent',
+    apkRendered.getAttribute('href') === APK_URL, apkRendered.getAttribute('href'));
+
+  // (c) a real tap: the capture-phase listener rewrites before navigation.
+  const apkTap = w.makeAnchor('Anba-Bishoy-Church.apk', 'Anba-Bishoy-Church.apk');
+  apkTap.setAttribute('data-apk-download', '');
+  const clickListener = w.calls.clickListeners[0] || {};
+  check('native: capture-phase click listener registered',
+    typeof clickListener.cb === 'function' && clickListener.capture === true);
+  if (clickListener.cb) clickListener.cb({ target: apkTap });
+  check('native: tap on the APK button rewritten before navigation',
+    apkTap.getAttribute('href') === APK_URL, apkTap.getAttribute('href'));
+
+  // (d) an APK button already rendered when the bridge boots.
+  const apkWorld = makeWorld({
+    native: true,
+    prepare(world) {
+      const rendered = world.makeAnchor('Anba-Bishoy-Church.apk', 'Anba-Bishoy-Church.apk');
+      rendered.setAttribute('data-apk-download', '');
+      world.docState.apkAnchors.push(rendered);
+      world.rendered = rendered;
+    },
+  });
+  await settle(apkWorld);
+  check('native: pre-rendered APK button rewritten at bridge start',
+    apkWorld.rendered.getAttribute('href') === APK_URL, apkWorld.rendered.getAttribute('href'));
+
   /* ---- 6. failure before share sheet → error toast + native fallback ---- */
   const w2 = makeWorld({ native: true });
   await settle(w2);
+  // Break the AFTER-revoke path: unknown blob URL + failing fetch.
   const bad = w2.makeAnchor('broken.json', 'blob:mock/does-not-exist');
   const oc0 = w2.calls.origClick.length;
   bad.click();
@@ -266,6 +347,18 @@ function makeWorld({ native }) {
   check('web: clicks pass through to original', web.calls.origClick.length === 1);
   check('web: no share triggered', web.calls.share.length === 0);
   check('web: no filesystem writes', web.calls.fsWrite.length === 0);
+  check('web: no style injected (APK button stays visible)', web.calls.styleInjected.length === 0);
+
+  /* ---- web: APK links stay exactly as authored (website untouched) ---- */
+  const webApk = web.makeAnchor('Anba-Bishoy-Church.apk', 'Anba-Bishoy-Church.apk');
+  webApk.setAttribute('data-apk-download', '');
+  const webClicks0 = web.calls.origClick.length;
+  webApk.click();
+  await settle(web);
+  check('web: APK href left relative (no rewrite on the website)',
+    webApk.getAttribute('href') === 'Anba-Bishoy-Church.apk', webApk.getAttribute('href'));
+  check('web: APK click passes through to original', web.calls.origClick.length === webClicks0 + 1);
+  check('web: no capture-phase click listener registered', web.calls.clickListeners.length === 0);
 
   console.log(`\n==== RESULT: ${passed} passed, ${failed} failed ====`);
   process.exitCode = failed ? 1 : 0;
