@@ -1,11 +1,11 @@
 /* Verification harness for the JSON-import change.
- * Mocks IndexedDB in-memory, loads the REAL db.js, and runs the
+ * Mocks IndexedDB in-memory, loads the REAL db.js next to this file, and runs the
  * task's verification matrix against BOTH MembersDB and VisitationDB.
- * Also runs static checks against app.js (multiple attr, handlers).
+ * Also runs static checks against the local app.js (multiple attr, handlers).
  */
 const fs = require('fs');
-const vm = require('vm');
 const path = require('path');
+const vm = require('vm');
 
 // ---------- in-memory IndexedDB mock (just enough for db.js) ----------
 const _maps = {
@@ -294,6 +294,21 @@ function names(list) { return list.map(r => r.name); }
   ok(has('لم يتم استيراد سجلات جديدة. تم تخطي ${skipped} سجل مكرر.'), 'app.js: Members zero-new toast');
   ok(has('تم استيراد ${imported} أسرة جديدة، وتخطي ${skipped} أسرة مكررة.'), 'app.js: Visitation toast shows imported+skipped');
   ok(has('لم يتم استيراد أسر جديدة. تم تخطي ${skipped} أسرة مكررة.'), 'app.js: Visitation zero-new toast');
+
+  // --- admin-only APK download button ---
+  const landingFn = app.slice(app.indexOf('async function renderLanding()'), app.indexOf('function initServiceWheel('));
+  const adminFn = app.slice(app.indexOf('async function renderAdminPanel()'), app.indexOf('(async function boot()'));
+  ok(!landingFn.includes('data-apk-download') && !landingFn.includes('Anba-Bishoy-Church.apk') && !landingFn.includes('Download Church App'),
+    'app.js: homepage has no APK download button');
+  ok(adminFn.includes('id="apkDownloadBtn"') && adminFn.includes('data-apk-download') &&
+     adminFn.includes('href="Anba-Bishoy-Church.apk"') && adminFn.includes('download="Anba-Bishoy-Church.apk"') &&
+     adminFn.includes('Download / Update Church App'),
+    'app.js: admin panel contains APK download button');
+  const apkHandlerIdx = adminFn.indexOf("getElementById('apkDownloadBtn')");
+  const apkHandler = apkHandlerIdx >= 0 ? adminFn.slice(apkHandlerIdx, apkHandlerIdx + 900) : '';
+  ok(apkHandler.includes('preventDefault') && apkHandler.includes('await Admin.require()') &&
+     apkHandler.includes("a.href = 'Anba-Bishoy-Church.apk'"),
+    'app.js: APK download requires admin PIN before download');
 
   console.log(lines.join('\n'));
   console.log(`\n==== RESULT: ${pass} passed, ${fail} failed ====`);

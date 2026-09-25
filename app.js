@@ -3809,6 +3809,14 @@ async function renderAdminPanel() {
         </div>
       </div>
 
+      <div class="admin-panel">
+        <h3>${ICONS.download} تنزيل / تحديث التطبيق</h3>
+        <p>تنزيل أحدث نسخة من تطبيق الكنيسة (APK) على هذا الجهاز.</p>
+        <div class="admin-actions">
+          <a id="apkDownloadBtn" class="btn btn-gold" data-apk-download href="Anba-Bishoy-Church.apk" download="Anba-Bishoy-Church.apk">${ICONS.download}<span>Download / Update Church App</span></a>
+        </div>
+      </div>
+
       <div class="admin-panel" style="border-color:var(--color-danger);">
         <h3 style="color:var(--color-danger);">منطقة خطرة</h3>
         <p>حذف كل البيانات المخزّنة على هذا الجهاز نهائيًا. لا يمكن التراجع عن هذا الإجراء إلا بالاستيراد من نسخة احتياطية.</p>
@@ -3830,6 +3838,22 @@ async function renderAdminPanel() {
     a.click();
     URL.revokeObjectURL(url);
     showToast('تم تنزيل النسخة الاحتياطية', 'success');
+  });
+
+  /* "Download / Update Church App" — PIN-gated like the other protected
+     admin actions: nothing downloads until Admin.require() succeeds. The
+     anchor itself is preventDefaulted; after auth a temporary in-DOM anchor
+     performs the real same-origin download (Firefox ignores clicks on
+     detached anchors). */
+  document.getElementById('apkDownloadBtn').addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!(await Admin.require())) return;
+    const a = document.createElement('a');
+    a.href = 'Anba-Bishoy-Church.apk';
+    a.download = 'Anba-Bishoy-Church.apk';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   });
 
   /* "مشاركة البيانات المحدثه" — asks for the password first, and only then
