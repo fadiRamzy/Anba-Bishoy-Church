@@ -1190,9 +1190,10 @@ async function downloadVisitationGuidePDF(items) {
       const trs = blockRows.map((r) => `
         <tr>
 ${COLS.map((c) => {
-  if (c.key === 'name') return `          <td style="${PDF_TD_BASE}text-align:right;">${r.serial} - ${escapeHTML(r.name)}</td>`;
-  if (c.key === 'phone') return `          <td style="${PDF_TD_BASE}text-align:center;direction:ltr;">${escapeHTML(r.phone)}</td>`;
-  return `          <td style="${PDF_TD_BASE}text-align:right;">${escapeHTML(r.address)}</td>`;
+  const cellW = BLOCK_W * c.w - 2;
+  if (c.key === 'name') return `          <td style="${PDF_TD_BASE}text-align:right;${pdfCellWrap(`${r.serial} - ${r.name}`, cellW)}">${r.serial} - ${escapeHTML(r.name)}</td>`;
+  if (c.key === 'phone') return `          <td style="${PDF_TD_BASE}text-align:center;direction:ltr;${pdfCellWrap(r.phone, cellW)}">${escapeHTML(r.phone)}</td>`;
+  return `          <td style="${PDF_TD_BASE}text-align:right;${pdfCellWrap(r.address, cellW)}">${escapeHTML(r.address)}</td>`;
 }).join('\n')}
         </tr>`).join('');
       return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><colgroup>${colgroup}</colgroup><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
@@ -1381,9 +1382,10 @@ async function downloadVisitationBirthdaysPDF(people) {
       const trs = blockRows.map((r) => `
         <tr>
 ${COLS.map((c) => {
-  if (c.key === 'name') return `          <td style="${TD}text-align:right;">${r.serial} - ${escapeHTML(r.name)}</td>`;
-  if (c.key === 'birth') return `          <td style="${TD}text-align:center;">${escapeHTML(r.birth)}</td>`;
-  return `          <td style="${TD}text-align:center;">${escapeHTML(r[c.key])}</td>`;
+  const cellW = BLOCK_W * c.w - 2;
+  if (c.key === 'name') return `          <td style="${TD}text-align:right;${pdfCellWrap(`${r.serial} - ${r.name}`, cellW)}">${r.serial} - ${escapeHTML(r.name)}</td>`;
+  if (c.key === 'birth') return `          <td style="${TD}text-align:center;${pdfCellWrap(r.birth, cellW)}">${escapeHTML(r.birth)}</td>`;
+  return `          <td style="${TD}text-align:center;${pdfCellWrap(r[c.key], cellW)}">${escapeHTML(r[c.key])}</td>`;
 }).join('\n')}
         </tr>`).join('');
       return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><colgroup>${colgroup}</colgroup><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
@@ -2536,7 +2538,12 @@ function _loadPdfLibs() {
         'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
         () => typeof window.html2canvas === 'function'
       ),
-    ]).catch((err) => { _pdfLibsPromise = null; throw err; });
+      /* Fonts are awaited here (idempotent — _pdfRenderPages still awaits
+         them) so the per-cell one-line measurement below uses the exact same
+         font the raster will use, never the fallback stack. */
+    ])
+      .then(() => _pdfFontsReady())
+      .catch((err) => { _pdfLibsPromise = null; throw err; });
   }
   return _pdfLibsPromise;
 }
@@ -2568,6 +2575,45 @@ const PDF_TD_BASE = `border:1px solid #C7CDD3;padding:5px 6px;vertical-align:mid
 const PDF_TH_BASE = `border:1px solid #9AA7B2;background:#DCE6F1;color:#1F2A37;font-weight:700;padding:3px 3px;text-align:center;vertical-align:middle;${PDF_TEXT_RULES}font-family:${PDF_FONT_STACK};`;
 const PDF_PROBE_BASE = `position:fixed;visibility:hidden;left:-9999px;top:0;box-sizing:border-box;padding:5px 6px;${PDF_TEXT_RULES}font-family:${PDF_FONT_STACK};`;
 const PDF_HEAD_FONT = "'Aref Ruqaa',system-ui,'Segoe UI',Tahoma,Arial,serif;";
+
+/* Some cell values are atomic: a date ("12/4/2021"), a phone number
+   ("01206739287") or a single word must never be broken mid-token while the
+   column has room for them. overflow-wrap:break-word (PDF_TEXT_RULES) only
+   kicks in when a token misses the cell's content box — which happens on
+   borderline values because the cell loses its 6px side padding ×2 plus its
+   1px borders ×2 to the column width, and BLOCK_W is frequently fractional.
+   The two helpers below measure a value's intrinsic single-line width with
+   the cells' own font and, only when it really fits, pin it to one line.
+   They add nothing but `white-space:nowrap`: no width, font, alignment,
+   padding or border of any cell/column is touched, and a value that
+   genuinely does not fit keeps the existing wrapping behaviour. */
+const PDF_CELL_PAD_X = 12; // 6px left + 6px right (PDF_TD_BASE padding)
+const PDF_CELL_FIT_SLACK = 2; // sub-pixel slack; can only use part of the padding, never a border/neighbour
+
+/* Shared hidden probe (same font stack/size as the cells) used to measure the
+   intrinsic width of a value. Created once, reused by every export. */
+let _pdfWidthProbe = null;
+function pdfIntrinsicWidth(text) {
+  if (!_pdfWidthProbe) {
+    _pdfWidthProbe = document.createElement('div');
+    _pdfWidthProbe.style.cssText = `position:fixed;visibility:hidden;left:-9999px;top:0;padding:0;border:0;margin:0;white-space:nowrap;font-size:10.5px;font-family:${PDF_FONT_STACK};`;
+    document.body.appendChild(_pdfWidthProbe);
+  }
+  _pdfWidthProbe.textContent = text;
+  return _pdfWidthProbe.offsetWidth;
+}
+
+/* cellW is the column's border-box width — the same value the exports already
+   pass to measureH() (BLOCK_W * col.w - 2). Returns the one extra inline
+   style a cell may carry, or '' to keep the current behaviour. */
+function pdfCellWrap(text, cellW) {
+  try {
+    const available = cellW - PDF_CELL_PAD_X + PDF_CELL_FIT_SLACK;
+    return pdfIntrinsicWidth(String(text)) <= available ? 'white-space:nowrap;' : '';
+  } catch (e) {
+    return '';
+  }
+}
 
 /* Wait for webfonts (bounded) so rasterization never races a font swap. */
 async function _pdfFontsReady() {
@@ -2661,6 +2707,7 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
       { key: 'birthDate', label: 'تاريخ الميلاد', w: 0.26 },
     ];
     const nameColW = BLOCK_W * COLS[0].w - 2;
+    const monthColW = BLOCK_W * COLS[1].w - 2;
     const classColW = BLOCK_W * COLS[2].w - 2;
     const ageColW = BLOCK_W * COLS[3].w - 2;
     const birthDateColW = BLOCK_W * COLS[4].w - 2;
@@ -2708,11 +2755,11 @@ async function downloadBirthdaysPDF(monthIdx, withDates) {
       const th = COLS.map((c) => `<th style="${PDF_TH_BASE}">${escapeHTML(c.label)}</th>`).join('');
       const trs = blockRows.map((r) => `
         <tr>
-          <td style="${PDF_TD_BASE}text-align:right;">${r.serial} - ${escapeHTML(r.name)}</td>
-          <td style="${PDF_TD_BASE}text-align:center;">${r.monthNum}</td>
-          <td style="${PDF_TD_BASE}text-align:center;">${escapeHTML(r.className)}</td>
-          <td style="${PDF_TD_BASE}text-align:center;">${r.age !== null ? r.age + ' سنة' : '—'}</td>
-          <td style="${PDF_TD_BASE}text-align:center;">${escapeHTML(r.birthText)}</td>
+          <td style="${PDF_TD_BASE}text-align:right;${pdfCellWrap(`${r.serial} - ${r.name}`, nameColW)}">${r.serial} - ${escapeHTML(r.name)}</td>
+          <td style="${PDF_TD_BASE}text-align:center;${pdfCellWrap(r.monthNum, monthColW)}">${r.monthNum}</td>
+          <td style="${PDF_TD_BASE}text-align:center;${pdfCellWrap(r.className, classColW)}">${escapeHTML(r.className)}</td>
+          <td style="${PDF_TD_BASE}text-align:center;${pdfCellWrap(r.age !== null ? r.age + ' سنة' : '—', ageColW)}">${r.age !== null ? r.age + ' سنة' : '—'}</td>
+          <td style="${PDF_TD_BASE}text-align:center;${pdfCellWrap(r.birthText, birthDateColW)}">${escapeHTML(r.birthText)}</td>
         </tr>`).join('');
       return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><colgroup>${colgroup}</colgroup><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
     }
@@ -2857,10 +2904,11 @@ async function downloadVisitationFamiliesPDF(families, visitationDateFilter = ''
       const th = COLS.map((c) => `<th style="${PDF_TH_BASE}">${escapeHTML(c.label)}</th>`).join('');
       const TD = PDF_TD_BASE;
       const tdHTML = (c, r) => {
-        if (c.key === 'name') return `          <td style="${TD}text-align:right;">${r.serial} - ${escapeHTML(r.name)}</td>`;
-        if (c.key === 'phone') return `          <td style="${TD}text-align:center;direction:ltr;">${escapeHTML(r.phone)}</td>`;
-        if (c.key === 'address') return `          <td style="${TD}text-align:right;">${escapeHTML(r.address)}</td>`;
-        return `          <td style="${TD}text-align:center;">${escapeHTML(r.middle)}</td>`;
+        const cellW = BLOCK_W * c.w - 2;
+        if (c.key === 'name') return `          <td style="${TD}text-align:right;${pdfCellWrap(`${r.serial} - ${r.name}`, cellW)}">${r.serial} - ${escapeHTML(r.name)}</td>`;
+        if (c.key === 'phone') return `          <td style="${TD}text-align:center;direction:ltr;${pdfCellWrap(r.phone, cellW)}">${escapeHTML(r.phone)}</td>`;
+        if (c.key === 'address') return `          <td style="${TD}text-align:right;${pdfCellWrap(r.address, cellW)}">${escapeHTML(r.address)}</td>`;
+        return `          <td style="${TD}text-align:center;${pdfCellWrap(r.middle, cellW)}">${escapeHTML(r.middle)}</td>`;
       };
       const trs = blockRows.map((r) => `
         <tr>
@@ -3012,10 +3060,10 @@ async function downloadSectorMembersPDF(members, sectorLabel) {
       const th = COLS.map((c) => `<th style="${PDF_TH_BASE}">${escapeHTML(c.label)}</th>`).join('');
       const trs = blockRows.map((r) => `
         <tr>
-          <td style="${PDF_TD_BASE}text-align:right;">${r.serial} - ${escapeHTML(r.name)}</td>
-          <td style="${PDF_TD_BASE}text-align:center;direction:ltr;">${escapeHTML(r.phone)}</td>
-          <td style="${PDF_TD_BASE}text-align:center;">${escapeHTML(r.className)}</td>
-          <td style="${PDF_TD_BASE}text-align:right;">${escapeHTML(r.address)}</td>
+          <td style="${PDF_TD_BASE}text-align:right;${pdfCellWrap(`${r.serial} - ${r.name}`, nameColW)}">${r.serial} - ${escapeHTML(r.name)}</td>
+          <td style="${PDF_TD_BASE}text-align:center;direction:ltr;${pdfCellWrap(r.phone, phoneColW)}">${escapeHTML(r.phone)}</td>
+          <td style="${PDF_TD_BASE}text-align:center;${pdfCellWrap(r.className, classColW)}">${escapeHTML(r.className)}</td>
+          <td style="${PDF_TD_BASE}text-align:right;${pdfCellWrap(r.address, addressColW)}">${escapeHTML(r.address)}</td>
         </tr>`).join('');
       return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><colgroup>${colgroup}</colgroup><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
     }

@@ -326,7 +326,8 @@ function names(list) { return list.map(r => r.name); }
   ok(bdayFn.includes("birthDate: x.member.birthDate || ''") &&
      bdayFn.includes('const birthText = formatDMY(r.birthDate)'),
     'app.js: birth date comes from the stored member profile (not from age/month)');
-  ok(bdayFn.includes("<td style=\"${PDF_TD_BASE}text-align:center;\">${escapeHTML(r.birthText)}</td>"),
+  ok(bdayFn.includes("${escapeHTML(r.birthText)}</td>") &&
+     bdayFn.includes('<td style="${PDF_TD_BASE}text-align:center;'),
     'app.js: birthdays PDF renders the birth-date cell');
   ok(bdayFn.includes('Math.max(MIN_ROW_H, nameH, classH, ageH, birthH)') &&
      bdayFn.includes('measureH(birthText, birthDateColW)'),
@@ -335,6 +336,102 @@ function names(list) { return list.map(r => r.name); }
                              app.indexOf('async function downloadSectorMembersPDF('));
   ok(!famPdfFn.includes("{ key: 'birthDate'"),
     'app.js: other PDF exports keep their columns unchanged');
+
+  // --- PDF text wrapping: values that fit their cell stay on ONE line ---
+  const pdfNames = ['downloadVisitationGuidePDF', 'downloadVisitationBirthdaysPDF',
+                    'downloadBirthdaysPDF', 'downloadVisitationFamiliesPDF', 'downloadSectorMembersPDF'];
+  const pdfSlices = pdfNames.map((n, i) => {
+    const s = app.indexOf(`async function ${n}(`);
+    const e = i + 1 < pdfNames.length ? app.indexOf(`async function ${pdfNames[i + 1]}(`)
+                                      : app.indexOf('(async function boot()');
+    return app.slice(s, e);
+  });
+  ok(pdfSlices.every((s) => s.includes('pdfCellWrap(')),
+    'app.js: every PDF export applies the one-line-fit rule to its cells');
+  const tdLines = (s) => (s.match(/<td[^>]*>/g) || []);
+  ok(pdfSlices.every((s) => tdLines(s).length > 0) &&
+     pdfSlices.every((s) => tdLines(s).every((t) => !/white-space\s*:/.test(t))),
+    'app.js: no cell hardcodes white-space (the rule is measured, never forced)');
+  ok(pdfSlices.every((s) => tdLines(s).every((t) => !/font-size\s*:|padding\s*:|width\s*:\s*[\d.]+px/.test(t))),
+    'app.js: no cell adds font-size/padding/px-width while fixing wrapping');
+  ok(app.includes('.then(() => _pdfFontsReady())'),
+    'app.js: fonts are ready before wrapping is decided (metrics match the raster)');
+  ok(JSON.stringify(pdfSlices.map((s) => (s.match(/w: 0\.\d+/g) || []))) ===
+     JSON.stringify([
+       ['w: 0.34', 'w: 0.24', 'w: 0.42'],
+       ['w: 0.30', 'w: 0.14', 'w: 0.28', 'w: 0.28'],
+       ['w: 0.28', 'w: 0.15', 'w: 0.16', 'w: 0.15', 'w: 0.26'],
+       ['w: 0.30', 'w: 0.20', 'w: 0.30', 'w: 0.20', 'w: 0.30', 'w: 0.22', 'w: 0.18', 'w: 0.30'],
+       ['w: 0.25', 'w: 0.25', 'w: 0.25', 'w: 0.25'],
+     ]),
+    'app.js: every PDF column width is unchanged by the wrapping fix');
+
+  // behavioural: run the real helpers with a fake probe whose width is the
+  // browser's measurement (exact values pushed per test case).
+  const grabFn = (name) => {
+    const i = app.indexOf(`function ${name}(`);
+    let depth = 0;
+    for (let k = app.indexOf('{', i); k < app.length; k++) {
+      if (app[k] === '{') depth++;
+      else if (app[k] === '}' && --depth === 0) return app.slice(i, k + 1);
+    }
+    return '';
+  };
+  const grabConst = (name) => (app.match(new RegExp(`const ${name} = [^;]+;`)) || [''])[0];
+  const probeDecl = (app.match(/let _pdfWidthProbe = null;/) || [''])[0];
+  ok(probeDecl !== '', 'app.js: the shared width probe is declared once');
+  const measured = {};
+  let probeText = '';
+  const probeEl = {
+    style: { cssText: '' },
+    set textContent(v) { probeText = String(v); },
+    get textContent() { return probeText; },
+    get offsetWidth() { return measured[probeText] ?? 0; },
+  };
+  const wrapCtx = vm.createContext({
+    document: { createElement: () => probeEl, body: { appendChild() {} } },
+    console, String, Error,
+  });
+  vm.runInContext([
+    probeDecl,
+    grabConst('PDF_FONT_STACK'), grabConst('PDF_CELL_PAD_X'), grabConst('PDF_CELL_FIT_SLACK'),
+    grabFn('pdfIntrinsicWidth'), grabFn('pdfCellWrap'),
+  ].join('\n'), wrapCtx);
+  const wrap = (text, cellW) => vm.runInContext(`pdfCellWrap(${JSON.stringify(text)}, ${cellW})`, wrapCtx);
+  let widthCalls = 0;
+  function fitCase(name, text, widthPx, cellW, expectNowrap) {
+    measured[text] = widthPx;
+    const got = wrap(text, cellW);
+    widthCalls++;
+    ok(got === (expectNowrap ? 'white-space:nowrap;' : ''),
+      `pdf wrap: ${name}`, `measured ${widthPx}px in ${cellW}px → "${got}"`);
+  }
+  /* Real column widths: birthdays two-column layout → block 264.5px;
+     full-width tables → block 543px (BLOCK_W = PAGE_W - 2*MARGIN). */
+  const bdayDateCell = 264.5 * 0.26 - 2;   // 66.77
+  const sectorPhoneCell = 543 * 0.25 - 2;  // 133.75
+  const bdayNameCell = 264.5 * 0.28 - 2;   // 72.06
+  fitCase('date "12/4/2021" stays on one line', '12/4/2021', 54, bdayDateCell, true);
+  fitCase('phone "01206739287" stays on one line', '01206739287', 66, sectorPhoneCell, true);
+  fitCase('Arabic name "ادم جون فادي" stays on one line', 'ادم جون فادي', 60, bdayNameCell, true);
+  fitCase('date/phone in an even narrower cell still one line when it fits', '12/4/2021', 40, 66.77, true);
+  fitCase('genuinely too-wide text keeps the existing wrapping',
+    'اسم طويل جدا لا يتسع داخل العمود المخصص له', 200, bdayNameCell, false);
+  fitCase('name that really overflows keeps wrapping (no layout change)',
+    'ادم جون فادي عبد المسيح', 95, bdayNameCell, false);
+  /* bdayNameCell 72.06px ⇒ real content box 60.06px (padding 12px) + 2px slack. */
+  fitCase('boundary: exactly at the cell content width → one line',
+    'اسم', 60, bdayNameCell, true);
+  fitCase('boundary: within the 2px sub-pixel slack → one line',
+    'ادم', 62, bdayNameCell, true);
+  fitCase('boundary: past the slack → wrapping unchanged (no layout change)',
+    'فادي', 63, bdayNameCell, false);
+  ok(widthCalls === 9 && probeEl.style.cssText.includes('font-size:10.5px'),
+    'pdf wrap: every decision used the cells\' own font/size probe',
+    probeEl.style.cssText.slice(0, 60));
+  ok(['white-space:nowrap;', ''].includes(wrap('X', 10)) &&
+     ['white-space:nowrap;', ''].includes(wrap('X'.repeat(500), 10)),
+    'pdf wrap: the rule can only ever add white-space:nowrap');
 
   console.log(lines.join('\n'));
   console.log(`\n==== RESULT: ${pass} passed, ${fail} failed ====`);
