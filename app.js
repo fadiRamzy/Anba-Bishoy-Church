@@ -175,6 +175,52 @@ function phoneLinkHTML(value) {
   return `<a href="tel:${escapeHTML(formatted)}" class="location-link">${escapeHTML(formatted)}</a>`;
 }
 
+/* "اتصال" — call button shown on profile cards (Services Directory +
+   Visitation). Uses the phone numbers already stored on the record
+   (phone1/phone2 — no new fields):
+     * one number  → dials it directly via tel:;
+     * two numbers → a small chooser built from the app's standard dialog
+       markup (same classes as openPinModal / openDateModal);
+     * no number   → a toast explains there is nothing to call.          */
+function initCallButton(profile) {
+  const btn = document.getElementById('callBtn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const phones = [...new Set([profile.phone1, profile.phone2]
+      .map((p) => formatPhone(p).trim())
+      .filter(Boolean))];
+    if (!phones.length) {
+      showToast('لا يوجد رقم موبايل محفوظ', 'error');
+      return;
+    }
+    if (phones.length === 1) {
+      window.location.href = 'tel:' + phones[0];
+      return;
+    }
+    const backdrop = document.createElement('div');
+    backdrop.className = 'pin-modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="pin-modal" role="dialog" aria-modal="true">
+        <h3>الاتصال</h3>
+        <p style="color:var(--color-ink-soft);font-size:.88rem;">يوجد رقما موبايل محفوظان — اختر الرقم الذي تريد الاتصال به:</p>
+        <div class="call-options">
+          <button type="button" class="btn btn-primary btn-call-option" dir="ltr">${escapeHTML(phones[0])}</button>
+          <button type="button" class="btn btn-primary btn-call-option" dir="ltr">${escapeHTML(phones[1])}</button>
+        </div>
+        <div class="form-actions" style="justify-content:center;">
+          <button type="button" class="btn btn-outline btn-cancel">إلغاء</button>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    const close = () => backdrop.remove();
+    backdrop.querySelector('.btn-cancel').addEventListener('click', close);
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+    backdrop.querySelectorAll('.btn-call-option').forEach((b) => {
+      b.addEventListener('click', () => { close(); window.location.href = 'tel:' + b.textContent.trim(); });
+    });
+  });
+}
+
 function fieldOrFallback(value) {
   if (value === null || value === undefined || value === '') {
     return '<span class="muted">غير متوفر</span>';
@@ -2118,6 +2164,7 @@ async function renderVisitationProfile(idStr) {
           </div>
         </div>
         <div class="profile-actions">
+          <button class="btn btn-primary btn-sm" id="callBtn">${ICONS.phone}<span>اتصال</span></button>
           <button class="btn btn-outline btn-sm" id="editBtn">${ICONS.edit}<span>تعديل</span></button>
           <button class="btn btn-danger btn-sm" id="deleteBtn">${ICONS.trash}<span>حذف</span></button>
         </div>
@@ -2196,6 +2243,7 @@ async function renderVisitationProfile(idStr) {
     </div>
   `;
 
+  initCallButton(fam);
   document.getElementById('editBtn').addEventListener('click', () => navigate(`/visitation/edit/${fam.id}`));
   document.getElementById('deleteBtn').addEventListener('click', async () => {
     if (!confirm(`هل تريد حذف "${fam.name}" نهائيًا من قاعدة البيانات؟`)) return;
@@ -3264,6 +3312,7 @@ async function renderProfile(idStr) {
           </div>
         </div>
         <div class="profile-actions">
+          <button class="btn btn-primary btn-sm" id="callBtn">${ICONS.phone}<span>اتصال</span></button>
           <button class="btn btn-outline btn-sm" id="editBtn">${ICONS.edit}<span>تعديل</span></button>
           <button class="btn btn-danger btn-sm" id="deleteBtn">${ICONS.trash}<span>حذف</span></button>
         </div>
@@ -3319,6 +3368,7 @@ async function renderProfile(idStr) {
     </div>
   `;
 
+  initCallButton(member);
   document.getElementById('editBtn').addEventListener('click', async () => {
     if (await Admin.require()) navigate(`/edit/${member.id}`);
   });

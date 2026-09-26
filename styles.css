@@ -307,7 +307,7 @@ main {
      towards the reading direction's start. */
   transform: scaleX(-1);
 }
-.back-link:active { transform: scale(.95); background: rgba(124, 31, 44, 0.12); }
+.back-link:active { transform: scale(.95); background-color: rgba(124, 31, 44, 0.16); } /* v5.1: was a flat `background:` that wiped the Liquid Glass fill while pressed */
 .back-link > span { font-size: 0.85rem; }
 
 /* Phones: icon-only back button, label kept for screen readers */
@@ -2959,3 +2959,99 @@ select.birthday-month-select, .child-row select {
   box-shadow: var(--lg-drop), inset 0 1px 0 rgba(255,255,255,.70),
               inset 0 -1px 0 rgba(255,255,255,.16), inset 0 -9px 14px -12px var(--lg-thick);
 }
+
+/* ==========================================================================
+   v5.2 — desktop / laptop refinement (ONLY @media (min-width: 720px))
+
+   The v5 Liquid-Glass layer was written for the approved phone design and
+   applied its phone-scale geometry at EVERY width, which left laptop/desktop
+   screens with a cramped, inconsistent hybrid: the admin pill forced into a
+   30px circle with its icon stacked on top of its label, 34px buttons,
+   phone-sized search/input fields, single-column card lists and a 2-column
+   browse grid on a 960px page.
+
+   This block runs ONLY on screens >= 720px and restores, verbatim, the
+   app's own pre-v5 desktop values for those controls (same sources as the
+   base rules above). Nothing else changes:
+     * phone (<720px) is untouched — every rule here is inside min-width MQs;
+     * colours, fonts, icons, content and the Liquid Glass material on the
+       phone-approved components (app bar, tab capsule, PIN modal, toast,
+       active tab, primary/gold buttons) are NOT modified;
+     * flat-outline buttons get the rim/bloom reflection strips removed only
+       because those strips belong to the glass material they no longer
+       carry on desktop; the maroon/gold solid buttons keep their look.
+   ========================================================================== */
+@media (min-width: 720px) {
+
+  /* buttons: the app's own desktop geometry (base .btn / .btn-sm) */
+  .btn { min-height: 46px; padding: 10px 18px; gap: 8px; font-size: 0.92rem; font-weight: 700; border-width: 1.5px; }
+  .btn svg { width: 18px; height: 18px; }
+  .btn:active { transform: scale(.975); }
+  .btn::before, .btn::after { content: none; }
+  .btn-outline { background: rgba(255, 255, 255, 0.86); border-color: var(--color-line); color: var(--color-ink); box-shadow: 0 1px 2px rgba(42, 33, 27, 0.04); }
+  .btn-outline:hover { background: rgba(255, 255, 255, 0.86); border-color: var(--color-gold); color: var(--color-maroon-dark); }
+  .btn-danger { background: rgba(255, 255, 255, 0.86); border-color: rgba(166, 54, 44, 0.4); color: var(--color-danger); box-shadow: 0 1px 2px rgba(42, 33, 27, 0.04); }
+  .btn-danger:hover { background: #FBEBEA; border-color: var(--color-danger); }
+  .btn-sm { min-height: 40px; padding: 7px 14px; font-size: 0.82rem; }
+  .btn-sm svg { width: 16px; height: 16px; }
+
+  /* top nav: labelled back pill + labelled admin pill, one row, one size */
+  .back-link { min-height: 40px; padding: 0 12px; gap: 6px; font-size: 0.85rem; background: rgba(124, 31, 44, 0.06); border: 1px solid rgba(124, 31, 44, 0.1); box-shadow: none; }
+  .back-link svg { width: 18px; height: 18px; }
+  .back-link::before, .back-link::after { content: none; }
+  .admin-toggle { display: inline-flex; align-items: center; width: auto; height: auto; min-height: 40px; padding: 0 14px; gap: 7px; border-radius: var(--radius-pill); font-size: 0.82rem; font-weight: 700; background: rgba(255, 255, 255, 0.72); border: 1px solid rgba(230, 220, 197, 0.9); color: var(--color-ink-soft); box-shadow: none; }
+  .admin-toggle svg { width: 16px; height: 16px; }
+  .admin-toggle::before, .admin-toggle::after { content: none; }
+  .admin-toggle.active { background: linear-gradient(180deg, #FBF1F2, #F6E9EA); color: var(--color-maroon-dark); border-color: rgba(173, 131, 50, 0.55); box-shadow: inset 0 0 0 1px rgba(173, 131, 50, 0.25); }
+
+  /* search + form fields: the app's own desktop sizes */
+  .search-box { min-height: 50px; padding: 0 4px; gap: 10px; background: var(--color-surface-tint); border: 1.5px solid var(--color-line); border-radius: var(--radius-md); box-shadow: none; }
+  .search-box:focus-within { border-color: var(--color-gold); background: #fff; box-shadow: 0 0 0 4px rgba(173, 131, 50, 0.14); }
+  .search-box svg { width: 21px; height: 21px; margin-inline-start: 12px; }
+  .search-box input { padding: 14px 6px; font-size: 1rem; }
+  .search-box input::placeholder { font-size: 1rem; }
+  .search-box::before, .search-box::after { content: none; }
+  .field label { font-size: 0.79rem; font-weight: 700; }
+  .field input, .field select { min-height: 46px; padding: 12px 13px; border: 1.5px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-surface-tint); font-size: 1rem; box-shadow: none; }
+  .field input:focus, .field select:focus { border-color: var(--color-gold); box-shadow: 0 0 0 4px rgba(173, 131, 50, 0.14); }
+
+  /* profile header: desktop row — avatar right (RTL), name+tags beside it,
+     action buttons grouped at the far end */
+  .profile-header { flex-direction: row; align-items: center; text-align: start; gap: 15px; padding: 16px; margin-bottom: 18px; }
+  .profile-header > div:not(.profile-actions) { align-items: flex-start; }
+  .profile-actions { margin-inline-start: auto; margin-top: 0; justify-content: flex-start; flex-wrap: nowrap; }
+  .profile-actions .btn { flex: 0 0 auto; min-height: 40px; }
+  .profile-avatar { width: 68px; height: 68px; border-radius: 22px; font-size: 1.6rem; }
+  .profile-name { font-size: 1.4rem; }
+
+  /* lists + grids: the app's own responsive columns (were forced to 1) */
+  .member-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .member-card { padding: 13px 15px; gap: 13px; }
+  .member-card > .member-info { padding-inline-end: 16px; }
+  .member-avatar { width: 46px; height: 46px; border-radius: 15px; font-size: 1.05rem; font-weight: 700; }
+  .member-name { font-size: 0.97rem; font-weight: 700; line-height: 1.5; }
+  .member-meta { font-size: 0.79rem; }
+  .member-meta-visit { font-size: 0.77rem; }
+
+  .empty-state { padding: 40px 20px; }
+  .empty-state svg { width: 44px; height: 44px; padding: 10px; border-radius: 50%; background: var(--color-gold-tint); box-sizing: content-box; }
+
+  .landing-grid:not(.service-wheel), .bible-home-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .landing-grid:not(.service-wheel) > a:last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+  /* the "نطاق حسب" quick-nav strip: the base design is one 5-across row of
+     compact icon cards (the phone layer had flattened it to 2 columns) */
+  .nav-grid { grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 8px 0 28px; }
+  .nav-card { padding: 16px 10px; gap: 9px; }
+  .nav-card .icon-wrap { width: 46px; height: 46px; border-radius: 15px; }
+  .nav-card .icon-wrap svg { width: 23px; height: 23px; }
+  .nav-card span { font-weight: 700; font-size: 0.88rem; }
+}
+@media (min-width: 1000px) {
+  .landing-grid:not(.service-wheel), .bible-home-grid { grid-template-columns: repeat(3, 1fr); }
+  .landing-grid:not(.service-wheel) > a:last-child:nth-child(odd) { grid-column: auto; }
+}
+
+/* the "اتصال" number chooser (new Call feature) — stacks the two number
+   buttons inside the standard .pin-modal dialog; no other styles affected */
+.call-options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
