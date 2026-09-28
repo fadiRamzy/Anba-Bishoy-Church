@@ -3201,3 +3201,7 @@ select.birthday-month-select, .child-row select {
 .att-history-row .att-h-del svg { width: 13px; height: 13px; }
 .att-history-row .att-h-del:hover { border-color: var(--color-danger); color: var(--color-danger); background: #FBEBEA; }
 .att-history-row .att-h-del:active { transform: scale(.94); }
+
+/* الحضور — search field above the class attendance list (spacing only;
+   the field itself reuses the shared .search-box Liquid Glass style) */
+.att-search { margin: 4px 0 10px; }

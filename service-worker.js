@@ -19,7 +19,7 @@
    The website itself never takes this branch: its behaviour is unchanged.
    ========================================================================== */
 
-const CACHE_VERSION = 'abc-church-cache-v12';
+const CACHE_VERSION = 'abc-church-cache-v13';
 
 /* Native-app mirror (Android only). MIRROR_BASE is the deployed website the
    app loads its files from; requests keep their path and query string (so the
@@ -35,10 +35,10 @@ const IS_APP = self.location.hostname === 'localhost' && self.location.protocol 
 const PRECACHE_URLS = [
   './',
   'index.html',
-  'app.js?v=20',
+  'app.js?v=21',
   'app-shell.js?v=2',
   'db.js?v=3',
-  'styles.css?v=19',
+  'styles.css?v=20',
   'bible/bible.js?v=5',
   'bible/metadata.json',
   'calendar/coptic-calendar.js?v=2',

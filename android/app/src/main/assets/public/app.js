@@ -3375,10 +3375,15 @@ async function renderAttendance() {
       .map((m) => (m.class || '').trim()).filter(Boolean)
   )];
 
+  /* while a class list is displayed: its roster + the live checkbox states
+     (search filtering only hides rows — states and save coverage survive) */
+  let rosterState = null;
+
   function renderList() {
     const sector = sectorSelect.value;
     const cls = classSelect.value;
     const day = attDay();
+    rosterState = null;
     if (!sector || !cls) {
       listWrap.innerHTML = `<div class="empty-state">${ICONS.empty}<p>اختر القطاع ثم الفصل لعرض الأسماء</p></div>`;
       return;
@@ -3388,26 +3393,63 @@ async function renderAttendance() {
       listWrap.innerHTML = `<div class="empty-state">${ICONS.empty}<p>لا يوجد أسماء في هذا التصنيف</p></div>`;
       return;
     }
+    /* live checkbox state per member (survives search filtering) */
+    const checkedMap = new Map();
+    roster.forEach((m) => {
+      const saved = (Array.isArray(m.attendance) ? m.attendance : [])
+        .find((r) => r.date === day && r.sector === sector && r.class === cls);
+      checkedMap.set(String(m.id), !!(saved && saved.present));
+    });
+    rosterState = { roster, checkedMap };
+
     listWrap.innerHTML = `
-      <div class="att-list">
-        ${roster.map((m) => {
-          const saved = (Array.isArray(m.attendance) ? m.attendance : [])
-            .find((r) => r.date === day && r.sector === sector && r.class === cls);
-          return `
-          <label class="att-row">
-            <span class="member-avatar">${escapeHTML(initials(m.name))}</span>
-            <span class="att-info">
-              <span class="att-name">${escapeHTML(m.name || '')}</span>
-            </span>
-            <input type="checkbox" class="att-checkbox" data-id="${m.id}"${saved && saved.present ? ' checked' : ''} />
-            <span class="att-box" aria-hidden="true"></span>
-          </label>`;
-        }).join('')}
+      <div class="search-box att-search">
+        ${ICONS.search}
+        <input type="text" id="attSearchInput" placeholder="ابحث عن اسم داخل الفصل..." autocomplete="off" />
       </div>
+      <div class="att-list" id="attList"></div>
       <div class="att-actions">
         <button type="button" id="attSaveBtn" class="btn btn-primary"><span>تسجيل الحضور عن اليوم</span></button>
       </div>
       <p class="att-hint">تاريخ تسجيل الحضور: ${formatDMY(day)} — إعادة التسجيل في نفس التاريخ يحدّث السجل ولا تكرّره</p>`;
+    const attList = document.getElementById('attList');
+    const searchInput = document.getElementById('attSearchInput');
+
+    const rowHTML = (m) => `
+      <label class="att-row">
+        <span class="member-avatar">${escapeHTML(initials(m.name))}</span>
+        <span class="att-info">
+          <span class="att-name">${escapeHTML(m.name || '')}</span>
+        </span>
+        <input type="checkbox" class="att-checkbox" data-id="${m.id}"${checkedMap.get(String(m.id)) ? ' checked' : ''} />
+        <span class="att-box" aria-hidden="true"></span>
+      </label>`;
+
+    /* search inside THIS class only; matches appear alphabetically;
+       clearing restores the full list; checkbox states never reset */
+    const renderRows = () => {
+      const states = new Map([...attList.querySelectorAll('.att-checkbox')]
+        .map((b) => [b.dataset.id, b.checked]));
+      const q = (searchInput.value || '').trim();
+      let rows = roster;
+      if (q) {
+        rows = roster.filter((m) => (m.name || '').includes(q))
+          .slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
+      }
+      attList.innerHTML = rows.length
+        ? rows.map(rowHTML).join('')
+        : `<div class="empty-state">${ICONS.empty}<p>لا يوجد اسم مطابق للبحث</p></div>`;
+      states.forEach((checked, id) => {
+        const b = attList.querySelector(`.att-checkbox[data-id="${id}"]`);
+        if (b) b.checked = checked;
+      });
+    };
+    renderRows();
+    attList.addEventListener('change', (e) => {
+      const b = e.target.closest('.att-checkbox');
+      if (b) checkedMap.set(b.dataset.id, b.checked);
+    });
+    searchInput.addEventListener('input', renderRows);
     document.getElementById('attSaveBtn').addEventListener('click', saveToday);
   }
 
@@ -3420,15 +3462,17 @@ async function renderAttendance() {
       return;
     }
     const saveBtn = document.getElementById('attSaveBtn');
-    const boxes = [...listWrap.querySelectorAll('.att-checkbox')];
+    if (!rosterState) {
+      showToast('اختر القطاع والفصل لعرض القائمة أولاً', 'error');
+      return;
+    }
+    const { roster, checkedMap } = rosterState;
     saveBtn.disabled = true;
     try {
       let present = 0;
       let changed = 0;
-      for (const box of boxes) {
-        const member = members.find((m) => String(m.id) === box.dataset.id);
-        if (!member) continue;
-        const want = box.checked;
+      for (const member of roster) {
+        const want = !!checkedMap.get(String(member.id));
         if (want) present++;
         const list = Array.isArray(member.attendance) ? member.attendance : [];
         const rec = list.find((r) => r.date === day && r.sector === sector && r.class === cls);
@@ -3446,9 +3490,10 @@ async function renderAttendance() {
           changed++;
         }
       }
-      showToast(changed ? `تم تسجيل الحضور عن ${formatDMY(day)}: ${present} حاضر من ${boxes.length}` : 'سجل هذا التاريخ محفوظ بالفعل — تم التحديث دون تكرار', 'success');
-      /* success: clear the list (filters stay selected so another
-         sector/class can be loaded for the next entry) */
+      showToast(changed ? `تم تسجيل الحضور عن ${formatDMY(day)}: ${present} حاضر من ${roster.length}` : 'سجل هذا التاريخ محفوظ بالفعل — تم التحديث دون تكرار', 'success');
+      /* success: clear the list AND the search field (filters stay
+         selected so another sector/class can be loaded next) */
+      rosterState = null;
       listWrap.innerHTML = `<div class="empty-state">${ICONS.empty}<p>تم حفظ الحضور — اختر القطاع والفصل لعرض قائمة جديدة</p></div>`;
     } catch (err) {
       console.error('Attendance save failed:', err);
