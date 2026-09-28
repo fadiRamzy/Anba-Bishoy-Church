@@ -3330,6 +3330,10 @@ async function renderAttendance() {
           <label for="attClassSelect">الفصل</label>
           <select id="attClassSelect" disabled><option value="">اختر القطاع أولاً</option></select>
         </div>
+        <div class="field">
+          <label for="attDateInput">تاريخ تسجيل الحضور</label>
+          <input type="date" id="attDateInput" value="${today}" />
+        </div>
       </div>
 
       <div id="attListWrap">
@@ -3354,6 +3358,7 @@ async function renderAttendance() {
 
   const sectorSelect = document.getElementById('attSectorSelect');
   const classSelect = document.getElementById('attClassSelect');
+  const dateInput = document.getElementById('attDateInput');
   const listWrap = document.getElementById('attListWrap');
   const fromInput = document.getElementById('attFromInput');
   const toInput = document.getElementById('attToInput');
@@ -3361,6 +3366,9 @@ async function renderAttendance() {
 
   fromInput.value = `${today.slice(0, 7)}-01`;
   toInput.value = today;
+
+  /* the recording date: chosen by the user (past dates allowed), defaults to today */
+  const attDay = () => (dateInput.value || today);
 
   const classesFor = (sector) => [...new Set(
     members.filter((m) => (m.sector || '').trim() === sector)
@@ -3370,6 +3378,7 @@ async function renderAttendance() {
   function renderList() {
     const sector = sectorSelect.value;
     const cls = classSelect.value;
+    const day = attDay();
     if (!sector || !cls) {
       listWrap.innerHTML = `<div class="empty-state">${ICONS.empty}<p>اختر القطاع ثم الفصل لعرض الأسماء</p></div>`;
       return;
@@ -3383,14 +3392,12 @@ async function renderAttendance() {
       <div class="att-list">
         ${roster.map((m) => {
           const saved = (Array.isArray(m.attendance) ? m.attendance : [])
-            .find((r) => r.date === today && r.sector === sector && r.class === cls);
-          const phone = m.phone1 || m.phone2 || '';
+            .find((r) => r.date === day && r.sector === sector && r.class === cls);
           return `
           <label class="att-row">
             <span class="member-avatar">${escapeHTML(initials(m.name))}</span>
             <span class="att-info">
               <span class="att-name">${escapeHTML(m.name || '')}</span>
-              ${phone ? `<span class="att-meta" dir="ltr">${escapeHTML(formatPhone(phone))}</span>` : ''}
             </span>
             <input type="checkbox" class="att-checkbox" data-id="${m.id}"${saved && saved.present ? ' checked' : ''} />
             <span class="att-box" aria-hidden="true"></span>
@@ -3400,13 +3407,18 @@ async function renderAttendance() {
       <div class="att-actions">
         <button type="button" id="attSaveBtn" class="btn btn-primary"><span>تسجيل الحضور عن اليوم</span></button>
       </div>
-      <p class="att-hint">يوم الحضور: ${formatDMY(today)} — إعادة التسجيل في نفس اليوم تحدّث السجل ولا تكرّره</p>`;
+      <p class="att-hint">تاريخ تسجيل الحضور: ${formatDMY(day)} — إعادة التسجيل في نفس التاريخ يحدّث السجل ولا تكرّره</p>`;
     document.getElementById('attSaveBtn').addEventListener('click', saveToday);
   }
 
   async function saveToday() {
     const sector = sectorSelect.value;
     const cls = classSelect.value;
+    const day = attDay();
+    if (!day) {
+      showToast('اختر تاريخ تسجيل الحضور', 'error');
+      return;
+    }
     const saveBtn = document.getElementById('attSaveBtn');
     const boxes = [...listWrap.querySelectorAll('.att-checkbox')];
     saveBtn.disabled = true;
@@ -3419,7 +3431,7 @@ async function renderAttendance() {
         const want = box.checked;
         if (want) present++;
         const list = Array.isArray(member.attendance) ? member.attendance : [];
-        const rec = list.find((r) => r.date === today && r.sector === sector && r.class === cls);
+        const rec = list.find((r) => r.date === day && r.sector === sector && r.class === cls);
         if (rec) {
           if (rec.present !== want) {
             rec.present = want;
@@ -3428,13 +3440,13 @@ async function renderAttendance() {
             changed++;
           }
         } else {
-          list.push({ date: today, sector, class: cls, present: want });
+          list.push({ date: day, sector, class: cls, present: want });
           member.attendance = list;
           await MembersDB.put(member);
           changed++;
         }
       }
-      showToast(changed ? `تم تسجيل الحضور عن ${formatDMY(today)}: ${present} حاضر من ${boxes.length}` : 'سجل اليوم محفوظ بالفعل — تم التحديث دون تكرار', 'success');
+      showToast(changed ? `تم تسجيل الحضور عن ${formatDMY(day)}: ${present} حاضر من ${boxes.length}` : 'سجل هذا التاريخ محفوظ بالفعل — تم التحديث دون تكرار', 'success');
       /* success: clear the list (filters stay selected so another
          sector/class can be loaded for the next entry) */
       listWrap.innerHTML = `<div class="empty-state">${ICONS.empty}<p>تم حفظ الحضور — اختر القطاع والفصل لعرض قائمة جديدة</p></div>`;
@@ -3455,6 +3467,7 @@ async function renderAttendance() {
     renderList();
   });
   classSelect.addEventListener('change', renderList);
+  dateInput.addEventListener('change', renderList);
   pdfBtn.addEventListener('click', () => {
     const sector = sectorSelect.value;
     const cls = classSelect.value;
@@ -3470,7 +3483,7 @@ async function renderAttendance() {
    _pdfRenderPages, PDF_FONT_STACK/PDF_TEXT_RULES, pdfCellWrap, the probe)
    exactly like the existing visitation/birthdays/sector exports, and the
    existing logo.jpg asset as the faded watermark. Structure follows the
-   KG2 Friday sheet: navy #1F3864 header repeated on every page, month
+   KG2 Friday sheet layout: theme-maroon header repeated on every page, month
    groups spanning their date columns, 30 rows per page with continuous
    numbering, hollow circles for empty cells and a green check for
    attended dates. Dates/columns are derived from the stored attendance
@@ -3548,14 +3561,16 @@ async function downloadAttendancePDF({ sector, cls, from, to, btn }) {
     const NAME_COL_W = PAGE_W * 0.265;
     const nameInnerW = NAME_COL_W - PDF_CELL_PAD_X;
 
-    const ATT_TD = `border:1px solid #B7C3CE;height:22px;padding:1px 5px;vertical-align:middle;${PDF_TEXT_RULES}font-family:${PDF_FONT_STACK};`;
-    const ATT_TH_NAVY = `background:#1F3864;color:#fff;border:1px solid #1F3864;font-weight:700;text-align:center;vertical-align:middle;padding:4px 3px;${PDF_TEXT_RULES}font-family:${PDF_FONT_STACK};`;
-    const ATT_TH_MONTH = `background:#2F5597;color:#fff;border:1px solid #2F5597;font-weight:700;text-align:center;vertical-align:middle;padding:3px;${PDF_TEXT_RULES}font-family:${PDF_FONT_STACK};`;
-    const ATT_TH_DATE = `background:#DCE6F1;color:#1F2A37;border:1px solid #9AA7B2;font-weight:700;text-align:center;vertical-align:middle;padding:2px 1px;font-size:9.5px;line-height:1.3;overflow-wrap:break-word;font-family:${PDF_FONT_STACK};`;
+    const ATT_TD = `border:1px solid #C7B9A6;height:22px;padding:1px 5px;vertical-align:middle;${PDF_TEXT_RULES}font-family:${PDF_FONT_STACK};`;
+    const ATT_TH_NAVY = `background:#591420;color:#fff;border:1px solid #591420;font-weight:700;text-align:center;vertical-align:middle;padding:4px 3px;${PDF_TEXT_RULES}font-family:${PDF_FONT_STACK};`;
+    const ATT_TH_MONTH = `background:#7C1F2C;color:#fff;border:1px solid #7C1F2C;font-weight:700;text-align:center;vertical-align:middle;padding:3px;${PDF_TEXT_RULES}font-family:${PDF_FONT_STACK};`;
+    const ATT_TH_DATE = `background:#F6ECDC;color:#591420;border:1px solid #C9AE8C;font-weight:700;text-align:center;vertical-align:middle;padding:2px 1px;font-size:9.5px;line-height:1.3;overflow-wrap:break-word;font-family:${PDF_FONT_STACK};`;
+    /* member names: clear Naskh-style font (Cairo) — never the Ruqaa display face */
+    const ATT_NAME_FONT = `font-family:'Cairo',system-ui,'Segoe UI',Tahoma,Arial,sans-serif;`;
 
     const markHTML = (present) => present
-      ? '<span style="display:inline-block;width:7px;height:12px;border-right:2.2px solid #2E7D32;border-bottom:2.2px solid #2E7D32;transform:rotate(45deg);margin-top:-4px;"></span>'
-      : '<span style="display:inline-block;width:11px;height:11px;border:1.3px solid #555555;border-radius:50%;"></span>';
+      ? '<span style="color:#2E7D32;font-weight:700;white-space:nowrap;">حضور</span>'
+      : '<span style="color:#A34941;font-weight:700;white-space:nowrap;">غياب</span>';
 
     /* measure wrapped name heights so no row is ever split across pages
        (same probe technique as the existing exports) */
@@ -3601,7 +3616,7 @@ async function downloadAttendancePDF({ sector, cls, from, to, btn }) {
       const bodyRows = pageRows.map((r, i) => {
         const serial = startSerial + i;
         const cells = dates.map((dt) => `<td style="${ATT_TD}text-align:center;">${markHTML(r.marks.get(dt) === true)}</td>`).join('');
-        return `<tr><td style="${ATT_TD}text-align:center;font-weight:700;">${serial}</td><td style="${ATT_TD}text-align:right;font-weight:700;color:#000;${pdfCellWrap(r.name, nameInnerW)}">${escapeHTML(r.name)}</td>${cells}</tr>`;
+        return `<tr><td style="${ATT_TD}text-align:center;font-weight:700;">${serial}</td><td style="${ATT_TD}${ATT_NAME_FONT}text-align:right;font-weight:700;color:#000;${pdfCellWrap(r.name, nameInnerW)}">${escapeHTML(r.name)}</td>${cells}</tr>`;
       }).join('');
       const spareRows = Array.from({ length: spareCount }, (_, i) => {
         const serial = startSerial + pageRows.length + i;
@@ -3609,9 +3624,9 @@ async function downloadAttendancePDF({ sector, cls, from, to, btn }) {
       }).join('');
       return `
         <div style="width:${PAGE_W}px;height:${PAGE_H}px;background:#FFFDF8;box-sizing:border-box;position:relative;overflow:hidden;direction:rtl;">
-          <img src="logo.jpg" alt="" style="position:absolute;left:50%;top:55%;width:330px;height:330px;object-fit:contain;transform:translate(-50%,-50%);opacity:0.17;">
+          <div style="position:absolute;inset:0;background-image:url('site-bg.jpg');background-size:cover;background-position:center;opacity:0.08;"></div>
           <div style="position:relative;padding:${MARGIN}px;">
-            <div style="background:#1F3864;color:#fff;text-align:center;padding:7px 8px 8px;">
+            <div style="background:#591420;color:#fff;text-align:center;padding:7px 8px 8px;">
               <div style="font-family:${PDF_HEAD_FONT}font-size:16.5px;font-weight:700;line-height:1.5;">كنيســــة القديس العظيم الأنبــــا بيشوي - المنيا الجديدة</div>
               <div style="font-family:${PDF_FONT_STACK};font-size:11px;font-weight:700;margin-top:2px;display:flex;justify-content:center;gap:22px;"><span>مدارس الأحد</span><span>${escapeHTML(cleanLabel(sector))}</span><span>${escapeHTML(cleanLabel(cls))}</span></div>
               <div style="font-family:${PDF_FONT_STACK};font-size:11px;font-weight:700;margin-top:2px;">كشف حضور وغياب ${escapeHTML(daysPhrase)}${escapeHTML(periodPhrase)}</div>
@@ -3737,7 +3752,7 @@ async function renderProfile(idStr) {
         <h3>${ICONS.calendar} سجل الحضور</h3>
         <div class="att-history">
           <div class="att-history-row att-history-head">
-            <span>تاريخ الحضور</span><span>المرحلة/القطاع وقت التسجيل</span><span>الفصل وقت التسجيل</span><span>حالة الحضور</span>
+            <span>تاريخ الحضور</span><span>المرحلة/القطاع وقت التسجيل</span><span>الفصل وقت التسجيل</span><span>حالة الحضور</span><span></span>
           </div>
           ${member.attendance.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))
             .map((r) => `
@@ -3745,7 +3760,8 @@ async function renderProfile(idStr) {
             <span class="att-h-date" dir="ltr">${escapeHTML(formatDMY(r.date) || '—')}</span>
             <span>${escapeHTML(cleanLabel(r.sector) || '—')}</span>
             <span>${escapeHTML(cleanLabel(r.class) || '—')}</span>
-            <span class="att-h-state${r.present ? ' present' : ''}">${r.present ? 'حاضر' : 'غائب'}</span>
+            <span class="att-h-state${r.present ? ' present' : ''}">${r.present ? 'حضور' : 'غياب'}</span>
+            <button type="button" class="att-h-del" data-date="${escapeHTML(r.date || '')}" data-sector="${escapeHTML(r.sector || '')}" data-class="${escapeHTML(r.class || '')}" aria-label="حذف هذا السجل">${ICONS.trash}</button>
           </div>`).join('')}
         </div>
       </div>` : ''}
@@ -3753,6 +3769,22 @@ async function renderProfile(idStr) {
   `;
 
   initCallButton(member);
+  [...document.querySelectorAll('.att-history-row .att-h-del')].forEach((b) => {
+    b.addEventListener('click', async () => {
+      const d = b.dataset.date;
+      const sec = b.dataset.sector;
+      const cls2 = b.dataset.class;
+      if (!confirm(`هل تريد حذف سجل الحضور عن ${formatDMY(d)}؟`)) return;
+      const list = Array.isArray(member.attendance) ? member.attendance : [];
+      const idx = list.findIndex((r) => r.date === d && (r.sector || '') === sec && (r.class || '') === cls2);
+      if (idx < 0) return;
+      list.splice(idx, 1);
+      member.attendance = list;
+      await MembersDB.put(member);
+      showToast('تم حذف سجل الحضور', 'success');
+      renderProfile(member.id);
+    });
+  });
   document.getElementById('editBtn').addEventListener('click', async () => {
     if (await Admin.require()) navigate(`/edit/${member.id}`);
   });

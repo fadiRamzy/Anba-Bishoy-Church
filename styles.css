@@ -3089,7 +3089,6 @@ select.birthday-month-select, .child-row select {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.att-row .att-meta { font-size: 0.75rem; color: var(--color-ink-soft); }
 .att-checkbox {
   position: absolute;
   width: 1px;
@@ -3149,7 +3148,7 @@ select.birthday-month-select, .child-row select {
 .att-history { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
 .att-history-row {
   display: grid;
-  grid-template-columns: 88px 1fr 1fr 72px;
+  grid-template-columns: 88px 1fr 1fr 72px 34px;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
@@ -3181,5 +3180,24 @@ select.birthday-month-select, .child-row select {
   border-color: rgba(46, 125, 50, 0.35);
 }
 @media (min-width: 720px) {
-  .att-history-row { grid-template-columns: 110px 1fr 1fr 90px; padding: 10px 12px; font-size: 0.82rem; }
+  .att-history-row { grid-template-columns: 110px 1fr 1fr 90px 36px; padding: 10px 12px; font-size: 0.82rem; }
 }
+
+.att-history-row .att-h-del {
+  width: 28px;
+  height: 28px;
+  justify-self: end;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-tint);
+  color: var(--color-ink-soft);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+              background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.att-history-row .att-h-del svg { width: 13px; height: 13px; }
+.att-history-row .att-h-del:hover { border-color: var(--color-danger); color: var(--color-danger); background: #FBEBEA; }
+.att-history-row .att-h-del:active { transform: scale(.94); }
