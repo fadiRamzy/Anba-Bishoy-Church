@@ -471,6 +471,7 @@ async function router() {
   if (segments[0] === 'browse' && segments[1]) return renderBrowse(segments[1], segments[2], params);
   if (segments[0] === 'member' && segments[1]) return renderProfile(segments[1]);
   if (segments[0] === 'add') return renderForm(null);
+  if (segments[0] === 'attendance') return renderAttendance();
   if (segments[0] === 'edit' && segments[1]) return renderForm(segments[1]);
   if (segments[0] === 'admin') return renderAdminPanel();
   if (segments[0] === 'birthdays') return renderBirthdays();
@@ -2334,6 +2335,10 @@ async function renderHome() {
           <span class="icon-wrap">${ICONS.cake}</span>
           <span>أعياد الميلاد</span>
         </a>
+        <a href="#/attendance" class="nav-card">
+          <span class="icon-wrap">${ICONS.calendar}</span>
+          <span>الحضور</span>
+        </a>
       </div>
     </div>
   `;
@@ -3285,6 +3290,368 @@ async function renderBrowse(key, valueRaw, params) {
 }
 
 /* ---------------------------------------------------------------------- */
+/*  الحضور — Attendance (additive feature).                                */
+/*  Uses the EXISTING classification data (the member's القطاع/الفصل),     */
+/*  the existing UI patterns and the shared jsPDF/html2canvas PDF layer.   */
+/*  History is stored on each member record (the project's IndexedDB       */
+/*  update pattern, MembersDB.put) as:                                     */
+/*    member.attendance = [{ date, sector, class, present }, ...]          */
+/*  so every record snapshots the classification it was recorded under     */
+/*  and is never affected by later moves to another sector/class.          */
+/*  Re-recording the same member/date/classification updates the existing  */
+/*  record instead of duplicating it. No departure/checkout.               */
+/* ---------------------------------------------------------------------- */
+
+function attTodayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+const ATT_ROWS_PER_PAGE = 30; /* rows per attendance-sheet PDF page */
+
+async function renderAttendance() {
+  renderChrome(true);
+  const members = await MembersDB.getAll();
+  const sectors = [...new Set(members.map((m) => (m.sector || '').trim()).filter(Boolean))];
+  const today = attTodayStr();
+
+  APP_ROOT.innerHTML = `
+    <div class="container">
+      <p class="breadcrumbs"><a href="#/home">الرئيسية</a><span class="sep">/</span><span>الحضور</span></p>
+      <h2 class="section-title">الحضور</h2>
+      <p class="section-sub">اختر القطاع ثم الفصل لتسجيل حضور اليوم أو استخراج كشف الحضور</p>
+
+      <div class="filter-bar">
+        <div class="field">
+          <label for="attSectorSelect">القطاع</label>
+          <select id="attSectorSelect"><option value="">اختر القطاع</option>${sectors.map((s) => `<option value="${escapeHTML(s)}">${escapeHTML(cleanLabel(s))}</option>`).join('')}</select>
+        </div>
+        <div class="field">
+          <label for="attClassSelect">الفصل</label>
+          <select id="attClassSelect" disabled><option value="">اختر القطاع أولاً</option></select>
+        </div>
+      </div>
+
+      <div id="attListWrap">
+        <div class="empty-state">${ICONS.empty}<p>اختر القطاع ثم الفصل لعرض الأسماء</p></div>
+      </div>
+
+      <div class="filter-bar att-pdf-bar">
+        <div class="field">
+          <label for="attFromInput">حضور من تاريخ</label>
+          <input type="date" id="attFromInput" />
+        </div>
+        <div class="field">
+          <label for="attToInput">حضور إلى تاريخ</label>
+          <input type="date" id="attToInput" />
+        </div>
+        <div class="field att-pdf-field">
+          <label for="attPdfBtn">الكشف</label>
+          <button type="button" id="attPdfBtn" class="btn btn-outline btn-sm">${ICONS.download}<span>استخراج PDF</span></button>
+        </div>
+      </div>
+    </div>`;
+
+  const sectorSelect = document.getElementById('attSectorSelect');
+  const classSelect = document.getElementById('attClassSelect');
+  const listWrap = document.getElementById('attListWrap');
+  const fromInput = document.getElementById('attFromInput');
+  const toInput = document.getElementById('attToInput');
+  const pdfBtn = document.getElementById('attPdfBtn');
+
+  fromInput.value = `${today.slice(0, 7)}-01`;
+  toInput.value = today;
+
+  const classesFor = (sector) => [...new Set(
+    members.filter((m) => (m.sector || '').trim() === sector)
+      .map((m) => (m.class || '').trim()).filter(Boolean)
+  )];
+
+  function renderList() {
+    const sector = sectorSelect.value;
+    const cls = classSelect.value;
+    if (!sector || !cls) {
+      listWrap.innerHTML = `<div class="empty-state">${ICONS.empty}<p>اختر القطاع ثم الفصل لعرض الأسماء</p></div>`;
+      return;
+    }
+    const roster = members.filter((m) => (m.sector || '').trim() === sector && (m.class || '').trim() === cls);
+    if (!roster.length) {
+      listWrap.innerHTML = `<div class="empty-state">${ICONS.empty}<p>لا يوجد أسماء في هذا التصنيف</p></div>`;
+      return;
+    }
+    listWrap.innerHTML = `
+      <div class="att-list">
+        ${roster.map((m) => {
+          const saved = (Array.isArray(m.attendance) ? m.attendance : [])
+            .find((r) => r.date === today && r.sector === sector && r.class === cls);
+          const phone = m.phone1 || m.phone2 || '';
+          return `
+          <label class="att-row">
+            <span class="member-avatar">${escapeHTML(initials(m.name))}</span>
+            <span class="att-info">
+              <span class="att-name">${escapeHTML(m.name || '')}</span>
+              ${phone ? `<span class="att-meta" dir="ltr">${escapeHTML(formatPhone(phone))}</span>` : ''}
+            </span>
+            <input type="checkbox" class="att-checkbox" data-id="${m.id}"${saved && saved.present ? ' checked' : ''} />
+            <span class="att-box" aria-hidden="true"></span>
+          </label>`;
+        }).join('')}
+      </div>
+      <div class="att-actions">
+        <button type="button" id="attSaveBtn" class="btn btn-primary"><span>تسجيل الحضور عن اليوم</span></button>
+      </div>
+      <p class="att-hint">يوم الحضور: ${formatDMY(today)} — إعادة التسجيل في نفس اليوم تحدّث السجل ولا تكرّره</p>`;
+    document.getElementById('attSaveBtn').addEventListener('click', saveToday);
+  }
+
+  async function saveToday() {
+    const sector = sectorSelect.value;
+    const cls = classSelect.value;
+    const saveBtn = document.getElementById('attSaveBtn');
+    const boxes = [...listWrap.querySelectorAll('.att-checkbox')];
+    saveBtn.disabled = true;
+    try {
+      let present = 0;
+      let changed = 0;
+      for (const box of boxes) {
+        const member = members.find((m) => String(m.id) === box.dataset.id);
+        if (!member) continue;
+        const want = box.checked;
+        if (want) present++;
+        const list = Array.isArray(member.attendance) ? member.attendance : [];
+        const rec = list.find((r) => r.date === today && r.sector === sector && r.class === cls);
+        if (rec) {
+          if (rec.present !== want) {
+            rec.present = want;
+            member.attendance = list;
+            await MembersDB.put(member);
+            changed++;
+          }
+        } else {
+          list.push({ date: today, sector, class: cls, present: want });
+          member.attendance = list;
+          await MembersDB.put(member);
+          changed++;
+        }
+      }
+      showToast(changed ? `تم تسجيل الحضور عن ${formatDMY(today)}: ${present} حاضر من ${boxes.length}` : 'سجل اليوم محفوظ بالفعل — تم التحديث دون تكرار', 'success');
+      /* success: clear the list (filters stay selected so another
+         sector/class can be loaded for the next entry) */
+      listWrap.innerHTML = `<div class="empty-state">${ICONS.empty}<p>تم حفظ الحضور — اختر القطاع والفصل لعرض قائمة جديدة</p></div>`;
+    } catch (err) {
+      console.error('Attendance save failed:', err);
+      showToast('تعذر حفظ الحضور', 'error');
+    } finally {
+      const b = document.getElementById('attSaveBtn');
+      if (b) b.disabled = false;
+    }
+  }
+
+  sectorSelect.addEventListener('change', () => {
+    const sector = sectorSelect.value;
+    const classes = classesFor(sector);
+    classSelect.innerHTML = `<option value="">${sector ? 'اختر الفصل' : 'اختر القطاع أولاً'}</option>${classes.map((c) => `<option value="${escapeHTML(c)}">${escapeHTML(cleanLabel(c))}</option>`).join('')}`;
+    classSelect.disabled = !sector || !classes.length;
+    renderList();
+  });
+  classSelect.addEventListener('change', renderList);
+  pdfBtn.addEventListener('click', () => {
+    const sector = sectorSelect.value;
+    const cls = classSelect.value;
+    if (!sector || !cls) {
+      showToast('اختر القطاع والفصل أولاً', 'error');
+      return;
+    }
+    downloadAttendancePDF({ sector, cls, from: fromInput.value, to: toInput.value, btn: pdfBtn });
+  });
+}
+
+/* Attendance PDF — reuses the shared export layer (_loadPdfLibs,
+   _pdfRenderPages, PDF_FONT_STACK/PDF_TEXT_RULES, pdfCellWrap, the probe)
+   exactly like the existing visitation/birthdays/sector exports, and the
+   existing logo.jpg asset as the faded watermark. Structure follows the
+   KG2 Friday sheet: navy #1F3864 header repeated on every page, month
+   groups spanning their date columns, 30 rows per page with continuous
+   numbering, hollow circles for empty cells and a green check for
+   attended dates. Dates/columns are derived from the stored attendance
+   records inside the selected period — nothing is hard-coded.          */
+async function downloadAttendancePDF({ sector, cls, from, to, btn }) {
+  const originalLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = 'جاري التجهيز...';
+  try {
+    await _loadPdfLibs();
+    const { jsPDF } = window.jspdf;
+    const members = await MembersDB.getAll();
+    const today = attTodayStr();
+
+    const start = from;
+    const end = to;
+    if (!start || !end || start > end) {
+      showToast('اختر فترة صحيحة', 'error');
+      return;
+    }
+
+    /* historical scan: match each record's own snapshotted classification */
+    const dateSet = new Set();
+    const rowsById = new Map();
+    const addRow = (id, name) => {
+      if (!rowsById.has(id)) rowsById.set(id, { id, name: name || '', marks: new Map() });
+      return rowsById.get(id);
+    };
+    for (const m of members) {
+      const list = Array.isArray(m.attendance) ? m.attendance : [];
+      for (const r of list) {
+        if (!r || typeof r.date !== 'string') continue;
+        if (r.date < start || r.date > end) continue;
+        if ((r.sector || '') !== sector || (r.class || '') !== cls) continue;
+        dateSet.add(r.date);
+        addRow(m.id, m.name).marks.set(r.date, !!r.present);
+      }
+    }
+    /* current roster of the class appears even without records in range */
+    for (const m of members) {
+      if ((m.sector || '').trim() === sector && (m.class || '').trim() === cls) addRow(m.id, m.name);
+    }
+    const dates = [...dateSet].sort();
+    if (!dates.length) {
+      showToast('لا توجد سجلات حضور لهذا الفصل في الفترة المحددة', 'error');
+      return;
+    }
+    const rows = [...rowsById.values()].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
+
+    /* group the dates under their months (chronological) */
+    const monthKeys = [];
+    const monthMap = new Map();
+    for (const dt of dates) {
+      const key = dt.slice(0, 7);
+      if (!monthMap.has(key)) { monthMap.set(key, []); monthKeys.push(key); }
+      monthMap.get(key).push(dt);
+    }
+
+    /* dynamic title phrases */
+    const WD = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+    const wds = new Set(dates.map((dt) => new Date(`${dt}T00:00:00`).getDay()));
+    const daysPhrase = wds.size === 1 ? `أيام ${WD[[...wds][0]]} ` : '';
+    const years = [...new Set(monthKeys.map((k) => k.slice(0, 4)))];
+    const periodPhrase = `للفترة من ${formatDMY(start)} إلى ${formatDMY(end)}${years.length === 1 ? ` لعام ${years[0]}` : ''}`;
+
+    /* page geometry — same pt==px convention as the existing exports */
+    const PAGE_W = 595;
+    const PAGE_H = 842;
+    const MARGIN = 14;
+    const HEAD_BLOCK_H = 74;
+    const TABLE_TOP_GAP = 8;
+    const THEAD_H = 36;
+    const BLOCK_TOP = MARGIN + HEAD_BLOCK_H + TABLE_TOP_GAP + THEAD_H;
+    const BLOCK_H = PAGE_H - BLOCK_TOP - MARGIN;
+    const NAME_COL_W = PAGE_W * 0.265;
+    const nameInnerW = NAME_COL_W - PDF_CELL_PAD_X;
+
+    const ATT_TD = `border:1px solid #B7C3CE;height:22px;padding:1px 5px;vertical-align:middle;${PDF_TEXT_RULES}font-family:${PDF_FONT_STACK};`;
+    const ATT_TH_NAVY = `background:#1F3864;color:#fff;border:1px solid #1F3864;font-weight:700;text-align:center;vertical-align:middle;padding:4px 3px;${PDF_TEXT_RULES}font-family:${PDF_FONT_STACK};`;
+    const ATT_TH_MONTH = `background:#2F5597;color:#fff;border:1px solid #2F5597;font-weight:700;text-align:center;vertical-align:middle;padding:3px;${PDF_TEXT_RULES}font-family:${PDF_FONT_STACK};`;
+    const ATT_TH_DATE = `background:#DCE6F1;color:#1F2A37;border:1px solid #9AA7B2;font-weight:700;text-align:center;vertical-align:middle;padding:2px 1px;font-size:9.5px;line-height:1.3;overflow-wrap:break-word;font-family:${PDF_FONT_STACK};`;
+
+    const markHTML = (present) => present
+      ? '<span style="display:inline-block;width:7px;height:12px;border-right:2.2px solid #2E7D32;border-bottom:2.2px solid #2E7D32;transform:rotate(45deg);margin-top:-4px;"></span>'
+      : '<span style="display:inline-block;width:11px;height:11px;border:1.3px solid #555555;border-radius:50%;"></span>';
+
+    /* measure wrapped name heights so no row is ever split across pages
+       (same probe technique as the existing exports) */
+    const probe = document.createElement('div');
+    probe.style.cssText = PDF_PROBE_BASE;
+    document.body.appendChild(probe);
+    const measureH = (text, width) => {
+      probe.style.width = `${width}px`;
+      probe.textContent = text;
+      return probe.offsetHeight;
+    };
+    const measured = rows.map((r) => ({ ...r, rowH: Math.max(22, measureH(r.name, nameInnerW)) }));
+    probe.remove();
+
+    /* bin-pack: max 30 rows per page, never exceeding the page block */
+    const pagesRows = [];
+    let current = [];
+    let currentH = 0;
+    for (const r of measured) {
+      if (current.length && (current.length >= ATT_ROWS_PER_PAGE || currentH + r.rowH > BLOCK_H)) {
+        pagesRows.push(current);
+        current = [];
+        currentH = 0;
+      }
+      current.push(r);
+      currentH += r.rowH;
+    }
+    if (current.length) pagesRows.push(current);
+    /* spare rows keep the structured sheet layout on the last page */
+    const last = pagesRows[pagesRows.length - 1];
+    const lastH = last.reduce((a, r) => a + r.rowH, 0);
+    let spares = 0;
+    while (last.length + spares < ATT_ROWS_PER_PAGE && lastH + (spares + 1) * 22 <= BLOCK_H) spares++;
+
+    const monthLabel = (k) => {
+      const name = ARABIC_MONTHS[parseInt(k.slice(5, 7), 10) - 1];
+      return years.length > 1 ? `${name} ${k.slice(0, 4)}` : name;
+    };
+
+    function pageHTML(pageRows, startSerial, spareCount) {
+      const monthsHead = monthKeys.map((k) => `<th colspan="${monthMap.get(k).length}" style="${ATT_TH_MONTH}">${escapeHTML(monthLabel(k))}</th>`).join('');
+      const datesHead = dates.map((dt) => `<th style="${ATT_TH_DATE}">${parseInt(dt.slice(8, 10), 10)}/${parseInt(dt.slice(5, 7), 10)}</th>`).join('');
+      const bodyRows = pageRows.map((r, i) => {
+        const serial = startSerial + i;
+        const cells = dates.map((dt) => `<td style="${ATT_TD}text-align:center;">${markHTML(r.marks.get(dt) === true)}</td>`).join('');
+        return `<tr><td style="${ATT_TD}text-align:center;font-weight:700;">${serial}</td><td style="${ATT_TD}text-align:right;font-weight:700;color:#000;${pdfCellWrap(r.name, nameInnerW)}">${escapeHTML(r.name)}</td>${cells}</tr>`;
+      }).join('');
+      const spareRows = Array.from({ length: spareCount }, (_, i) => {
+        const serial = startSerial + pageRows.length + i;
+        return `<tr><td style="${ATT_TD}text-align:center;font-weight:700;">${serial}</td><td style="${ATT_TD}"></td>${dates.map(() => '<td style="' + ATT_TD + '"></td>').join('')}</tr>`;
+      }).join('');
+      return `
+        <div style="width:${PAGE_W}px;height:${PAGE_H}px;background:#FFFDF8;box-sizing:border-box;position:relative;overflow:hidden;direction:rtl;">
+          <img src="logo.jpg" alt="" style="position:absolute;left:50%;top:55%;width:330px;height:330px;object-fit:contain;transform:translate(-50%,-50%);opacity:0.17;">
+          <div style="position:relative;padding:${MARGIN}px;">
+            <div style="background:#1F3864;color:#fff;text-align:center;padding:7px 8px 8px;">
+              <div style="font-family:${PDF_HEAD_FONT}font-size:16.5px;font-weight:700;line-height:1.5;">كنيســــة القديس العظيم الأنبــــا بيشوي - المنيا الجديدة</div>
+              <div style="font-family:${PDF_FONT_STACK};font-size:11px;font-weight:700;margin-top:2px;display:flex;justify-content:center;gap:22px;"><span>مدارس الأحد</span><span>${escapeHTML(cleanLabel(sector))}</span><span>${escapeHTML(cleanLabel(cls))}</span></div>
+              <div style="font-family:${PDF_FONT_STACK};font-size:11px;font-weight:700;margin-top:2px;">كشف حضور وغياب ${escapeHTML(daysPhrase)}${escapeHTML(periodPhrase)}</div>
+            </div>
+            <table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-top:${TABLE_TOP_GAP}px;">
+              <colgroup><col style="width:5.5%"><col style="width:26.5%">${dates.map(() => '<col>').join('')}</colgroup>
+              <thead>
+                <tr><th rowspan="2" style="${ATT_TH_NAVY}">م</th><th rowspan="2" style="${ATT_TH_NAVY}">الاسم</th>${monthsHead}</tr>
+                <tr>${datesHead}</tr>
+              </thead>
+              <tbody>${bodyRows}${spareRows}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    let serial = 1;
+    const pages = pagesRows.map((block) => {
+      const html = pageHTML(block, serial, 0);
+      serial += block.length;
+      return html;
+    });
+    const lastStart = serial - pagesRows[pagesRows.length - 1].length;
+    pages[pages.length - 1] = pageHTML(pagesRows[pagesRows.length - 1], lastStart, spares);
+
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+    await _pdfRenderPages(pdf, pages, PAGE_W, PAGE_H);
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    pdf.save(`كشف_الحضور_${cleanLabel(cls)}_${stamp}.pdf`);
+  } catch (err) {
+    console.error('PDF generation failed:', err);
+    showToast('حدث خطأ أثناء إنشاء ملف PDF', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
 /*  Member profile                                                        */
 /* ---------------------------------------------------------------------- */
 async function renderProfile(idStr) {
@@ -3365,6 +3732,23 @@ async function renderProfile(idStr) {
           <div class="info-item full"><dd class="${member.notes ? '' : 'muted'}">${fieldOrFallback(member.notes)}</dd></div>
         </dl>
       </div>
+      ${Array.isArray(member.attendance) && member.attendance.length ? `
+      <div class="info-section">
+        <h3>${ICONS.calendar} سجل الحضور</h3>
+        <div class="att-history">
+          <div class="att-history-row att-history-head">
+            <span>تاريخ الحضور</span><span>المرحلة/القطاع وقت التسجيل</span><span>الفصل وقت التسجيل</span><span>حالة الحضور</span>
+          </div>
+          ${member.attendance.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+            .map((r) => `
+          <div class="att-history-row">
+            <span class="att-h-date" dir="ltr">${escapeHTML(formatDMY(r.date) || '—')}</span>
+            <span>${escapeHTML(cleanLabel(r.sector) || '—')}</span>
+            <span>${escapeHTML(cleanLabel(r.class) || '—')}</span>
+            <span class="att-h-state${r.present ? ' present' : ''}">${r.present ? 'حاضر' : 'غائب'}</span>
+          </div>`).join('')}
+        </div>
+      </div>` : ''}
     </div>
   `;
 

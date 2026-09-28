@@ -35,10 +35,10 @@ const IS_APP = self.location.hostname === 'localhost' && self.location.protocol 
 const PRECACHE_URLS = [
   './',
   'index.html',
-  'app.js?v=17',
-  'app-shell.js?v=1',
+  'app.js?v=19',
+  'app-shell.js?v=2',
   'db.js?v=3',
-  'styles.css?v=14',
+  'styles.css?v=18',
   'bible/bible.js?v=5',
   'bible/metadata.json',
   'calendar/coptic-calendar.js?v=2',

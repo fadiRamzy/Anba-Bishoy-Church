@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=14" />
+<link rel="stylesheet" href="styles.css?v=18" />
 <link rel="stylesheet" href="calendar/calendar.css?v=3" />
 </head>
 <body>
@@ -97,8 +97,8 @@
 <script src="db.js?v=3"></script>
 <script src="bible/bible.js?v=5"></script>
 <script src="calendar/coptic-calendar.js?v=2"></script>
-<script src="app.js?v=17"></script>
-<script src="app-shell.js?v=1"></script>
+<script src="app.js?v=19"></script>
+<script src="app-shell.js?v=2"></script>
 <script>
   // Offline support: register the service worker so the app's own files
   // (HTML/CSS/JS) keep working with no internet connection. IndexedDB data
@@ -108,6 +108,45 @@
       navigator.serviceWorker.register('service-worker.js').catch(() => {});
     });
   }
+</script>
+<script>
+  // v5 Liquid Glass — visual only. Feeds the two custom properties behind the
+  // moving specular highlight on the existing controls, and mirrors the app
+  // bar's own .is-scrolled behaviour onto the bottom bar. Passive listeners;
+  // they write CSS variables / one class and never touch app state or markup.
+  (function () {
+    var SEL = '.btn,.back-link,.admin-toggle,.search-box,.tab-item .tab-icon,.pin-modal,.toast';
+    var raf = 0, el = null, ev = null, key = '';
+    function paint() {
+      raf = 0;
+      if (!el || !ev) return;
+      var r = el.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      var mx = (((ev.clientX - r.left) / r.width) * 100).toFixed(1) + '%';
+      var my = (((ev.clientY - r.top) / r.height) * 100).toFixed(1) + '%';
+      if (mx + my === key) return;          // sub-pixel move: nothing to repaint
+      key = mx + my;
+      el.style.setProperty('--lg-mx', mx);
+      el.style.setProperty('--lg-my', my);
+    }
+    document.addEventListener('pointermove', function (e) {
+      var t = e.target && e.target.closest ? e.target.closest(SEL) : null;
+      if (!t) return;
+      el = t; ev = e;
+      if (!raf && typeof requestAnimationFrame === 'function') raf = requestAnimationFrame(paint);
+    }, { passive: true });
+    document.addEventListener('pointerout', function (e) {
+      var t = e.target && e.target.closest ? e.target.closest(SEL) : null;
+      if (!t) return;
+      t.style.removeProperty('--lg-mx');
+      t.style.removeProperty('--lg-my');
+      key = '';
+    }, { passive: true });
+    window.addEventListener('scroll', function () {
+      var bar = document.querySelector('.tab-bar');
+      if (bar) bar.classList.toggle('is-scrolled', window.scrollY > 6);
+    }, { passive: true });
+  })();
 </script>
 </body>
 </html>

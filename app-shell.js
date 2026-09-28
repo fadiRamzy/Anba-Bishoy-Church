@@ -30,6 +30,7 @@
     add: 'directory',
     edit: 'directory',
     birthdays: 'directory',
+    attendance: 'directory',
     visitation: 'visitation',
     bible: 'bible',
     admin: 'admin',

@@ -3041,7 +3041,7 @@ select.birthday-month-select, .child-row select {
 
   /* the "نطاق حسب" quick-nav strip: the base design is one 5-across row of
      compact icon cards (the phone layer had flattened it to 2 columns) */
-  .nav-grid { grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 8px 0 28px; }
+  .nav-grid { grid-template-columns: repeat(6, 1fr); gap: 12px; margin: 8px 0 28px; }
   .nav-card { padding: 16px 10px; gap: 9px; }
   .nav-card .icon-wrap { width: 46px; height: 46px; border-radius: 15px; }
   .nav-card .icon-wrap svg { width: 23px; height: 23px; }
@@ -3055,3 +3055,131 @@ select.birthday-month-select, .child-row select {
 /* the "اتصال" number chooser (new Call feature) — stacks the two number
    buttons inside the standard .pin-modal dialog; no other styles affected */
 .call-options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+
+/* ==========================================================================
+   الحضور — Attendance (additive feature: selection rows + checkbox + save)
+   New component classes only; every existing rule is untouched. Reuses the
+   app's own tokens/variables so it inherits the Liquid Glass identity.
+   ========================================================================== */
+.att-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.att-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 13px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.att-row:active { transform: scale(.99); }
+.att-row:focus-within { outline: 2px solid rgba(124, 31, 44, 0.4); outline-offset: 2px; }
+.att-row .att-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.att-row .att-name {
+  font-weight: 700;
+  font-size: 0.97rem;
+  line-height: 1.5;
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.att-row .att-meta { font-size: 0.75rem; color: var(--color-ink-soft); }
+.att-checkbox {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  margin: 0;
+  pointer-events: none;
+}
+.att-box {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 9px;
+  border: 1.5px solid var(--color-line);
+  background: var(--color-surface-tint);
+  display: grid;
+  place-items: center;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
+}
+.att-box::after {
+  content: '';
+  width: 7px;
+  height: 12px;
+  border-right: 2.5px solid #fff;
+  border-bottom: 2.5px solid #fff;
+  transform: rotate(45deg) scale(0);
+  margin-top: -2px;
+  opacity: 0;
+  transition: transform var(--dur-fast) var(--ease-spring), opacity var(--dur-fast) var(--ease);
+}
+.att-row .att-checkbox:checked ~ .att-box {
+  background: #2E7D32;
+  border-color: #2E7D32;
+  box-shadow: 0 2px 8px -2px rgba(46, 125, 50, 0.5);
+}
+.att-row .att-checkbox:checked ~ .att-box::after { transform: rotate(45deg) scale(1); opacity: 1; }
+.att-row:has(.att-checkbox:checked) {
+  border-color: rgba(46, 125, 50, 0.45);
+  background: linear-gradient(180deg, #F3FAF4, #EAF6EC);
+}
+.att-actions { display: flex; gap: 8px; margin: 14px 0 6px; }
+.att-actions .btn { flex: 1; min-height: 46px; font-size: 0.92rem; font-weight: 700; }
+.att-hint { font-size: 0.75rem; color: var(--color-ink-soft); text-align: center; margin: 0 0 4px; }
+.att-pdf-bar { margin-top: 16px; }
+
+/* desktop: consistent with the v5.2 refinement metrics */
+@media (min-width: 720px) {
+  .att-row { padding: 13px 15px; gap: 13px; }
+  .att-row .att-name { font-size: 0.97rem; }
+  .att-box { width: 28px; height: 28px; border-radius: 10px; }
+  .att-list { gap: 10px; }
+}
+
+/* سجل الحضور — attendance history rows inside the member profile
+   (feature-scoped: new classes only, existing rules untouched) */
+.att-history { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.att-history-row {
+  display: grid;
+  grid-template-columns: 88px 1fr 1fr 72px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+.att-history-row.att-history-head {
+  background: var(--color-surface-alt);
+  font-size: 0.68rem;
+  color: var(--color-ink-soft);
+  border-color: rgba(230, 220, 197, 0.9);
+}
+.att-history-row .att-h-date { color: var(--color-ink-soft); }
+.att-history-row .att-h-state {
+  justify-self: start;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  color: var(--color-ink-soft);
+  border: 1px solid rgba(230, 220, 197, 0.9);
+}
+.att-history-row .att-h-state.present {
+  background: #EAF6EC;
+  color: #2E7D32;
+  border-color: rgba(46, 125, 50, 0.35);
+}
+@media (min-width: 720px) {
+  .att-history-row { grid-template-columns: 110px 1fr 1fr 90px; padding: 10px 12px; font-size: 0.82rem; }
+}
