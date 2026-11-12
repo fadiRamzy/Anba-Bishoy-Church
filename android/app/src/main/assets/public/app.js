@@ -3461,8 +3461,10 @@ async function renderAttendance() {
             ${ICONS.bell}
             <span class="att-notif-count" id="attNotifCount">0</span>
           </button>
-          <label for="attDateInput">تاريخ تسجيل الحضور</label>
-          <input type="date" id="attDateInput" value="${today}" />
+          <div class="att-date-group">
+            <label for="attDateInput">تاريخ تسجيل الحضور</label>
+            <input type="date" id="attDateInput" value="${today}" />
+          </div>
         </div>
       </div>
 
