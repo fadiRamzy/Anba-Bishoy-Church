@@ -77,21 +77,21 @@ jobs:
           name: anba-bishoy-android-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
-      # The live website serves this file (GitHub Pages, repo root) and the
-      # Administration page downloads it via the "تنزيل / تحديث التطبيق"
-      # button, so the published APK must always be the latest build.
-      # Committing *.apk does not retrigger this workflow (not in paths:).
-      - name: Publish APK to site root (download/update distribution)
+      # The Administration page's "تنزيل / تحديث التطبيق" button downloads
+      # this file, so the published APK must always be the latest build.
+      # Pushing binaries back to Main is rejected (protected branch), so the
+      # APK is published to the fixed, public "android-latest" release instead.
+      # The button and the in-app bridge download from that exact URL.
+      - name: Publish APK to the android-latest release (download/update distribution)
         if: github.ref == 'refs/heads/Main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cp android/app/build/outputs/apk/debug/app-debug.apk Anba-Bishoy-Church.apk
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add Anba-Bishoy-Church.apk
-          if git diff --cached --quiet; then
-            echo 'APK unchanged — nothing to publish'
-            exit 0
+          if gh release view android-latest >/dev/null 2>&1; then
+            gh release upload android-latest Anba-Bishoy-Church.apk --clobber
+          else
+            gh release create android-latest Anba-Bishoy-Church.apk \
+              --title 'تطبيق الكنيسة (Android) — أحدث نسخة' \
+              --notes 'أحدث بناء لأندرويد يُنشر تلقائيًا من سير عمل Build Android عند كل تحديث على Main.'
           fi
-          git commit -m 'ci: publish updated Android APK to site root'
-          git pull --rebase origin Main
-          git push origin HEAD:Main
