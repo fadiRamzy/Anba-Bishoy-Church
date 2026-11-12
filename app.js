@@ -3448,6 +3448,11 @@ async function renderAttendance() {
       <p class="section-sub">اختر القطاع ثم الفصل لتسجيل حضور اليوم أو استخراج كشف الحضور</p>
 
       <div class="att-filter-outer">
+        <button type="button" class="att-notif" id="attNotifBtn" aria-label="أشخاص لم يسجلوا حضورًا منذ أكثر من ١٤ يومًا">
+          ${ICONS.bell}
+          <span class="att-notif-text">لم يحضروا منذ ١٤ يومًا</span>
+          <span class="att-notif-count" id="attNotifCount">0</span>
+        </button>
         <div class="filter-bar">
           <div class="field">
             <label for="attSectorSelect">القطاع</label>
@@ -3462,10 +3467,6 @@ async function renderAttendance() {
             <input type="date" id="attDateInput" value="${today}" />
           </div>
         </div>
-        <button type="button" class="att-notif" id="attNotifBtn" aria-label="أشخاص لم يسجلوا حضورًا منذ أكثر من ١٤ يومًا">
-          ${ICONS.bell}
-          <span class="att-notif-count" id="attNotifCount">0</span>
-        </button>
       </div>
 
       <div id="attListWrap">
@@ -4139,8 +4140,8 @@ const CLASS_MAP = {
   'جامعة شابات': ['اجتماع الشباب', 'اجتماع الشابات'],
   'خريجين شباب': ['اجتماع الشباب', 'اجتماع الشابات'],
   'خريجين شابات': ['اجتماع الشباب', 'اجتماع الشابات'],
-  'مدرسة الشمامسة': ['داوؤد النبي', 'المريمات', 'استطفانوس'],
-  'معهد الالحان': ['الفرقة الاولي اولاد', 'الفرقة الاولي بنات'],
+  'مدرسة الشمامسة': ['داود النبي', 'المريمات', 'استطفانوس'],
+  'معهد الالحان': ['الفرقة الاولي اولاد', 'الفرقة الاولي بنات', 'خورس'],
 };
 
 /* Backward compatibility: old records stored the gender-combined value
