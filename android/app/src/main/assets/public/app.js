@@ -3246,10 +3246,13 @@ async function renderBrowse(key, valueRaw, params) {
             <select id="classFilterSelect"><option value="">الكل</option>${classValues.map((c) => `<option value="${escapeHTML(c)}" ${c === subField ? 'selected' : ''}>${escapeHTML(cleanLabel(c))}</option>`).join('')}${subField && !classValues.includes(subField) ? `<option value="${escapeHTML(subField)}" selected>${escapeHTML(cleanLabel(subField))}</option>` : ''}</select>
           </div>
         </div>
-        <div style="margin:18px 0 24px;">
+        <div class="select-names-bar">
           <button type="button" id="sectorPdfBtn" class="btn btn-outline btn-sm">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-inline-end:4px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>استخراج PDF
           </button>
+          <button type="button" id="selectNamesToggle" class="btn btn-outline btn-sm select-names-toggle" aria-pressed="false">${ICONS.users}<span>تحديد أسماء</span></button>
+          <button type="button" id="selectNamesAll" class="btn btn-outline btn-sm select-names-all" hidden>تحديد الكل</button>
+          <span class="select-names-count" id="selectNamesCount" hidden>تم تحديد <b id="selectNamesCountNum">0</b></span>
         </div>` : ''}
       ${showCategoryFilter && categoryCounts.some((c) => c.count > 0) ? `
         <p class="section-sub" style="margin-top:14px;">تصفية</p>
@@ -3257,7 +3260,7 @@ async function renderBrowse(key, valueRaw, params) {
           <a href="#/browse/${key}/${encodeURIComponent(value)}" class="chip${!catParam ? ' active' : ''}">الكل<span class="count">${members.length}</span></a>
           ${categoryCounts.map((c) => `<a href="#/browse/${key}/${encodeURIComponent(value)}?${qs({ cat: c.label })}" class="chip${catParam === c.label ? ' active' : ''}">${escapeHTML(c.label)}<span class="count">${c.count}</span></a>`).join('')}
         </div>` : ''}
-      ${renderMemberListOrEmpty(filtered, 'لا يوجد أسماء في هذا التصنيف')}
+      <div id="memberListWrap">${renderMemberListOrEmpty(filtered, 'لا يوجد أسماء في هذا التصنيف')}</div>
     </div>`;
 
   const sectorFilterSelect = document.getElementById('sectorFilterSelect');
@@ -3283,9 +3286,104 @@ async function renderBrowse(key, valueRaw, params) {
   wireSectorSubFilter('stageFilterSelect', 'stage');
   wireSectorSubFilter('classFilterSelect', 'class');
 
+  /* "تحديد أسماء" — manual selection of any subset of the CURRENTLY
+     DISPLAYED individuals (i.e. after القطاع/الحي/المرحلة/الفصل filters).
+     The selection is handed to the UNCHANGED PDF export; when nobody is
+     selected, the export receives the full filtered list exactly as before. */
+  let sectorSelection = null;
+  if (section.key === 'sector') {
+    const selectToggle = document.getElementById('selectNamesToggle');
+    const selectAllBtn = document.getElementById('selectNamesAll');
+    const countWrap = document.getElementById('selectNamesCount');
+    const countNum = document.getElementById('selectNamesCountNum');
+    const listWrapEl = document.getElementById('memberListWrap');
+    let selectionMode = false;
+    const selectedIds = new Set();
+
+    const selectableCardHTML = (m) => {
+      const metaParts = [m.neighborhood, cleanLabel(m.class || m.sector)].filter(Boolean);
+      const id = String(m.id);
+      const checked = selectedIds.has(id);
+      return `
+        <label class="member-card selectable-card${checked ? ' is-selected' : ''}" data-id="${escapeHTML(id)}">
+          <span class="member-avatar">${escapeHTML(initials(m.name))}</span>
+          <span class="member-info">
+            <span class="member-name">${escapeHTML(m.name)}</span>
+            <span class="member-meta">${escapeHTML(metaParts.join(' · ') || '—')}</span>
+          </span>
+          <input type="checkbox" class="select-card-checkbox" data-id="${escapeHTML(id)}"${checked ? ' checked' : ''} />
+          <span class="select-card-box" aria-hidden="true"></span>
+        </label>`;
+    };
+
+    const renderListInto = () => {
+      if (!listWrapEl) return;
+      if (!selectionMode) {
+        listWrapEl.innerHTML = renderMemberListOrEmpty(filtered, 'لا يوجد أسماء في هذا التصنيف');
+        return;
+      }
+      listWrapEl.innerHTML = filtered.length
+        ? `<div class="member-list">${filtered.map(selectableCardHTML).join('')}</div>`
+        : `<div class="empty-state">${ICONS.empty}<p>لا يوجد أسماء في هذا التصنيف</p></div>`;
+    };
+
+    const updateSelectionUI = () => {
+      const n = selectedIds.size;
+      if (countNum) countNum.textContent = String(n);
+      if (countWrap) countWrap.hidden = !selectionMode;
+      if (selectAllBtn) {
+        selectAllBtn.hidden = !selectionMode;
+        selectAllBtn.textContent = (filtered.length && filtered.every((m) => selectedIds.has(String(m.id))))
+          ? 'إلغاء تحديد الكل'
+          : 'تحديد الكل';
+      }
+      if (selectToggle) {
+        selectToggle.classList.toggle('is-active', selectionMode);
+        selectToggle.setAttribute('aria-pressed', String(selectionMode));
+      }
+    };
+
+    if (selectToggle) {
+      selectToggle.addEventListener('click', () => {
+        selectionMode = !selectionMode;
+        if (!selectionMode) selectedIds.clear();
+        renderListInto();
+        updateSelectionUI();
+      });
+    }
+    if (selectAllBtn) {
+      selectAllBtn.addEventListener('click', () => {
+        const allSelected = filtered.length && filtered.every((m) => selectedIds.has(String(m.id)));
+        if (allSelected) filtered.forEach((m) => selectedIds.delete(String(m.id)));
+        else filtered.forEach((m) => selectedIds.add(String(m.id)));
+        renderListInto();
+        updateSelectionUI();
+      });
+    }
+    if (listWrapEl) {
+      listWrapEl.addEventListener('change', (e) => {
+        const b = e.target.closest('.select-card-checkbox');
+        if (!b) return;
+        const id = b.dataset.id;
+        if (b.checked) selectedIds.add(id);
+        else selectedIds.delete(id);
+        const card = b.closest('.selectable-card');
+        if (card) card.classList.toggle('is-selected', b.checked);
+        updateSelectionUI();
+      });
+    }
+    sectorSelection = {
+      chosen: () => (selectionMode ? filtered.filter((m) => selectedIds.has(String(m.id))) : []),
+    };
+  }
+
   const sectorPdfBtn = document.getElementById('sectorPdfBtn');
   if (sectorPdfBtn) {
-    sectorPdfBtn.addEventListener('click', () => downloadSectorMembersPDF(filtered, value));
+    sectorPdfBtn.addEventListener('click', () => {
+      const chosen = sectorSelection ? sectorSelection.chosen() : [];
+      if (chosen.length) downloadSectorMembersPDF(chosen, value); // export ONLY the selected individuals
+      else downloadSectorMembersPDF(filtered, value);              // no selection -> existing behavior, unchanged
+    });
   }
 }
 
@@ -3305,6 +3403,34 @@ async function renderBrowse(key, valueRaw, params) {
 function attTodayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/* Notification: people whose LAST RECORDED attendance was present and is
+   more than 14 days before today. Recomputed live from the current members
+   array (rebuilt from the stored records), so the count stays synchronized
+   with attendance records automatically. */
+function attDateAddDays(iso, deltaDays) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (isNaN(d.getTime())) return iso;
+  d.setUTCDate(d.getUTCDate() + deltaDays);
+  return d.toISOString().slice(0, 10);
+}
+
+function attLastPresentDate(member) {
+  const list = Array.isArray(member.attendance) ? member.attendance : [];
+  let last = '';
+  for (const r of list) {
+    if (r && r.present === true && typeof r.date === 'string' && r.date > last) last = r.date;
+  }
+  return last;
+}
+
+function attOverdueMembers(members, todayStr) {
+  const cutoff = attDateAddDays(todayStr, -14); /* last present strictly before this ⇔ more than 14 days ago */
+  return members
+    .map((m) => ({ member: m, last: attLastPresentDate(m) }))
+    .filter((x) => x.last && x.last < cutoff)
+    .sort((a, b) => a.last.localeCompare(b.last) || (a.member.name || '').localeCompare(b.member.name || '', 'ar'));
 }
 
 const ATT_ROWS_PER_PAGE = 30; /* rows per attendance-sheet PDF page */
@@ -3330,7 +3456,11 @@ async function renderAttendance() {
           <label for="attClassSelect">الفصل</label>
           <select id="attClassSelect" disabled><option value="">اختر القطاع أولاً</option></select>
         </div>
-        <div class="field">
+        <div class="field att-date-field">
+          <button type="button" class="att-notif" id="attNotifBtn" aria-label="أشخاص لم يسجلوا حضورًا منذ أكثر من ١٤ يومًا">
+            ${ICONS.bell}
+            <span class="att-notif-count" id="attNotifCount">0</span>
+          </button>
           <label for="attDateInput">تاريخ تسجيل الحضور</label>
           <input type="date" id="attDateInput" value="${today}" />
         </div>
@@ -3363,6 +3493,57 @@ async function renderAttendance() {
   const fromInput = document.getElementById('attFromInput');
   const toInput = document.getElementById('attToInput');
   const pdfBtn = document.getElementById('attPdfBtn');
+  const notifBtn = document.getElementById('attNotifBtn');
+  const notifCountEl = document.getElementById('attNotifCount');
+
+  /* Keeps the circular badge (and any open list) synchronized with the
+     attendance records stored on each member. Called on load, after every
+     save, and whenever the list is opened. */
+  const refreshAttNotif = () => {
+    const overdue = attOverdueMembers(members, attTodayStr());
+    if (notifCountEl) {
+      notifCountEl.textContent = String(overdue.length);
+      notifCountEl.classList.toggle('is-zero', overdue.length === 0);
+    }
+    return overdue;
+  };
+
+  const openAttNotifList = () => {
+    const overdue = refreshAttNotif();
+    const backdrop = document.createElement('div');
+    backdrop.className = 'pin-modal-backdrop';
+    const items = overdue.map(({ member, last }) => {
+      const meta = [member.sector ? cleanLabel(member.sector) : '', member.class ? cleanLabel(member.class) : '']
+        .filter(Boolean).join(' · ') || '—';
+      return `
+        <a class="att-notif-item" href="#/member/${member.id}">
+          <span class="member-avatar">${escapeHTML(initials(member.name))}</span>
+          <span class="att-notif-item-info">
+            <span class="att-notif-item-name">${escapeHTML(member.name || '')}</span>
+            <span class="att-notif-item-meta">${escapeHTML(meta)}</span>
+            <span class="att-notif-item-last">آخر حضور: ${escapeHTML(formatDMY(last))}</span>
+          </span>
+          ${ICONS.back}
+        </a>`;
+    }).join('');
+    backdrop.innerHTML = `
+      <div class="pin-modal att-notif-modal" role="dialog" aria-modal="true" aria-label="أشخاص لم يسجلوا حضورًا منذ أكثر من ١٤ يومًا">
+        <div class="att-notif-modal-head">
+          <h3>لم يحضروا منذ أكثر من ١٤ يومًا (${overdue.length})</h3>
+          <button type="button" class="att-notif-close" aria-label="إغلاق">&times;</button>
+        </div>
+        ${overdue.length
+          ? `<div class="att-notif-list">${items}</div>`
+          : `<div class="empty-state">${ICONS.empty}<p>لا يوجد أشخاص — كل من سجّل حضورًا سابقًا حضر خلال آخر ١٤ يومًا</p></div>`}
+      </div>`;
+    document.body.appendChild(backdrop);
+    const close = () => backdrop.remove();
+    backdrop.querySelector('.att-notif-close').addEventListener('click', close);
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+    backdrop.querySelectorAll('.att-notif-item').forEach((a) => a.addEventListener('click', close));
+  };
+  if (notifBtn) notifBtn.addEventListener('click', openAttNotifList);
+  refreshAttNotif();
 
   fromInput.value = `${today.slice(0, 7)}-01`;
   toInput.value = today;
@@ -3407,6 +3588,13 @@ async function renderAttendance() {
         ${ICONS.search}
         <input type="text" id="attSearchInput" placeholder="ابحث عن اسم داخل الفصل..." autocomplete="off" />
       </div>
+      <label class="att-row att-selectall" for="attSelectAll">
+        <span class="att-info">
+          <span class="att-name">تحديد الكل <span class="att-selectall-count" id="attSelectAllCount"></span></span>
+        </span>
+        <input type="checkbox" class="att-checkbox" id="attSelectAll" aria-label="تحديد كل الأسماء المعروضة" />
+        <span class="att-box" aria-hidden="true"></span>
+      </label>
       <div class="att-list" id="attList"></div>
       <div class="att-actions">
         <button type="button" id="attSaveBtn" class="btn btn-primary"><span>تسجيل الحضور عن اليوم</span></button>
@@ -3414,6 +3602,31 @@ async function renderAttendance() {
       <p class="att-hint">تاريخ تسجيل الحضور: ${formatDMY(day)} — إعادة التسجيل في نفس التاريخ يحدّث السجل ولا تكرّره</p>`;
     const attList = document.getElementById('attList');
     const searchInput = document.getElementById('attSearchInput');
+    const selectAll = document.getElementById('attSelectAll');
+    const selectAllCount = document.getElementById('attSelectAllCount');
+
+    /* "تحديد الكل" — toggles every name currently displayed in the class
+       (respects the search filter; checkbox states outside the visible
+       rows are untouched). Keeps checkedMap as the single source of truth. */
+    const displayedCheckboxes = () => [...attList.querySelectorAll('.att-checkbox')];
+    const syncSelectAll = () => {
+      if (!selectAll) return;
+      const boxes = displayedCheckboxes();
+      const checked = boxes.filter((b) => b.checked).length;
+      selectAll.checked = boxes.length > 0 && checked === boxes.length;
+      selectAll.indeterminate = checked > 0 && checked < boxes.length;
+      if (selectAllCount) selectAllCount.textContent = boxes.length ? `(${checked}/${boxes.length})` : '';
+    };
+    if (selectAll) {
+      selectAll.addEventListener('change', () => {
+        const want = selectAll.checked;
+        displayedCheckboxes().forEach((b) => {
+          b.checked = want;
+          if (b.dataset.id) checkedMap.set(b.dataset.id, want);
+        });
+        syncSelectAll();
+      });
+    }
 
     const rowHTML = (m) => `
       <label class="att-row">
@@ -3443,11 +3656,13 @@ async function renderAttendance() {
         const b = attList.querySelector(`.att-checkbox[data-id="${id}"]`);
         if (b) b.checked = checked;
       });
+      syncSelectAll();
     };
     renderRows();
     attList.addEventListener('change', (e) => {
       const b = e.target.closest('.att-checkbox');
       if (b) checkedMap.set(b.dataset.id, b.checked);
+      syncSelectAll();
     });
     searchInput.addEventListener('input', renderRows);
     document.getElementById('attSaveBtn').addEventListener('click', saveToday);
@@ -3491,6 +3706,7 @@ async function renderAttendance() {
         }
       }
       showToast(changed ? `تم تسجيل الحضور عن ${formatDMY(day)}: ${present} حاضر من ${roster.length}` : 'سجل هذا التاريخ محفوظ بالفعل — تم التحديث دون تكرار', 'success');
+      refreshAttNotif();
       /* success: clear the list AND the search field (filters stay
          selected so another sector/class can be loaded next) */
       rosterState = null;
@@ -3895,6 +4111,7 @@ const STAGE_OPTIONS = [
   'الاجتماع العام',
   'اجتماع الكرمة المثمرة',
   'اجتماع الصلاة',
+  'مدرسة الشمامسة - معهد الالحان',
 ];
 
 /* المرحلة -> القطاع */
@@ -3904,6 +4121,7 @@ const SECTOR_MAP = {
   'ثانوي': ['ثانوي بنين', 'ثانوي بنات'],
   'جامعة': ['جامعة شباب', 'جامعة شابات'],
   'خريجين': ['خريجين شباب', 'خريجين شابات'],
+  'مدرسة الشمامسة - معهد الالحان': ['مدرسة الشمامسة', 'معهد الالحان'],
 };
 
 /* القطاع -> الفصل */
@@ -3919,6 +4137,8 @@ const CLASS_MAP = {
   'جامعة شابات': ['اجتماع الشباب', 'اجتماع الشابات'],
   'خريجين شباب': ['اجتماع الشباب', 'اجتماع الشابات'],
   'خريجين شابات': ['اجتماع الشباب', 'اجتماع الشابات'],
+  'مدرسة الشمامسة': ['داوؤد النبي', 'المريمات', 'استطفانوس'],
+  'معهد الالحان': ['الفرقة الاولي اولاد', 'الفرقة الاولي بنات'],
 };
 
 /* Backward compatibility: old records stored the gender-combined value

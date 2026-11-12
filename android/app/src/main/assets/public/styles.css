@@ -3205,3 +3205,175 @@ select.birthday-month-select, .child-row select {
 /* الحضور — search field above the class attendance list (spacing only;
    the field itself reuses the shared .search-box Liquid Glass style) */
 .att-search { margin: 4px 0 10px; }
+
+/* ==========================================================================
+   الحضور — circular notification button (overdue attendance > 14 days),
+   the overdue-people list modal, and the "تحديد الكل" select-all row.
+   New component classes only; every existing rule is untouched.
+   ========================================================================== */
+.att-date-field { display: flex; flex-direction: column; align-items: flex-start; }
+.att-notif {
+  position: relative;
+  align-self: flex-start;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 10px;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #8A2534, #591420);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 6px 16px -8px rgba(89, 20, 32, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+.att-notif:hover { transform: translateY(-1px); box-shadow: 0 10px 22px -10px rgba(89, 20, 32, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
+.att-notif:active { transform: scale(.96); }
+.att-notif:focus-visible { outline: 2px solid rgba(124, 31, 44, 0.5); outline-offset: 2px; }
+.att-notif svg { width: 23px; height: 23px; }
+.att-notif-count {
+  position: absolute;
+  top: -5px;
+  inset-inline-end: -7px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #B42318;
+  color: #fff;
+  border: 2px solid #fff;
+  font-size: .74rem;
+  font-weight: 800;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 6px rgba(42, 33, 27, 0.35);
+}
+.att-notif-count.is-zero { background: #6E6259; }
+
+/* overdue-people list modal (reuses the shared .pin-modal-backdrop look) */
+.att-notif-modal { max-width: 460px; width: 100%; text-align: start; display: flex; flex-direction: column; max-height: 82vh; }
+.att-notif-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.att-notif-modal-head h3 { margin: 0; font-size: 1.02rem; line-height: 1.6; }
+.att-notif-close {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface-tint);
+  color: var(--color-ink-soft);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.att-notif-close:hover { background: #FBEBEA; color: var(--color-danger); }
+.att-notif-list { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.att-notif-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.96);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.att-notif-item:hover { border-color: rgba(173, 131, 50, 0.6); background: #fff; }
+.att-notif-item:active { transform: scale(.99); }
+.att-notif-item-info { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
+.att-notif-item-name { font-weight: 700; font-size: .95rem; color: var(--color-ink); }
+.att-notif-item-meta { font-size: .76rem; color: var(--color-ink-soft); }
+.att-notif-item-last { font-size: .76rem; color: var(--color-maroon); font-weight: 600; }
+.att-notif-item > svg { width: 15px; height: 15px; flex: none; color: var(--color-gold); }
+
+/* "تحديد الكل" — select-all row above the class attendance list
+   (reuses .att-row / .att-checkbox / .att-box with a dashed variant) */
+.att-selectall {
+  margin-top: 10px;
+  border-style: dashed;
+  border-color: rgba(173, 131, 50, 0.55);
+  background: rgba(255, 255, 255, 0.72);
+}
+.att-selectall .att-name { color: var(--color-maroon-dark); font-weight: 800; white-space: normal; }
+.att-selectall-count { color: var(--color-ink-soft); font-weight: 600; font-size: .82em; }
+.att-selectall .att-checkbox:indeterminate ~ .att-box { background: #591420; border-color: #591420; box-shadow: 0 2px 8px -2px rgba(89, 20, 32, 0.5); }
+.att-selectall .att-checkbox:indeterminate ~ .att-box::after {
+  width: 12px;
+  height: 0;
+  border: none;
+  border-top: 2.5px solid #fff;
+  border-radius: 2px;
+  transform: none;
+  margin-top: 0;
+  opacity: 1;
+}
+
+/* ==========================================================================
+   قطاع — "تحديد أسماء" (select names) for the sector PDF export.
+   Functionality only; the PDF engine and member-card base design are untouched.
+   ========================================================================== */
+.select-names-bar { margin: 18px 0 24px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.select-names-toggle.is-active {
+  background: #591420;
+  border-color: #591420;
+  color: #fff;
+  box-shadow: 0 6px 16px -8px rgba(89, 20, 32, 0.65);
+}
+.select-names-count {
+  font-size: .84rem;
+  font-weight: 700;
+  color: var(--color-maroon-dark);
+  background: #FDF3F4;
+  border: 1px solid rgba(124, 31, 44, 0.28);
+  border-radius: 999px;
+  padding: 7px 14px;
+  line-height: 1;
+}
+.select-names-count b { color: #591420; }
+.selectable-card { cursor: pointer; }
+.selectable-card::after { display: none; }
+.selectable-card .member-info { padding-inline-end: 34px; }
+.select-card-checkbox { position: absolute; width: 1px; height: 1px; opacity: 0; margin: 0; pointer-events: none; }
+.select-card-box {
+  position: absolute;
+  inset-inline-end: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  border: 1.5px solid var(--color-line);
+  background: var(--color-surface-tint);
+  display: grid;
+  place-items: center;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
+}
+.select-card-box::after {
+  content: '';
+  width: 7px;
+  height: 12px;
+  border-right: 2.5px solid #fff;
+  border-bottom: 2.5px solid #fff;
+  transform: rotate(45deg) scale(0);
+  margin-top: -2px;
+  opacity: 0;
+  transition: transform var(--dur-fast) var(--ease-spring), opacity var(--dur-fast) var(--ease);
+}
+.select-card-checkbox:checked ~ .select-card-box {
+  background: #2E7D32;
+  border-color: #2E7D32;
+  box-shadow: 0 2px 8px -2px rgba(46, 125, 50, 0.5);
+}
+.select-card-checkbox:checked ~ .select-card-box::after { transform: rotate(45deg) scale(1); opacity: 1; }
+.selectable-card.is-selected {
+  border-color: rgba(46, 125, 50, 0.45);
+  background: linear-gradient(180deg, #F3FAF4, #EAF6EC);
+}
+.selectable-card:focus-within { outline: 2px solid rgba(124, 31, 44, 0.4); outline-offset: 2px; }
