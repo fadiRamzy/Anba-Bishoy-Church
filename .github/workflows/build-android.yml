@@ -24,6 +24,9 @@ on:
       - 'package.json'
       - '.github/workflows/build-android.yml'
 
+permissions:
+  contents: write # allows the final step to publish the built APK to the repo root
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -39,22 +42,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Populate www/ from website root
-        run: |
-          mkdir -p www
-          rsync -a \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='android' \
-            --exclude='node_modules' \
-            --exclude='www' \
-            --exclude='assets' \
-            --exclude='package.json' \
-            --exclude='package-lock.json' \
-            --exclude='capacitor.config.json' \
-            --exclude='.gitignore' \
-            ./ ./www/
-          test -f www/index.html || (echo "::error::www/index.html missing after copy" && exit 1)
+      - name: Populate www/ from website root (includes the native bridge)
+        run: node scripts/sync-web.js
 
       - name: Sync Capacitor Android
         run: npx cap sync android
@@ -65,11 +54,18 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
+
+      # ubuntu-latest runners ship with a preinstalled Android SDK
+      # (ANDROID_HOME / ANDROID_SDK_ROOT). Failing android-actions/setup-android
+      # was removed; verify the SDK instead of re-installing it.
+      - name: Verify Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          test -n "$ANDROID_HOME" && test -d "$ANDROID_HOME" || (echo "::error::Android SDK not found on the runner" && exit 1)
+          java -version
 
       - name: Build debug APK
         working-directory: android
@@ -80,3 +76,22 @@ jobs:
         with:
           name: anba-bishoy-android-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      # The live website serves this file (GitHub Pages, repo root) and the
+      # Administration page downloads it via the "تنزيل / تحديث التطبيق"
+      # button, so the published APK must always be the latest build.
+      # Committing *.apk does not retrigger this workflow (not in paths:).
+      - name: Publish APK to site root (download/update distribution)
+        if: github.ref == 'refs/heads/Main'
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk Anba-Bishoy-Church.apk
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Anba-Bishoy-Church.apk
+          if git diff --cached --quiet; then
+            echo 'APK unchanged — nothing to publish'
+            exit 0
+          fi
+          git commit -m 'ci: publish updated Android APK to site root'
+          git pull --rebase origin Main
+          git push origin HEAD:Main
