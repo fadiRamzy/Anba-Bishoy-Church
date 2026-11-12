@@ -3447,25 +3447,25 @@ async function renderAttendance() {
       <h2 class="section-title">الحضور</h2>
       <p class="section-sub">اختر القطاع ثم الفصل لتسجيل حضور اليوم أو استخراج كشف الحضور</p>
 
-      <div class="filter-bar">
-        <div class="field">
-          <label for="attSectorSelect">القطاع</label>
-          <select id="attSectorSelect"><option value="">اختر القطاع</option>${sectors.map((s) => `<option value="${escapeHTML(s)}">${escapeHTML(cleanLabel(s))}</option>`).join('')}</select>
-        </div>
-        <div class="field">
-          <label for="attClassSelect">الفصل</label>
-          <select id="attClassSelect" disabled><option value="">اختر القطاع أولاً</option></select>
-        </div>
-        <div class="field att-date-field">
-          <button type="button" class="att-notif" id="attNotifBtn" aria-label="أشخاص لم يسجلوا حضورًا منذ أكثر من ١٤ يومًا">
-            ${ICONS.bell}
-            <span class="att-notif-count" id="attNotifCount">0</span>
-          </button>
-          <div class="att-date-group">
+      <div class="att-filter-outer">
+        <div class="filter-bar">
+          <div class="field">
+            <label for="attSectorSelect">القطاع</label>
+            <select id="attSectorSelect"><option value="">اختر القطاع</option>${sectors.map((s) => `<option value="${escapeHTML(s)}">${escapeHTML(cleanLabel(s))}</option>`).join('')}</select>
+          </div>
+          <div class="field">
+            <label for="attClassSelect">الفصل</label>
+            <select id="attClassSelect" disabled><option value="">اختر القطاع أولاً</option></select>
+          </div>
+          <div class="field">
             <label for="attDateInput">تاريخ تسجيل الحضور</label>
             <input type="date" id="attDateInput" value="${today}" />
           </div>
         </div>
+        <button type="button" class="att-notif" id="attNotifBtn" aria-label="أشخاص لم يسجلوا حضورًا منذ أكثر من ١٤ يومًا">
+          ${ICONS.bell}
+          <span class="att-notif-count" id="attNotifCount">0</span>
+        </button>
       </div>
 
       <div id="attListWrap">
