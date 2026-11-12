@@ -4624,7 +4624,7 @@ async function renderAdminPanel() {
         <h3>${ICONS.download} تنزيل / تحديث التطبيق</h3>
         <p>تنزيل أحدث نسخة من تطبيق الكنيسة (APK) على هذا الجهاز.</p>
         <div class="admin-actions">
-          <a id="apkDownloadBtn" class="btn btn-gold" data-apk-download href="Anba-Bishoy-Church.apk" download="Anba-Bishoy-Church.apk">${ICONS.download}<span>Download / Update Church App</span></a>
+          <a id="apkDownloadBtn" class="btn btn-gold" data-apk-download href="https://github.com/fadiRamzy/Anba-Bishoy-Church/releases/download/android-latest/Anba-Bishoy-Church.apk">${ICONS.download}<span>Download / Update Church App</span></a>
         </div>
       </div>
 
@@ -4651,15 +4651,15 @@ async function renderAdminPanel() {
     showToast('تم تنزيل النسخة الاحتياطية', 'success');
   });
 
-  /* "Download / Update Church App" — no PIN required: the tap downloads
-     immediately. The anchor itself is preventDefaulted; a temporary in-DOM
-     anchor performs the real same-origin download (Firefox ignores clicks on
-     detached anchors). */
+  /* "Download / Update Church App" — the tap downloads the latest build,
+     published automatically to the android-latest release by the Build
+     Android workflow. No PIN required: the tap downloads immediately.
+     The anchor itself is preventDefaulted; a temporary in-DOM anchor performs
+     the real download (Firefox ignores clicks on detached anchors). */
   document.getElementById('apkDownloadBtn').addEventListener('click', (e) => {
     e.preventDefault();
     const a = document.createElement('a');
-    a.href = 'Anba-Bishoy-Church.apk';
-    a.download = 'Anba-Bishoy-Church.apk';
+    a.href = 'https://github.com/fadiRamzy/Anba-Bishoy-Church/releases/download/android-latest/Anba-Bishoy-Church.apk';
     document.body.appendChild(a);
     a.click();
     a.remove();

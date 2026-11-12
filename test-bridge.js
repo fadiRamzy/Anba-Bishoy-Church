@@ -18,7 +18,7 @@ const path = require('path');
 const vm = require('vm');
 
 const BRIDGE_SRC = fs.readFileSync(path.join(__dirname, 'capacitor-bridge.js'), 'utf8');
-const APK_URL = 'https://fadiramzy.github.io/Anba-Bishoy-Church/Anba-Bishoy-Church.apk';
+const APK_URL = 'https://github.com/fadiRamzy/Anba-Bishoy-Church/releases/download/android-latest/Anba-Bishoy-Church.apk';
 
 let passed = 0;
 let failed = 0;

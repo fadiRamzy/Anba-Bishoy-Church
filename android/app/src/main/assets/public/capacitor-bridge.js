@@ -97,13 +97,14 @@
     }
 
     /* ---------------- 1b. APK download button ---------------- */
-    /* The APK lives on the live website, not in www/ (see the *.apk
-       exclusion in scripts/sync-web.js). A WebView cannot save a
-       relative-href download (no DownloadListener), so the button's link is
-       rewritten to the absolute GitHub Pages URL: the tap then leaves the
-       WebView and Capacitor opens the external browser, which downloads the
-       newest APK. The button itself stays visible. */
-    var APK_URL = 'https://fadiramzy.github.io/Anba-Bishoy-Church/Anba-Bishoy-Church.apk';
+    /* The APK is published to the fixed, public "android-latest" GitHub
+       release by the Build Android workflow (see the workflow's publish
+       step). A WebView cannot save a relative-href download (no
+       DownloadListener), so the button's link is rewritten to that
+       absolute URL: the tap then leaves the WebView and Capacitor opens the
+       external browser, which downloads the newest APK. The button itself
+       stays visible. */
+    var APK_URL = 'https://github.com/fadiRamzy/Anba-Bishoy-Church/releases/download/android-latest/Anba-Bishoy-Church.apk';
 
     function isApkAnchor(a) {
       if (!a || a.tagName !== 'A' || !a.getAttribute) return false;

@@ -300,14 +300,15 @@ function names(list) { return list.map(r => r.name); }
   const adminFn = app.slice(app.indexOf('async function renderAdminPanel()'), app.indexOf('(async function boot()'));
   ok(!landingFn.includes('data-apk-download') && !landingFn.includes('Anba-Bishoy-Church.apk') && !landingFn.includes('Download Church App'),
     'app.js: homepage has no APK download button');
+  const APK_RELEASE_URL = 'https://github.com/fadiRamzy/Anba-Bishoy-Church/releases/download/android-latest/Anba-Bishoy-Church.apk';
   ok(adminFn.includes('id="apkDownloadBtn"') && adminFn.includes('data-apk-download') &&
-     adminFn.includes('href="Anba-Bishoy-Church.apk"') && adminFn.includes('download="Anba-Bishoy-Church.apk"') &&
+     adminFn.includes(`href="${APK_RELEASE_URL}"`) &&
      adminFn.includes('Download / Update Church App'),
     'app.js: admin panel contains APK download button');
   const apkHandlerIdx = adminFn.indexOf("getElementById('apkDownloadBtn')");
   const apkHandler = apkHandlerIdx >= 0 ? adminFn.slice(apkHandlerIdx, apkHandlerIdx + 900) : '';
   ok(apkHandler.includes('preventDefault') && !apkHandler.includes('Admin.require') &&
-     apkHandler.includes("a.href = 'Anba-Bishoy-Church.apk'"),
+     apkHandler.includes("a.href = 'https://github.com/fadiRamzy/Anba-Bishoy-Church/releases/download/android-latest/Anba-Bishoy-Church.apk'"),
     'app.js: APK download is direct (no PIN gate) yet still downloads');
 
   // --- Birthdays PDF: the added "تاريخ الميلاد" column (this export only) ---
