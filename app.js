@@ -3450,7 +3450,7 @@ async function renderAttendance() {
       <div class="att-filter-outer">
         <button type="button" class="att-notif" id="attNotifBtn" aria-label="أشخاص لم يسجلوا حضورًا منذ أكثر من ١٤ يومًا">
           ${ICONS.bell}
-          <span class="att-notif-text">لم يحضروا منذ ١٤ يومًا</span>
+          <span class="att-notif-text">افتقد مخدومك</span>
           <span class="att-notif-count" id="attNotifCount">0</span>
         </button>
         <div class="filter-bar">
@@ -3532,7 +3532,7 @@ async function renderAttendance() {
     backdrop.innerHTML = `
       <div class="pin-modal att-notif-modal" role="dialog" aria-modal="true" aria-label="أشخاص لم يسجلوا حضورًا منذ أكثر من ١٤ يومًا">
         <div class="att-notif-modal-head">
-          <h3>لم يحضروا منذ أكثر من ١٤ يومًا (${overdue.length})</h3>
+          <h3>افتقد مخدومك (${overdue.length})</h3>
           <button type="button" class="att-notif-close" aria-label="إغلاق">&times;</button>
         </div>
         ${overdue.length
