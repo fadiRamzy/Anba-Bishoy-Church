@@ -3211,15 +3211,17 @@ select.birthday-month-select, .child-row select {
    the overdue-people list modal, and the "تحديد الكل" select-all row.
    New component classes only; every existing rule is untouched.
    ========================================================================== */
-/* beside the attendance registration date: one balanced row —
-   circular bell + badge on the inline-start, label + input filling the rest.
-   The date field keeps its intrinsic size; the button never shifts it. */
-.att-date-field {
-  flex-direction: row;
-  align-items: center;
-  gap: 14px;
-}
-.att-date-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+/* attendance filter row — the overdue-notification button lives OUTSIDE the
+   filter card, parked on its physical left (RTL inline-end), immediately beside
+   the date field's left edge and vertically centered on the date input. The
+   card keeps its exact original width and its fields are never moved, resized
+   or reflowed. Below 1120px the page gutter is too narrow to park the full
+   56px circle, so the button docks in-flow on the same side instead.
+   Vertical alignment uses the date field being the last field (and, on
+   single-row desktop, the only row): its input centre sits 41px above the
+   card's content bottom (18/14px card padding + half of the 46px input). */
+.att-filter-outer { position: relative; margin-bottom: 20px; }
+.att-filter-outer .filter-bar { margin-bottom: 0; }
 .att-notif {
   position: relative;
   flex: none;
@@ -3260,6 +3262,26 @@ select.birthday-month-select, .child-row select {
   box-shadow: 0 2px 6px rgba(42, 33, 27, 0.35);
 }
 .att-notif-count.is-zero { background: #6E6259; }
+/* parked in the left page gutter, just outside the card, level with the date input */
+@media (min-width: 1120px) {
+  .att-notif {
+    position: absolute;
+    inset-inline-end: -70px; /* 56px circle + 14px breathing room past the card edge */
+    bottom: 13px;            /* button centre == date input centre (46px input, 18px card padding) */
+    z-index: 5;
+  }
+}
+/* no room in the gutter — dock in-flow on the same side; card flexes, button never does */
+@media (max-width: 1119px) {
+  .att-filter-outer { display: flex; align-items: stretch; gap: 14px; }
+  .att-filter-outer .filter-bar { flex: 1 1 auto; min-width: 0; }
+  .att-notif { position: relative; flex: none; align-self: flex-end; margin-bottom: 13px; }
+}
+/* 719px card compaction (14px padding): input centre sits 37px above the card bottom */
+@media (max-width: 719px) {
+  .att-filter-outer { gap: 12px; }
+  .att-notif { margin-bottom: 9px; }
+}
 
 /* overdue-people list modal — wide, balanced sheet on desktop,
    comfortable single column on phones; reuses the shared backdrop. */
@@ -3271,8 +3293,8 @@ select.birthday-month-select, .child-row select {
 .pin-modal-backdrop:has(> .att-notif-modal) { background: rgba(35, 26, 22, 0.55); }
 .att-notif-modal {
   position: relative;
-  width: min(94vw, 640px);
-  max-width: 640px;
+  width: min(94vw, 780px);
+  max-width: 780px;
   text-align: start;
   display: flex;
   flex-direction: column;
@@ -3326,7 +3348,7 @@ select.birthday-month-select, .child-row select {
   overscroll-behavior: contain;
 }
 @media (min-width: 640px) {
-  .att-notif-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .att-notif-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 }
 .att-notif-item {
   position: relative;
@@ -3353,7 +3375,7 @@ select.birthday-month-select, .child-row select {
 .att-notif-modal .empty-state { padding: 26px 12px 18px; }
 
 @media (max-width: 560px) {
-  .att-notif-modal { width: min(96vw, 640px); max-height: 86vh; padding: 17px 16px 15px; border-radius: var(--radius-lg); }
+  .att-notif-modal { width: min(96vw, 780px); max-height: 86vh; padding: 17px 16px 15px; border-radius: var(--radius-lg); }
   .att-notif-modal-head h3 { font-size: 1rem; }
   .att-notif-modal-head { padding-bottom: 11px; }
   .att-notif-list { gap: 8px; padding-top: 12px; }
