@@ -175,7 +175,7 @@ async function renderPerformance(params) {
       <div class="container">
         <p class="breadcrumbs"><a href="#/home">الرئيسية</a><span class="sep">/</span><span>مؤشر قياس الأداء</span></p>
         <h2 class="section-title">مؤشر قياس الأداء</h2>
-        <p class="section-sub">لوحة مؤشرات قياس الأداء — للمعدنيين المصرّح لهم فقط. اختر نوع الدخول:</p>
+        <p class="section-sub">لوحة مؤشرات قياس الأداء:</p>
         <div class="perf-gate">
           <button type="button" class="perf-role-card" data-role="amin">
             <span class="perf-role-icon">${ICONS.unlock}</span>
@@ -185,10 +185,10 @@ async function renderPerformance(params) {
           <button type="button" class="perf-role-card" data-role="khadim">
             <span class="perf-role-icon">${ICONS.users}</span>
             <span class="perf-role-name">خادم</span>
-            <span class="perf-role-desc">مؤشرات مستوى الفصل فقط + تقارير البيانات غير المكتملة + إكمال الحقول الناقصة للمخدومين (بدون حذف وبدون بقية المستويات).</span>
+            <span class="perf-role-desc">مؤشرات مستوى الفصل فقط + تقارير البيانات غير المكتملة + إكمال البيانات للمخدومين .</span>
           </button>
         </div>
-        <p class="perf-gate-note">الوصول مصرّح به للمعدنيين فقط — كل جلسة دخول مرتبطة بالجلسة الحالية للمتصفح.</p>
+        <p class="perf-gate-note">لوحة مؤشرات قياس الأداء.</p>
       </div>`;
     APP_ROOT.querySelectorAll('.perf-role-card').forEach((btn) => {
       btn.addEventListener('click', async () => {
