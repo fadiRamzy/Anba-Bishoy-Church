@@ -141,7 +141,6 @@ function perfGroupTable(groups, headerLabel) {
       ${perfPctCell(g.pctAbsent, 'is-bad')}
       <td class="perf-num">${fmtNum(g.present)}</td>
       <td class="perf-num">${fmtNum(g.absent)}</td>
-      <td class="perf-num">${fmtNum(g.records)}</td>
     </tr>`).join('');
   const tot = groups.reduce((acc, g) => ({
     count: acc.count + g.count, records: acc.records + g.records,
@@ -152,9 +151,9 @@ function perfGroupTable(groups, headerLabel) {
   return `
   <div class="perf-table-wrap">
     <table class="perf-table">
-      <thead><tr><th>${escapeHTML(headerLabel)}</th><th>المخدومون</th><th>% حضور</th><th>% غياب</th><th>أيام الحضور</th><th>أيام الغياب</th><th>إجمالي السجلات</th></tr></thead>
-      <tbody>${rows || `<tr><td colspan="7" class="perf-empty">لا توجد بيانات مسجلة</td></tr>`}</tbody>
-      <tfoot><tr><th>الإجمالي</th><th class="perf-num">${fmtNum(tot.count)}</th>${tot.records ? `<th class="perf-num">${tot.pctPresent.toFixed(1)}%</th><th class="perf-num">${tot.pctAbsent.toFixed(1)}%</th>` : '<th class="perf-num">—</th><th class="perf-num">—</th>'}<th class="perf-num">${fmtNum(tot.present)}</th><th class="perf-num">${fmtNum(tot.absent)}</th><th class="perf-num">${fmtNum(tot.records)}</th></tr></tfoot>
+      <thead><tr><th>${escapeHTML(headerLabel)}</th><th>المخدومون</th><th>% حضور</th><th>% غياب</th><th>أيام الحضور</th><th>أيام الغياب</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="6" class="perf-empty">لا توجد بيانات مسجلة</td></tr>`}</tbody>
+      <tfoot><tr><th>الإجمالي</th><th class="perf-num">${fmtNum(tot.count)}</th>${tot.records ? `<th class="perf-num">${tot.pctPresent.toFixed(1)}%</th><th class="perf-num">${tot.pctAbsent.toFixed(1)}%</th>` : '<th class="perf-num">—</th><th class="perf-num">—</th>'}<th class="perf-num">${fmtNum(tot.present)}</th><th class="perf-num">${fmtNum(tot.absent)}</th></tr></tfoot>
     </table>
   </div>`;
 }
@@ -239,20 +238,77 @@ async function renderPerformance(params) {
 
   const body = document.getElementById('perfBody');
   const total = perfTotals(members);
-  const servants = members.filter((m) => (m.stage || '').toString().trim() === 'مدرسة الشمامسة - معهد الالحان');
 
   /* ======================= نظرة عامة (أمين) ======================= */
   if (tab === 'overview') {
+    const statKey = (params && params.stat) || '';
+    const perMember = members.map((m) => {
+      const list = perfAttendanceRecords(m);
+      const present = list.filter((r) => r.present === true).length;
+      const absent = list.length - present;
+      const pct = list.length ? (present / list.length) * 100 : null;
+      return { m, present, absent, pct };
+    });
+    const alpha = (a, b) => String(a.m.name || '').localeCompare(String(b.m.name || ''), 'ar');
+    const byAbsent = (a, b) => b.absent - a.absent || alpha(a, b);
+    const drilldowns = {
+      total: { label: 'كل المخدومين', list: perMember.slice().sort(alpha) },
+      presence: { label: 'المخدومون الذين لديهم سجلات حضور', list: perMember.filter((x) => x.present > 0).sort((a, b) => b.present - a.present || alpha(a, b)) },
+      absence: { label: 'المخدومون الغائبون', list: perMember.filter((x) => x.absent > 0).sort(byAbsent) },
+      absentDays: { label: 'المخدومون الغائبون', list: perMember.filter((x) => x.absent > 0).sort(byAbsent) },
+    };
+    const linkCard = (key, value, label, sub, kind) => {
+      const active = statKey === key;
+      const href = `#/performance?${qs({ tab: 'overview', stat: active ? undefined : key })}`;
+      return `<a class="perf-stat perf-stat-link ${kind || ''}${active ? ' is-active' : ''}" href="${href}" aria-pressed="${active}">
+        <div class="perf-stat-value">${value}</div>
+        <div class="perf-stat-label">${escapeHTML(label)}</div>
+        <div class="perf-stat-sub">${escapeHTML(sub)}</div>
+        <div class="perf-stat-cta">${active ? 'إغلاق القائمة' : 'عرض المخدومين المعنيين'}</div>
+      </a>`;
+    };
+    const dd = drilldowns[statKey];
+    const ddRows = dd ? dd.list.map(({ m, present, absent, pct }) => {
+      const classKey = perfClassKey(m);
+      return `
+        <tr>
+          <td class="perf-group"><a class="perf-member-link" href="#/member/${m.id}">${escapeHTML(m.name || '— بلا اسم')}</a></td>
+          <td class="perf-meta">${escapeHTML(perfClassLabel(classKey))}</td>
+          <td class="perf-num">${fmtNum(present)}</td>
+          <td class="perf-num">${fmtNum(absent)}</td>
+          <td class="perf-num">${fmtPct(pct)}</td>
+          <td class="perf-actions">
+            <a class="btn btn-outline btn-sm" href="#/member/${m.id}">فتح الملف</a>
+            <button type="button" class="btn btn-primary btn-sm perf-edit-btn" data-id="${m.id}">تعديل</button>
+          </td>
+        </tr>`;
+    }).join('') : '';
+    const panel = dd ? `
+      <div class="perf-drill">
+        <div class="perf-drill-head">
+          <h3>${escapeHTML(dd.label)}<span class="perf-drill-count">${fmtNum(dd.list.length)}</span></h3>
+          <a class="perf-chip perf-chip-clear" href="#/performance?${qs({ tab: 'overview' })}">✕ إغلاق القائمة</a>
+        </div>
+        <div class="perf-table-wrap">
+          <table class="perf-table">
+            <thead><tr><th>المخدوم</th><th>القطاع · الفصل</th><th>أيام الحضور</th><th>أيام الغياب</th><th>% حضور</th><th>الإجراء</th></tr></thead>
+            <tbody>${ddRows || `<tr><td colspan="6" class="perf-empty">لا يوجد مخدومون مطابقون</td></tr>`}</tbody>
+          </table>
+        </div>
+      </div>` : '';
     body.innerHTML = `
       <div class="perf-stat-grid">
-        ${perfStatCard(fmtNum(total.count), 'إجمالي المخدومين', 'المسجّلون في قاعدة البيانات')}
-        ${perfStatCard(fmtNum(servants.length), 'الخدام والخادمات', 'مرحلة مدرسة الشمامسة – معهد الالحان')}
-        ${perfStatCard(fmtPct(total.pctPresent), 'نسبة الحضور', 'من إجمالي سجلات الحضور', total.pctPresent === null ? '' : 'is-good')}
-        ${perfStatCard(fmtPct(total.pctAbsent), 'نسبة الغياب', 'من إجمالي سجلات الحضور', total.pctAbsent === null ? '' : 'is-bad')}
-        ${perfStatCard(fmtNum(total.records), 'إجمالي سجلات الحضور', 'أيام مسجلة لكل المخدومين')}
-        ${perfStatCard(fmtNum(total.absent), 'إجمالي أيام الغياب', 'سجلات بحالة غياب')}
+        ${linkCard('total', fmtNum(total.count), 'إجمالي المخدومين', 'اضغط لعرض كل المخدومين')}
+        ${linkCard('presence', fmtPct(total.pctPresent), 'نسبة الحضور', 'اضغط لعرض المخدومين الذين لديهم حضور', total.pctPresent === null ? '' : 'is-good')}
+        ${linkCard('absence', fmtPct(total.pctAbsent), 'نسبة الغياب', 'اضغط لعرض المخدومين الغائبين', total.pctAbsent === null ? '' : 'is-bad')}
+        ${linkCard('absentDays', fmtNum(total.absent), 'إجمالي أيام الغياب', 'اضغط لعرض المخدومين الغائبين', 'is-bad')}
       </div>
-      <p class="perf-footnote">المؤشرات محسوبة من سجلات الحضور الفعلية المحفوظة لكل مخدوم — تُحدَّث تلقائيًا مع كل تسجيل أو حذف أو تعديل.</p>`;
+      ${panel}
+      <p class="perf-footnote">المؤشرات محسوبة من سجلات الحضور الفعلية المحفوظة لكل مخدوم — اضغط على أي مؤشر لعرض المخدومين المعنيين والوصول المباشر إلى ملفاتهم.</p>`;
+    body.querySelectorAll('.perf-edit-btn').forEach((btn) => btn.addEventListener('click', () => {
+      const member = members.find((m) => String(m.id) === String(btn.dataset.id));
+      if (member) openPerfEditModal(member, role, params);
+    }));
     return;
   }
 
@@ -280,9 +336,11 @@ async function renderPerformance(params) {
       peers.get(k).push(m);
     }
     const classOptions = [...peers.keys()].sort((a, b) => perfClassLabel(a).localeCompare(perfClassLabel(b), 'ar'));
-    const classOptionsHtml = ['<option value="">كل الفصول</option>']
-      .concat(classOptions.map((k) => `<option value="${escapeHTML(k)}" ${k === classFilter ? 'selected' : ''}>${escapeHTML(perfClassLabel(k))}</option>`))
-      .join('');
+    const pill = (key, label) => {
+      const active = key === classFilter;
+      return `<button type="button" class="perf-tab perf-class-pill${active ? ' active' : ''}" data-class="${escapeHTML(key)}" aria-pressed="${active}">${escapeHTML(label)}</button>`;
+    };
+    const classPillsHtml = pill('', 'كل الفصول') + classOptions.map((k) => pill(k, perfClassLabel(k))).join('');
 
     const rows = members.map((m) => {
       const list = perfAttendanceRecords(m);
@@ -323,8 +381,8 @@ async function renderPerformance(params) {
     body.innerHTML = `
       <div class="perf-controls">
         <input type="text" id="perfSearch" class="perf-search" placeholder="ابحث بالاسم أو رقم الهاتف..." value="${escapeHTML(params.q || '')}" autocomplete="off" />
-        <select id="perfClassFilter" class="perf-class-filter">${classOptionsHtml}</select>
       </div>
+      <div class="perf-class-filter-row" role="group" aria-label="تصفية حسب الفصل">${classPillsHtml}</div>
       <div class="perf-table-wrap">
         <table class="perf-table">
           <thead><tr><th>المخدوم</th><th>القطاع · الفصل</th><th>أيام الحضور</th><th>أيام الغياب</th><th>% حضور</th><th>المقارنة داخل الفصل</th><th></th></tr></thead>
@@ -332,17 +390,25 @@ async function renderPerformance(params) {
         </table>
       </div>`;
     const tbody = body.querySelector('#perfIndividualRows');
+    let currentClass = classFilter;
     const applyFilter = () => {
       const q = (body.querySelector('#perfSearch').value || '').trim().toLowerCase();
-      const cls = body.querySelector('#perfClassFilter').value;
       tbody.querySelectorAll('tr[data-class]').forEach((row) => {
-        const okClass = !cls || row.dataset.class === cls;
+        const okClass = !currentClass || row.dataset.class === currentClass;
         const okQ = !q || row.dataset.name.includes(q) || row.dataset.phone.includes(q);
         row.style.display = okClass && okQ ? '' : 'none';
       });
     };
     body.querySelector('#perfSearch').addEventListener('input', debounce(applyFilter, 200));
-    body.querySelector('#perfClassFilter').addEventListener('change', applyFilter);
+    body.querySelectorAll('.perf-class-pill').forEach((pillBtn) => pillBtn.addEventListener('click', () => {
+      currentClass = pillBtn.dataset.class;
+      body.querySelectorAll('.perf-class-pill').forEach((p) => {
+        const on = p === pillBtn;
+        p.classList.toggle('active', on);
+        p.setAttribute('aria-pressed', String(on));
+      });
+      applyFilter();
+    }));
     body.querySelectorAll('.perf-edit-btn').forEach((btn) => btn.addEventListener('click', () => {
       const member = members.find((m) => String(m.id) === String(btn.dataset.id));
       if (member) openPerfEditModal(member, role, params);
