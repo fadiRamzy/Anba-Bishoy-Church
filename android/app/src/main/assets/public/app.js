@@ -35,6 +35,7 @@ const ICONS = {
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>',
   book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5c-2-1.5-5-2-8-2v16c3 0 6 .5 8 2 2-1.5 5-2 8-2V3c-3 0-6 .5-8 2z"/><path d="M12 5v16"/></svg>',
   send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
+  chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4M4 20h16"/><path d="M9 16v-5M13 16V8M17 16v-8"/></svg>',
 };
 
 /* ---------------------------------------------------------------------- */
@@ -472,6 +473,7 @@ async function router() {
   if (segments[0] === 'member' && segments[1]) return renderProfile(segments[1]);
   if (segments[0] === 'add') return renderForm(null);
   if (segments[0] === 'attendance') return renderAttendance();
+  if (segments[0] === 'performance') return renderPerformance(params);
   if (segments[0] === 'edit' && segments[1]) return renderForm(segments[1]);
   if (segments[0] === 'admin') return renderAdminPanel();
   if (segments[0] === 'birthdays') return renderBirthdays();
@@ -2339,6 +2341,10 @@ async function renderHome() {
           <span class="icon-wrap">${ICONS.calendar}</span>
           <span>الحضور</span>
         </a>
+        <a href="#/performance" class="nav-card">
+          <span class="icon-wrap">${ICONS.chart}</span>
+          <span>مؤشر قياس الأداء</span>
+        </a>
       </div>
     </div>
   `;
@@ -3450,7 +3456,7 @@ async function renderAttendance() {
       <div class="att-filter-outer">
         <button type="button" class="att-notif" id="attNotifBtn" aria-label="أشخاص لم يسجلوا حضورًا منذ أكثر من ١٤ يومًا">
           ${ICONS.bell}
-          <span class="att-notif-text">لم يحضروا منذ ١٤ يومًا</span>
+          <span class="att-notif-text">افتقد مخدومك</span>
           <span class="att-notif-count" id="attNotifCount">0</span>
         </button>
         <div class="filter-bar">
@@ -3532,7 +3538,7 @@ async function renderAttendance() {
     backdrop.innerHTML = `
       <div class="pin-modal att-notif-modal" role="dialog" aria-modal="true" aria-label="أشخاص لم يسجلوا حضورًا منذ أكثر من ١٤ يومًا">
         <div class="att-notif-modal-head">
-          <h3>لم يحضروا منذ أكثر من ١٤ يومًا (${overdue.length})</h3>
+          <h3>افتقد مخدومك (${overdue.length})</h3>
           <button type="button" class="att-notif-close" aria-label="إغلاق">&times;</button>
         </div>
         ${overdue.length
