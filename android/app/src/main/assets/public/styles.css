@@ -3703,6 +3703,7 @@ a.perf-stat { text-decoration: none; color: inherit; font-family: inherit; }
 /* Directory filters use the same raised, outlined button treatment while
    retaining native select semantics and keyboard accessibility. */
 .ift-filter-bar .field select {
+  min-height: 44px;
   appearance: none;
   -webkit-appearance: none;
   padding: 9px 12px 9px 34px;
