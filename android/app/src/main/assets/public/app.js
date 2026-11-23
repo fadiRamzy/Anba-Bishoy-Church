@@ -2343,13 +2343,13 @@ async function renderHome() {
           <span class="icon-wrap">${ICONS.calendar}</span>
           <span>الحضور</span>
         </a>
-        <a href="#/performance" class="nav-card">
-          <span class="icon-wrap">${ICONS.chart}</span>
-          <span>مؤشر قياس الأداء</span>
-        </a>
         <a href="#/iftiqad" class="nav-card">
           <span class="icon-wrap">${ICONS.visit}</span>
           <span>دليل الافتقاد</span>
+        </a>
+        <a href="#/performance" class="nav-card">
+          <span class="icon-wrap">${ICONS.chart}</span>
+          <span>مؤشر قياس الأداء</span>
         </a>
       </div>
     </div>
