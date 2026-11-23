@@ -835,8 +835,8 @@ async function perfExportFullReportPDF(members) {
   const percentages = ['—', fmtPct(total.pctPresent), fmtPct(total.pctAbsent),
     fmtPct(visits.pctVisited), fmtPct(visits.pctNotVisited),
     percentage(incomplete), percentage(members.length - incomplete)];
-  // Each valid category occurs once in its own level, independently of other
-  // fields. Missing categories are omitted, not invented or relabelled.
+  // Match the dashboard's level keys, including sector-qualified classes.
+  // Unspecified labels stay blank while their members remain in the totals.
   const levels = [
     ['القطاع', 'sector'], ['المرحلة', 'stage'], ['المدينة', 'city'],
     ['الحي', 'neighborhood'], ['الفصل', 'class'],
