@@ -15,6 +15,7 @@ const { chromium } = require('playwright-core');
    await page.locator(`[data-tab="${tab}"]`).click();
    await page.waitForFunction(t=>document.querySelector(`[data-tab="${t}"]`).classList.contains('active'),tab);
    check(`navigation ${viewport.width} ${tab}`,await page.evaluate(([t,h])=>location.hash===h && document.querySelector(`[data-tab="${t}"]`).getAttribute('aria-current')==='page',[tab,href]));
+   if (await page.locator('.pin-modal-backdrop .btn-cancel').count()) await page.locator('.pin-modal-backdrop .btn-cancel').click();
   }
   const geometry=await page.evaluate(()=>{
    const bar=document.querySelector('.tab-bar-inner'), items=[...bar.querySelectorAll('.tab-item')], rects=items.map(x=>x.getBoundingClientRect()), icons=items.map(x=>x.querySelector('svg').getBoundingClientRect());
