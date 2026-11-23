@@ -8,6 +8,7 @@ on:
       - 'index.html'
       - 'app.js'
       - 'performance.js'
+      - 'iftiqad.js'
       - 'app-shell.js'
       - 'db.js'
       - 'capacitor-bridge.js'

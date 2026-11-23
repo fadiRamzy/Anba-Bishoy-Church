@@ -3600,3 +3600,102 @@ a.perf-stat { text-decoration: none; color: inherit; font-family: inherit; }
   .perf-controls { flex-direction: column; }
   .perf-search { width: 100% !important; }
 }
+
+/* ==========================================================================
+   دليل الافتقاد (iftiqad) + افتقاد indicators + PDF export bars
+   Additive styles only — scoped under .ift-*, .visit-*, .perf-visit-*,
+   .perf-export-bar / .perf-pick-* so no existing rule is changed.
+   ========================================================================== */
+
+/* export bars (performance + iftiqad) */
+.perf-export-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--color-line); border-radius: var(--radius-md); background: rgba(255, 255, 255, 0.85); box-shadow: var(--shadow-card); }
+.perf-pick-all { display: inline-flex; align-items: center; gap: 8px; font-size: .82rem; font-weight: 700; color: var(--color-ink); cursor: pointer; min-height: 40px; }
+.perf-pick-all input[type="checkbox"], .perf-pick-cell input[type="checkbox"], .ift-pick { width: 20px; height: 20px; accent-color: var(--color-maroon); cursor: pointer; flex: none; }
+.perf-selected-count { font-size: .78rem; font-weight: 700; color: var(--color-maroon); font-variant-numeric: tabular-nums; }
+.perf-export-bar .btn { min-height: 40px; }
+.perf-pick-cell { width: 44px; text-align: center; padding-inline: 6px !important; }
+.perf-pick-cell input[type="checkbox"] { margin: 0; vertical-align: middle; }
+
+/* visitation indicators (أمين خدمة only) */
+.perf-visit-title { display: flex; align-items: center; gap: 8px; margin: 22px 2px 10px; font-size: 1rem; font-weight: 800; color: var(--color-maroon-dark); }
+.perf-visit-title svg { width: 20px; height: 20px; color: var(--color-maroon); }
+.perf-stat-grid-visit { margin-bottom: 12px; }
+.perf-visit-dist { margin: 0 2px 4px; }
+.perf-visit-dist-bar { height: 14px; border-radius: 999px; overflow: hidden; background: #F3D9D2; border: 1px solid var(--color-line); }
+.perf-visit-dist-fill { display: block; height: 100%; background: linear-gradient(90deg, #2E7D4F, #43A06B); transition: width .4s ease; }
+.perf-visit-dist-legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 8px; font-size: .8rem; color: var(--color-ink); }
+.perf-visit-legend-item { display: inline-flex; align-items: center; gap: 7px; }
+.perf-visit-dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; flex: none; }
+.perf-visit-dot.visited { background: #43A06B; }
+.perf-visit-dot.unvisited { background: #D96A5B; }
+.perf-visit-count { color: var(--color-maroon); font-weight: 800; text-decoration: none; font-variant-numeric: tabular-nums; }
+.perf-visit-count:hover { text-decoration: underline; }
+
+/* دليل الافتقاد directory */
+.ift-search-panel { margin-bottom: 12px; }
+.ift-filter-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.ift-filter-bar .field { margin: 0; }
+.ift-filter-bar select { width: 100%; min-height: 44px; }
+.ift-clear-field { display: flex; align-items: flex-end; }
+.ift-clear-field .btn { min-height: 44px; width: 100%; justify-content: center; }
+.ift-views { margin-bottom: 12px; }
+.ift-view-count { font-variant-numeric: tabular-nums; font-size: .8em; }
+.ift-list { display: flex; flex-direction: column; gap: 10px; }
+.ift-card { display: flex; align-items: flex-start; gap: 12px; padding: 13px 14px; border: 1px solid var(--color-line); border-radius: var(--radius-md); background: rgba(255, 255, 255, 0.95); box-shadow: var(--shadow-card); }
+.ift-card .ift-pick { margin-top: 4px; }
+.ift-avatar { flex: none; }
+.ift-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.ift-name { font-size: 1rem; }
+.ift-phone { color: var(--color-maroon); text-decoration: none; font-weight: 700; }
+.ift-phone:hover { text-decoration: underline; }
+.ift-visit-line { font-size: .8rem; color: var(--color-ink-soft); }
+.ift-visit-line strong { color: var(--color-maroon-dark); }
+.ift-record-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; align-items: center; }
+.ift-date-input { min-height: 42px; border: 1.5px solid var(--color-line); border-radius: var(--radius-sm); padding: 8px 10px; font-family: inherit; font-size: .88rem; color: var(--color-ink); background: #fff; }
+.ift-record-row .btn { min-height: 42px; }
+.ift-empty-filtered { margin-top: 4px; }
+
+/* profile visit history (سجل الافتقاد) */
+.visit-add-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.visit-add-row input[type="date"] { min-height: 42px; border: 1.5px solid var(--color-line); border-radius: var(--radius-sm); padding: 8px 10px; font-family: inherit; font-size: .88rem; color: var(--color-ink); background: #fff; }
+.visit-add-row .btn { min-height: 42px; }
+.visit-history { margin-top: 4px; }
+.visit-empty { margin: 4px 0 0; }
+
+/* ==========================================================================
+   Mobile usability — Performance Indicators module ONLY (responsive /
+   spacing / tap-target fixes; no functionality or calculation changes).
+   ========================================================================== */
+@media (max-width: 719px) {
+  .perf-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .perf-stat { padding: 13px 12px; }
+  .perf-stat-label { font-size: .74rem; }
+  .perf-stat-sub { font-size: .64rem; }
+  .perf-stat-cta { font-size: .64rem; }
+  .perf-table { min-width: 560px; font-size: .8rem; }
+  .perf-table th, .perf-table td { padding: 10px 9px; }
+  .perf-tabs { margin-bottom: 10px; padding-bottom: 10px; }
+  .perf-tab { padding: 10px 15px; font-size: .84rem; min-height: 44px; display: inline-flex; align-items: center; }
+  .perf-drill-head h3 { font-size: .88rem; }
+  .perf-actions .btn { min-height: 40px; }
+  .perf-head-actions .btn { min-height: 42px; }
+  .perf-export-bar { padding: 10px; gap: 8px 10px; }
+  .perf-export-bar .btn { flex: 1 1 auto; justify-content: center; }
+  .perf-pick-all { min-height: 44px; }
+  .perf-pick-cell input[type="checkbox"], .perf-pick-all input[type="checkbox"], .ift-pick { width: 22px; height: 22px; }
+  .perf-visit-dist-legend { font-size: .76rem; gap: 4px 14px; }
+  .perf-field-chips { gap: 6px; }
+  .perf-chip { padding: 9px 12px; font-size: .76rem; min-height: 40px; }
+  .ift-filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ift-clear-field { grid-column: 1 / -1; }
+  .ift-card { padding: 12px; gap: 10px; }
+  .ift-record-row .btn { flex: 1 1 auto; justify-content: center; }
+  .ift-date-input { flex: 1 1 100%; }
+  .visit-add-row .btn { flex: 1 1 auto; justify-content: center; }
+  .visit-add-row input[type="date"] { flex: 1 1 100%; }
+}
+@media (max-width: 420px) {
+  .perf-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .perf-stat-value { font-size: 1.25rem; }
+  .ift-filter-bar { grid-template-columns: minmax(0, 1fr); }
+}
