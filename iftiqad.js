@@ -321,7 +321,7 @@ async function renderIftiqad(params) {
         <label class="perf-pick-all"><input type="checkbox" id="iftPickAll" /><span>تحديد الكل المعروض</span></label>
         <span class="perf-selected-count" id="iftSelectedCount">0 محدد</span>
         <button type="button" class="btn btn-outline btn-sm" id="iftExportSelected">${ICONS.download}<span>تصدير المحدد PDF</span></button>
-        <button type="button" class="btn btn-gold btn-sm" id="iftExportFiltered">${ICONS.download}<span>تصدير المعروض PDF</span></button>
+        <button type="button" class="btn btn-gold btn-sm" id="iftExportFiltered">${ICONS.download}<span>تصدير الكل PDF</span></button>
       </div>
 
       <div class="member-list ift-list" id="iftList">

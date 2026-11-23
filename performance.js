@@ -344,7 +344,7 @@ async function renderPerformance(params) {
       <div class="perf-export-bar">
         <label class="perf-pick-all"><input type="checkbox" id="perfDrillPickAll" /><span>تحديد الكل</span></label>
         <span class="perf-selected-count" id="perfDrillCount">0 محدد</span>
-        <button type="button" class="btn btn-outline btn-sm" id="perfDrillExportSelected">${ICONS.download}<span>تصدير المحدد</span></button>
+        <button type="button" class="btn btn-outline btn-sm" id="perfDrillExportSelected">${ICONS.download}<span>تصدير المحدد PDF</span></button>
         <button type="button" class="btn btn-gold btn-sm" id="perfDrillExportAll">${ICONS.download}<span>تصدير الكل</span></button>
       </div>`;
     const ddHead = ddIsVisit
@@ -785,114 +785,102 @@ async function perfExportIncompletePDF(items, label, filename) {
   showToast('تم تصدير ملف PDF', 'success');
 }
 
-/* التقرير العددي الكامل — أمين خدمة فقط. ZERO names / personal info:
-   every indicator broken down hierarchically (الخدمة بالكامل ← القطاع ←
-   المرحلة ← المدينة ← الحي ← الفصل) with per-level totals. */
+/* التقرير العددي الكامل — أمين خدمة فقط. No personal information;
+   overall totals and a compact section for each organizational level. */
 async function perfExportFullReportPDF(members) {
   if (PerformanceAuth.role() !== 'amin') throw new Error('غير مصرح بتصدير التقرير العددي الكامل');
-  const pct = (p) => (p === null || !isFinite(p) ? '—' : `${p.toFixed(1)}%`);
-  const num = (n) => fmtNum(n);
-  const incompleteCount = (list) => list.filter((m) => perfMissingFields(m).length > 0).length;
-
-  const reportHeaders = [
-    { label: 'المجموعة', width: 16 },
-    { label: 'المخدومون', width: 6, align: 'center' },
-    { label: 'أيام الحضور', width: 8, align: 'center' },
-    { label: 'أيام الغياب', width: 8, align: 'center' },
-    { label: '% حضور', width: 8, align: 'center' },
-    { label: '% غياب', width: 8, align: 'center' },
-    { label: 'تم افتقادهم', width: 8, align: 'center' },
-    { label: 'لم يتم افتقادهم', width: 9, align: 'center' },
-    { label: '% افتقاد', width: 6, align: 'center' },
-    { label: '% لم يُفتقدوا', width: 6, align: 'center' },
-    { label: 'ملفات غير مكتملة', width: 7, align: 'center' },
-    { label: '% غير مكتملة', width: 6, align: 'center' },
-    { label: 'ملفات مكتملة', width: 7, align: 'center' },
-    { label: '% مكتملة', width: 6, align: 'center' },
-  ];
-  const reportRow = (label, list, bold) => {
-    const t = perfTotals(list);
-    const v = perfVisitStats(list);
-    const inc = incompleteCount(list);
-    const incPct = list.length ? (inc / list.length) * 100 : null;
-    const style = bold ? 'font-weight:800;background:rgba(251,243,223,0.7);' : '';
-    const cell = (txt, center) => `<span style="${style}${center ? 'text-align:center;' : ''}">${txt}</span>`;
-    return [
-      cell(escapeHTML(label)),
-      cell(num(t.count), true),
-      cell(num(t.present), true),
-      cell(num(t.absent), true),
-      cell(pct(t.pctPresent), true),
-      cell(pct(t.pctAbsent), true),
-      cell(num(v.visited), true),
-      cell(num(v.notVisited), true),
-      cell(pct(v.pctVisited), true),
-      cell(pct(v.pctNotVisited), true),
-      cell(num(inc), true),
-      cell(pct(incPct), true),
-      cell(num(list.length - inc), true),
-      cell(pct(list.length ? ((list.length - inc) / list.length) * 100 : null), true),
-    ];
+  const stats = (list) => {
+    const attendance = perfTotals(list);
+    const visits = perfVisitStats(list);
+    const incomplete = list.filter((m) => perfMissingFields(m).length > 0).length;
+    return { attendance, visits, incomplete };
   };
-  const hierarchy = [
-    ['القطاع', (m) => m.sector],
-    ['المرحلة', (m) => m.stage],
-    ['المدينة', (m) => m.city],
-    ['الحي', (m) => m.neighborhood],
-    ['الفصل', (m) => m.class],
+  const values = (list) => {
+    const { attendance: a, visits: v, incomplete } = stats(list);
+    return [a.count, a.present, a.absent, v.visited, v.notVisited, list.length - incomplete, incomplete].map(fmtNum);
+  };
+  const { attendance: total, visits, incomplete } = stats(members);
+  const percentage = (n) => members.length ? fmtPct(100 * n / members.length) : '—';
+  const percentages = ['—', fmtPct(total.pctPresent), fmtPct(total.pctAbsent),
+    fmtPct(visits.pctVisited), fmtPct(visits.pctNotVisited),
+    percentage(members.length - incomplete), percentage(incomplete)];
+  // Each valid category occurs once in its own level, independently of other
+  // fields. Missing categories are omitted, not invented or relabelled.
+  const levels = [
+    ['القطاع', 'sector'], ['المرحلة', 'stage'], ['المدينة', 'city'],
+    ['الحي', 'neighborhood'], ['الفصل', 'class'],
   ];
-  const levelSection = (depth) => {
+  const sections = levels.map(([title, field]) => {
     const groups = new Map();
     for (const member of members) {
-      const path = hierarchy.slice(0, depth + 1).map(([, get]) => String(get(member) || '').trim() || '— غير محدد');
-      const key = JSON.stringify(path);
-      if (!groups.has(key)) groups.set(key, { path, members: [] });
-      groups.get(key).members.push(member);
+      const label = cleanLabel(member[field] || '').trim();
+      if (!label || label === '—' || label === 'غير محدد' || label === '— غير محدد') continue;
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(member);
     }
-    const rows = [...groups.values()]
-      .sort((a, b) => a.path.join(' / ').localeCompare(b.path.join(' / '), 'ar'))
-      .map((g) => reportRow(g.path.map(cleanLabel).join(' / '), g.members, false));
-    rows.push(reportRow('الإجمالي', members, true));
-    return { title: hierarchy[depth][0], headers: reportHeaders, rows };
-  };
+    return { title, rows: [...groups.entries()]
+      .sort(([a], [b]) => a.localeCompare(b, 'ar'))
+      .map(([label, list]) => [label, ...values(list)]) };
+  }).filter((section) => section.rows.length);
 
-  const t = perfTotals(members);
-  const v = perfVisitStats(members);
-  const inc = incompleteCount(members);
-  const incPct = members.length ? (inc / members.length) * 100 : null;
-  const summaryRows = [
-    ['إجمالي المخدومين', num(t.count), '—'],
-    ['أيام الحضور', num(t.present), pct(t.pctPresent)],
-    ['أيام الغياب', num(t.absent), pct(t.pctAbsent)],
-    ['تم افتقادهم', num(v.visited), pct(v.pctVisited)],
-    ['لم يتم افتقادهم', num(v.notVisited), pct(v.pctNotVisited)],
-    ['ملفات غير مكتملة', num(inc), pct(incPct)],
-    ['ملفات مكتملة', num(members.length - inc), pct(members.length ? ((members.length - inc) / members.length) * 100 : null)],
-  ].map(([label, count, p]) => [
-    `<span style="font-weight:700;">${escapeHTML(label)}</span>`,
-    `<span style="text-align:center;">${count}</span>`,
-    `<span style="text-align:center;">${p}</span>`,
-  ]);
-
-  await simpleTablePdf({
-    title: 'مؤشر قياس الأداء — التقرير العددي الكامل',
-    subtitle: 'تقرير عددي شامل بدون أسماء — الخدمة بالكامل وكل المستويات',
-    note: `تاريخ الإصدار: ${perfExportToday()} — إجمالي المخدومين: ${num(t.count)}`,
-    landscape: true,
-    sections: [
-      {
-        title: 'ملخص الخدمة بالكامل',
-        headers: [
-          { label: 'المؤشر', width: 50 },
-          { label: 'العدد', width: 25, align: 'center' },
-          { label: 'النسبة', width: 25, align: 'center' },
-        ],
-        rows: summaryRows,
-      },
-      ...hierarchy.map((_, depth) => levelSection(depth)),
-    ],
-    filename: `التقرير_العددي_الكامل_${perfExportStamp()}.pdf`,
-  });
+  // A report-only renderer: other PDF templates keep their existing behavior.
+  // Measure real browser layout and repeat the section/table header whenever a
+  // table continues onto a new page. Rasterization uses the existing PDF layer.
+  await _loadPdfLibs();
+  const pageW = 842, pageH = 595;
+  const stage = document.createElement('div');
+  stage.style.cssText = 'position:fixed;left:-99999px;top:0;width:842px;';
+  document.body.appendChild(stage);
+  const pages = [];
+  let page, body;
+  const headings = ['البيان', 'المخدومون', 'حضور', 'غياب', 'افتقاد', 'لم يُفتقد', 'مكتمل', 'ناقص'];
+  const tableStyle = 'width:100%;border-collapse:collapse;table-layout:fixed;direction:rtl;';
+  const cellStyle = `border:1px solid #d5c9b8;padding:3px 4px;font-family:${PDF_FONT_STACK};font-size:10px;line-height:1.45;overflow-wrap:anywhere;word-break:normal;vertical-align:middle;`;
+  const header = `<colgroup><col style="width:37%">${Array(7).fill('<col style="width:9%">').join('')}</colgroup><thead><tr>${headings.map((h) => `<th style="${cellStyle}background:#591420;color:white;text-align:center;font-weight:700;">${escapeHTML(h)}</th>`).join('')}</tr></thead>`;
+  const rowHtml = (cells, emphasized) => `<tr>${cells.map((v, i) => `<td style="${cellStyle}${i ? 'text-align:center;' : 'text-align:right;'}${emphasized ? 'font-weight:700;background:#fbf3df;' : ''}">${escapeHTML(String(v))}</td>`).join('')}</tr>`;
+  function newPage() {
+    page = document.createElement('div');
+    page.style.cssText = `width:${pageW}px;height:${pageH}px;box-sizing:border-box;background:#fffdf8;padding:12px 16px;direction:rtl;font-family:${PDF_FONT_STACK};`;
+    page.innerHTML = `<div style="text-align:center;color:#591420;font-family:${PDF_FONT_STACK};font-size:14px;font-weight:800;line-height:1.4;">كنيســــة القديس العظيم الأنبــــا بيشوي - المنيا الجديدة</div><div style="text-align:center;color:#591420;font-size:12px;font-weight:700;margin-bottom:6px;">التقرير الكامل عن الخدمة</div><div class="report-body" style="height:510px;overflow:hidden;"></div>`;
+    stage.appendChild(page);
+    body = page.querySelector('.report-body');
+    pages.push(page);
+  }
+  function createTable(title) {
+    const section = document.createElement('div');
+    section.style.cssText = 'margin:0 0 5px;';
+    section.innerHTML = `${title ? `<div style="font-size:11px;font-weight:800;color:#591420;padding:2px 2px;">${escapeHTML(title)}</div>` : ''}<table style="${tableStyle}">${header}<tbody></tbody></table>`;
+    body.appendChild(section);
+    return section;
+  }
+  function appendSection(title, rows, summary) {
+    if (!rows.length) return;
+    let section = createTable(title);
+    for (const row of rows) {
+      const tr = document.createElement('tbody');
+      tr.innerHTML = rowHtml(row, summary);
+      const item = tr.firstElementChild;
+      section.querySelector('tbody').appendChild(item);
+      if (body.scrollHeight > body.clientHeight) {
+        item.remove();
+        if (!section.querySelector('tbody').children.length) section.remove();
+        newPage();
+        section = createTable(title);
+        section.querySelector('tbody').appendChild(item);
+      }
+    }
+  }
+  try {
+    newPage();
+    appendSection('', [['الإجمالي', ...values(members)], ['النسبة', ...percentages]], true);
+    sections.forEach((section) => appendSection(section.title, section.rows, false));
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
+    await _pdfRenderPages(pdf, pages.map((p) => p.outerHTML), pageW, pageH);
+    pdf.save(`التقرير_العددي_الكامل_${perfExportStamp()}.pdf`);
+  } finally {
+    stage.remove();
+  }
   showToast('تم تصدير التقرير العددي الكامل', 'success');
 }
 
