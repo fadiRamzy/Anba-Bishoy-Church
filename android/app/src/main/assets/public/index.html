@@ -6,13 +6,28 @@
 <title>دليل خدام ومخدومي كنيسة الأنبا بيشوي - المنيا الجديدة</title>
 <meta name="description" content="نظام إدارة بيانات الخدام والمخدومين - إيبارشية شرق المنيا للأقباط الأرثوذكس" />
 <meta name="theme-color" content="#FAF6EC" />
-<meta name="color-scheme" content="light" />
+<meta name="color-scheme" content="light dark" />
+<script>
+(function () {
+  var key = 'church_appearance';
+  function apply(value, persist) {
+    value = value === 'dark' ? 'dark' : 'light';
+    document.documentElement.dataset.appearance = value;
+    document.documentElement.style.colorScheme = value;
+    if (persist) { try { localStorage.setItem(key, value); } catch (_) {} }
+  }
+  var saved; try { saved = localStorage.getItem(key); } catch (_) {}
+  apply(saved, false);
+  window.setChurchAppearance = function (value) { apply(value, true); };
+})();
+</script>
 <link rel="icon" href="logo.jpg" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=32" />
+<link rel="stylesheet" href="styles.css?v=33" />
 <link rel="stylesheet" href="calendar/calendar.css?v=3" />
+<link rel="stylesheet" href="appearance.css?v=1" />
 </head>
 <body>
 
@@ -99,7 +114,7 @@
 <script src="performance.js?v=8"></script>
 <script src="bible/bible.js?v=5"></script>
 <script src="calendar/coptic-calendar.js?v=2"></script>
-<script src="app.js?v=28"></script>
+<script src="app.js?v=29"></script>
 <script src="app-shell.js?v=2"></script>
 <script>
   // Offline support: register the service worker so the app's own files

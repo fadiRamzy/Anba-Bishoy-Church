@@ -27,6 +27,28 @@ const { chromium } = require('playwright-core');
  check('navigation labels and order preserved',await page.evaluate(e=>JSON.stringify([...document.querySelectorAll('.tab-item')].map(a=>[a.dataset.tab,a.getAttribute('href'),a.querySelector('.tab-label').textContent.trim()]))===JSON.stringify(e),expected));
  check('navigation no page errors',navErrors.length===0);
  await page.setViewportSize({width:1280,height:800});
+ // Appearance is local, starts light, and can be switched from Administration.
+ check('appearance defaults to light',await page.evaluate(()=>document.documentElement.dataset.appearance==='light'));
+ await page.evaluate(()=>renderAdminPanel());
+ for(const mode of ['dark','light','dark']) {
+  await page.locator(`[data-appearance-choice="${mode}"]`).click();
+  check(`appearance switch ${mode}`,await page.evaluate(m=>document.documentElement.dataset.appearance===m && localStorage.getItem('church_appearance')===m && document.querySelector(`[data-appearance-choice="${m}"]`).getAttribute('aria-pressed')==='true',mode));
+ }
+ await page.reload({waitUntil:'domcontentloaded'});
+ await page.waitForFunction(()=>typeof MembersDB!=='undefined');
+ check('dark appearance survives reload',await page.evaluate(()=>document.documentElement.dataset.appearance==='dark'));
+ await page.evaluate(()=>renderAdminPanel());
+ check('dark surfaces and button identities',await page.evaluate(()=>{
+  const panel=getComputedStyle(document.querySelector('.admin-panel')).backgroundColor;
+  const primary=getComputedStyle(document.querySelector('.btn-primary')).backgroundImage;
+  const gold=getComputedStyle(document.querySelector('.btn-gold')).backgroundImage;
+  const danger=getComputedStyle(document.querySelector('.btn-danger')).backgroundImage;
+  return panel.includes('42, 51, 61') && primary!==gold && danger!==primary && danger!==gold;
+ }));
+ await page.locator('[data-appearance-choice="light"]').click();
+ await page.reload({waitUntil:'domcontentloaded'});
+ await page.waitForFunction(()=>typeof MembersDB!=='undefined');
+ check('light appearance survives reload',await page.evaluate(()=>document.documentElement.dataset.appearance==='light'));
  await page.evaluate(async()=>{
   const old=await MembersDB.getAll(); for(const m of old) await MembersDB.remove(m.id);
   for(let i=1;i<=30;i++) await MembersDB.put({id:i,name:'اسم '+i,phone1:'01000111111',street:'شارع',locationLink:'x',sector:i<=15?'قطاع أ':'قطاع ب',stage:'مرحلة ١',city:'المنيا',neighborhood:i<=10?'حي أول':'حي ثان',class:i<=15?'فصل ألف':'فصل باء',visits:i%2?['2026-11-01']:[],attendance:[{date:'2026-10-01',present:i%2===1}]});
@@ -36,6 +58,30 @@ const { chromium } = require('playwright-core');
   sessionStorage.setItem('perf_unlocked_role','amin');
  });
  await page.evaluate(async()=>renderHome());
+ for (const viewport of [{width:1280,height:800},{width:375,height:812}]) {
+  await page.setViewportSize(viewport);
+  for (const mode of ['light','dark']) {
+   await page.evaluate(m=>{setChurchAppearance(m);return renderHome()},mode);
+   check(`directory eight cards ${viewport.width} ${mode}`,await page.evaluate(()=>{
+    const a=[...document.querySelectorAll('.nav-grid .nav-card')];
+    return a.length===8 && a.every(x=>x.getBoundingClientRect().width>0 && x.getBoundingClientRect().height>=44 && x.scrollWidth<=x.clientWidth+1);
+   }));
+   for (const href of ['#/browse/sector','#/browse/neighborhood','#/browse/stage','#/browse/city','#/birthdays','#/attendance','#/iftiqad','#/performance']) {
+    await page.evaluate(()=>renderHome());
+    await page.locator(`.nav-grid a[href="${href}"]`).click();
+    check(`directory destination ${mode} ${href}`,await page.evaluate(h=>location.hash===h,href));
+    if (await page.locator('.pin-modal-backdrop .btn-cancel').count()) await page.locator('.pin-modal-backdrop .btn-cancel').click();
+   }
+   await page.evaluate(()=>renderHome());
+   await page.locator('#homeSearchInput').fill('اسم 1');
+   await page.waitForSelector('#homeSearchResults .member-card');
+   await page.locator('#homeSearchResults .member-card').first().click();
+   check(`beneficiary profile ${viewport.width} ${mode}`,await page.evaluate(()=>location.hash.startsWith('#/member/')));
+  }
+ }
+ await page.setViewportSize({width:1280,height:800});
+ await page.evaluate(()=>{setChurchAppearance('light');return renderHome()});
+ check('appearance interactions no page errors',navErrors.length===0);
  check('service buttons ordered follow-up then performance', await page.evaluate(()=>{const links=[...document.querySelectorAll('.nav-grid a')].map(a=>a.getAttribute('href'));return links.indexOf('#/iftiqad')===links.length-2 && links.indexOf('#/performance')===links.length-1;}));
  await page.evaluate(async()=>perfExportFullReportPDF(await MembersDB.getAll()));
  let report=await page.evaluate(()=>__reports[0]);
