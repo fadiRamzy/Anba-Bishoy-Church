@@ -44,6 +44,17 @@ async function open() {
   }
   throw last || new Error('Android WebView not available');
 }
+async function checkPages(web, mode) {
+  for (const [hash, selector] of [
+    ['#/', '.landing-card'], ['#/home', '.nav-grid'], ['#/add', '.form-card'],
+    ['#/bible', '.bible-home-grid'], ['#/iftiqad', '.ift-filter-bar'],
+    ['#/performance', '.perf-gate'], ['#/admin', '.appearance-panel']
+  ]) {
+    await web.evaluate(`location.hash = ${JSON.stringify(hash)}`);
+    await web.wait(`!!document.querySelector(${JSON.stringify(selector)})`);
+    assert(await web.evaluate(`document.documentElement.dataset.appearance === ${JSON.stringify(mode)}`), `Android ${mode} ${hash}`);
+  }
+}
 (async () => {
   adb('install', '-r', 'android/app/build/outputs/apk/debug/app-debug.apk');
   adb('shell', 'svc', 'wifi', 'disable');
@@ -58,6 +69,7 @@ async function open() {
   await web.evaluate("location.hash = '#/home'");
   await web.wait("!!document.querySelector('.nav-grid')");
   assert(await web.evaluate("getComputedStyle(document.documentElement).colorScheme === 'dark'"), 'Android directory uses dark mode');
+  await checkPages(web, 'dark');
   assert(web.errors.length === 0, 'Android WebView has no page errors');
   web.socket.close(); adb('shell', 'am', 'force-stop', pkg);
   web = await open();
@@ -66,6 +78,7 @@ async function open() {
   await web.wait("!!document.querySelector('[data-appearance-choice=light]')");
   await web.evaluate("document.querySelector('[data-appearance-choice=light]').click()");
   assert(await web.evaluate("document.documentElement.dataset.appearance === 'light' && localStorage.getItem('church_appearance') === 'light'"), 'Android selector saves light');
+  await checkPages(web, 'light');
   web.socket.close(); adb('shell', 'am', 'force-stop', pkg);
   web = await open();
   assert(await web.evaluate("document.documentElement.dataset.appearance === 'light'"), 'Android light survives app restart');
