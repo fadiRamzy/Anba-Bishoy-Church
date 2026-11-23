@@ -92,3 +92,16 @@ html[data-appearance="dark"] .ift-filter-bar .field select { background: var(--a
 html[data-appearance="dark"] :is(.perf-chip, .perf-tab.active) { background: #594049; color: #ffe0e0; border-color: #aa7b82; }
 html[data-appearance="dark"] .search-box:focus-within { background: #303a44; }
 html[data-appearance="dark"] .tab-bar .tab-item:hover { background: rgba(255,255,255,.08); color: #ffd2d3; }
+
+body, .app-bar, .admin-panel, .filter-bar, .profile-header, .info-section,
+.form-card, .pin-modal, .search-panel { transition: background-color .24s ease, color .24s ease, border-color .24s ease, box-shadow .24s ease; }
+html[data-appearance="dark"] :is(.landing-card, .service-wheel .wheel-node, .bible-book-card, .verse-list, .bible-result, .att-row, .att-history-row, .duplicate-warning) { background: #2c3640; border-color: var(--color-line); color: var(--color-ink); }
+html[data-appearance="dark"] :is(.landing-card .icon-wrap, .bible-book-order, .visitation-home-actions > a:nth-child(3) svg, .visitation-home-actions > a:nth-child(4) svg, .visitation-home-actions > a:nth-child(5) svg) { background: #55434a; color: #ffd2d3; }
+html[data-appearance="dark"] :is(.visitation-home-actions > a:nth-child(3), .visitation-home-actions > a:nth-child(4), .visitation-home-actions > a:nth-child(5), .combo-add-btn, .child-row .remove-child-btn, .visit-date-row .remove-date-btn) { background: var(--appearance-glass); color: var(--color-ink); border-color: var(--color-line); box-shadow: var(--appearance-shadow); }
+html[data-appearance="dark"] :is(.selectable-card.is-selected, .att-row:has(.att-checkbox:checked)) { background: #344c40; border-color: #80ad8b; }
+html[data-appearance="dark"] :is(.admin-panel:has(#wipeBtn), .admin-panel:has(#visitationWipeBtn)) { background: #3c3036; border-color: #b37c7a; }
+html[data-appearance="dark"] :is(.field input:focus, .field select:focus, .field textarea:focus, .child-row select:focus, .child-row input:focus, .pin-modal input:focus) { background: #36424e; color: var(--color-ink); }
+@media (prefers-reduced-motion: reduce) {
+  body, .app-bar, .admin-panel, .filter-bar, .profile-header, .info-section,
+  .form-card, .pin-modal, .search-panel { transition: none; }
+}
