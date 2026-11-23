@@ -532,7 +532,7 @@ async function renderPerformance(params) {
         </div>
       </div>`;
     }
-    body.innerHTML = `<div class="perf-export-bar"><button type="button" class="btn btn-gold btn-sm" id="perfLevelExport">${ICONS.download}<span>تصدير الجدول PDF</span></button></div>` + perfGroupTable(groups, cfg.header, isAmin, { tab }) + visitPanel;
+    body.innerHTML = `<div class="perf-level-export"><button type="button" class="btn btn-gold btn-sm" id="perfLevelExport">${ICONS.download}<span>تصدير الجدول PDF</span></button></div>` + perfGroupTable(groups, cfg.header, isAmin, { tab }) + visitPanel;
     body.querySelector('#perfLevelExport').addEventListener('click', (e) => {
       const btn = e.currentTarget;
       if (!members.length) { showToast('لا توجد بيانات للتصدير', 'error'); return; }
@@ -686,11 +686,11 @@ async function renderPerformance(params) {
         <td class="perf-pick-cell" data-label="تحديد"><input type="checkbox" class="perf-incomplete-pick" data-id="${member.id}" aria-label="تحديد ${escapeHTML(member.name || '')}" /></td>
         <td class="perf-group" data-label="المخدوم"><a class="perf-member-link" href="#/member/${member.id}">${escapeHTML(member.name || '— بلا اسم')}</a></td>
         <td class="perf-meta" data-label="القطاع · الفصل">${escapeHTML([cleanLabel(member.sector || ''), cleanLabel(member.class || '')].filter(Boolean).join(' · ') || '—')}</td>
-        <td class="perf-missing-cell" data-label="الحقول الناقصة">${missing.map((f) => `<span class="perf-missing">${escapeHTML(f.label)}</span>`).join('')}</td>
-        <td class="perf-actions" data-label="الإجراء">
+        <td class="perf-missing-cell" data-label="الحقول الناقصة"><div class="perf-missing-list">${missing.map((f) => `<span class="perf-missing">${escapeHTML(f.label)}</span>`).join('')}</div></td>
+        <td class="perf-actions" data-label="الإجراء"><div class="perf-incomplete-actions">
           <a class="btn btn-outline btn-sm" href="#/member/${member.id}">فتح الملف</a>
           <button type="button" class="btn btn-primary btn-sm perf-edit-btn" data-id="${member.id}">إكمال البيانات</button>
-        </td>
+        </div></td>
       </tr>`).join('');
 
     body.innerHTML = `
