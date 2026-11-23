@@ -4656,6 +4656,14 @@ async function renderAdminPanel() {
       <h2 class="section-title">إدارة البيانات</h2>
       <p class="section-sub">البيانات محفوظة داخل هذا المتصفح فقط على هذا الجهاز (${total} اسم).</p>
 
+      <div class="admin-panel appearance-panel">
+        <h3>المظهر</h3>
+        <div class="appearance-options" role="group" aria-label="المظهر">
+          <button type="button" class="btn btn-outline appearance-choice" data-appearance-choice="light" aria-pressed="${document.documentElement.dataset.appearance !== 'dark'}">الوضع الفاتح</button>
+          <button type="button" class="btn btn-outline appearance-choice" data-appearance-choice="dark" aria-pressed="${document.documentElement.dataset.appearance === 'dark'}">الوضع الداكن</button>
+        </div>
+      </div>
+
       <div class="admin-panel">
         <h3>${ICONS.download.replace('width="19"','width="17"')} تصدير نسخة كاملة من البيانات</h3>
         <div class="admin-actions">
@@ -4694,6 +4702,15 @@ async function renderAdminPanel() {
       </div>
     </div>
   `;
+
+  document.querySelectorAll('[data-appearance-choice]').forEach((button) => {
+    button.addEventListener('click', () => {
+      window.setChurchAppearance(button.dataset.appearanceChoice);
+      document.querySelectorAll('[data-appearance-choice]').forEach((choice) => {
+        choice.setAttribute('aria-pressed', String(choice === button));
+      });
+    });
+  });
 
   document.getElementById('exportBtn').addEventListener('click', async () => {
     const json = await MembersDB.exportJSON();

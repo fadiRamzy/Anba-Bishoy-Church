@@ -1,0 +1,114 @@
+/* Appearance and material: content stays calm; controls catch the light. */
+:root {
+  --appearance-glass: linear-gradient(160deg, rgba(255,255,255,.90), rgba(250,249,247,.78) 52%, rgba(238,236,232,.78));
+  --appearance-rim: rgba(255,255,255,.82);
+  --appearance-shadow: 0 5px 16px -11px rgba(44,40,38,.34), inset 0 1px 1px rgba(255,255,255,.9), inset 0 -1px 1px rgba(93,85,80,.10);
+}
+.tab-bar .tab-bar-inner, .tab-bar.is-scrolled .tab-bar-inner {
+  background: linear-gradient(160deg, rgba(255,255,255,.78), rgba(246,245,243,.67));
+  box-shadow: 0 14px 30px -18px rgba(38,37,36,.42), 0 3px 9px rgba(38,37,36,.08), inset 0 1px 1px rgba(255,255,255,.9), inset 0 -1px 1px rgba(100,98,94,.10);
+}
+.tab-bar .tab-item { color: #53504f; }
+.tab-bar .tab-bar-inner::before { background: linear-gradient(125deg, rgba(255,255,255,.95), rgba(255,255,255,.08) 42%, rgba(220,220,219,.25) 72%, rgba(255,255,255,.8)); }
+/* Keep existing button hues; only the surface finish is shared. */
+:is(.btn, .back-link, .admin-toggle, .chip, .perf-tab, .nav-card, .member-card, .filter-bar select) {
+  box-shadow: var(--appearance-shadow);
+  transition: background-color .22s ease, color .22s ease, border-color .22s ease, box-shadow .22s ease, transform .18s ease;
+}
+:is(.nav-card, .member-card, .filter-bar select) {
+  background: var(--appearance-glass);
+  border-color: rgba(170,160,150,.34);
+}
+.filter-bar select { min-height: 44px; }
+.appearance-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.appearance-choice { min-width: 130px; }
+.appearance-choice[aria-pressed="true"] { border-color: var(--color-maroon); color: var(--color-maroon-dark); box-shadow: var(--appearance-shadow), 0 0 0 1px var(--color-maroon); }
+
+html[data-appearance="dark"] {
+  color-scheme: dark;
+  --color-bg: #1b2027;
+  --color-surface: #29313a;
+  --color-surface-alt: #343d46;
+  --color-surface-tint: #313943;
+  --color-ink: #f0ede8;
+  --color-ink-soft: #d1c9bf;
+  --color-ink-faint: #b7afa6;
+  --color-maroon: #efb1b5;
+  --color-maroon-dark: #ffd2d3;
+  --color-maroon-bright: #f2b7bb;
+  --color-maroon-tint: #55383e;
+  --color-gold: #e1c382;
+  --color-gold-dark: #edcf8c;
+  --color-gold-light: #b79b68;
+  --color-gold-tint: #4b4332;
+  --color-line: #56606a;
+  --color-line-soft: #444d56;
+  --color-danger: #ffb4ad;
+  --color-success: #a9d5b1;
+  --lg-edge: rgba(220,224,229,.24);
+  --lg-edge-hi: rgba(220,224,229,.38);
+  --lg-raise: linear-gradient(160deg, rgba(97,108,118,.89), rgba(57,66,76,.96));
+  --lg-thick: rgba(0,0,0,.35);
+  --appearance-glass: linear-gradient(160deg, rgba(80,91,102,.95), rgba(47,56,66,.96));
+  --appearance-rim: rgba(235,242,250,.28);
+  --appearance-shadow: 0 6px 18px -12px rgba(0,0,0,.7), inset 0 1px 1px rgba(255,255,255,.20), inset 0 -1px 1px rgba(0,0,0,.25);
+  --shadow-card: 0 6px 20px -14px rgba(0,0,0,.6);
+  --shadow-soft: 0 4px 14px -10px rgba(0,0,0,.55);
+}
+html[data-appearance="dark"] body { background: linear-gradient(180deg,#202830,#171e25); color: var(--color-ink); }
+html[data-appearance="dark"] body::before { background-image: linear-gradient(180deg,rgba(24,31,39,.92),rgba(24,30,37,.96)), url('site-bg.jpg'); }
+html[data-appearance="dark"] :is(.app-bar, .hero-verse-card, .search-panel, .filter-bar, .admin-panel, .form-card, .profile-header, .pin-modal, .toast, .empty-state, .cal-card, .bible-card, .perf-card, .perf-panel) {
+  background: rgba(42,51,61,.96); border-color: var(--color-line); color: var(--color-ink); box-shadow: var(--appearance-shadow);
+}
+html[data-appearance="dark"] :is(.nav-card, .member-card, .filter-bar select) { background: var(--appearance-glass); border-color: var(--lg-edge); color: var(--color-ink); }
+html[data-appearance="dark"] :is(.field input, .field select, .field textarea, .search-box, .search-box input, .pin-modal input, textarea, select) { background-color: #303a44; color: var(--color-ink); border-color: var(--color-line); }
+html[data-appearance="dark"] option { background: #303a44; color: #f0ede8; }
+html[data-appearance="dark"] :is(.btn-outline, .back-link, .admin-toggle, .chip, .perf-tab) { background: var(--lg-raise); border-color: var(--lg-edge); color: var(--color-ink); box-shadow: var(--appearance-shadow); }
+html[data-appearance="dark"] .btn-primary { background: linear-gradient(160deg,#a25361,#762f3d); color:#fff; }
+html[data-appearance="dark"] .btn-gold { background: linear-gradient(160deg,#9e7d47,#72572f); color:#fff; }
+html[data-appearance="dark"] .btn-danger { background: linear-gradient(160deg,#71464b,#53363c); color:#ffe0db; border-color:#b37c7a; }
+html[data-appearance="dark"] :is(.nav-card .icon-wrap, .profile-avatar, .browse-tile) { background: #55434a; color: #ffd2d3; border-color: #80666a; box-shadow: var(--appearance-shadow); }
+html[data-appearance="dark"] :is(.tab-bar .tab-bar-inner, .tab-bar.is-scrolled .tab-bar-inner) { background: linear-gradient(160deg,rgba(70,80,91,.91),rgba(40,48,58,.93)); border-color:rgba(240,245,250,.24); box-shadow:var(--appearance-shadow); }
+html[data-appearance="dark"] .tab-bar .tab-item { color: #dedad6; }
+html[data-appearance="dark"] .tab-bar .tab-item.active { color: #ffd2d3; }
+html[data-appearance="dark"] .tab-bar .tab-item.active .tab-icon { background: rgba(236,164,171,.20); }
+html[data-appearance="dark"] :is(table, th, td) { border-color: var(--color-line); }
+html[data-appearance="dark"] :is(th, thead) { background: #38434d; color: var(--color-ink); }
+html[data-appearance="dark"] :is(.tag, .cal-chip) { background: var(--color-surface-alt); border-color: var(--color-line); color: var(--color-ink); }
+html[data-appearance="dark"] .appearance-choice[aria-pressed="true"] { border-color: #f1b4ba; color: #ffd2d3; }
+@media (prefers-reduced-motion: reduce) {
+  :is(.btn, .back-link, .admin-toggle, .chip, .perf-tab, .nav-card, .member-card, .filter-bar select) { transition: none; }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root { --appearance-glass: #f9f8f5; }
+  html[data-appearance="dark"] { --appearance-glass: #35404a; }
+}
+
+/* Sections with their own legacy solid fills need an explicit dark surface. */
+html[data-appearance="dark"] :is(.info-section, .perf-stat, .perf-role-card, .perf-table-wrap, .perf-export-bar, .ift-card, .att-notif-modal, .att-notif-item, .att-selectall, .bible-search-card, .chapter-btn, .birthday-hero, .perf-incomplete-table tbody tr) { background: #2c3640; color: var(--color-ink); border-color: var(--color-line); }
+html[data-appearance="dark"] :is(.member-avatar, .browse-tile, .bible-book-icon) { background: #55434a; color: #ffd2d3; border-color: #80666a; }
+html[data-appearance="dark"] :is(.perf-search, .ift-date-input, .perf-period input, .visit-add-row input[type="date"]) { background: #303a44; color: var(--color-ink); border-color: var(--color-line); }
+html[data-appearance="dark"] .ift-filter-bar .field select { background: var(--appearance-glass); color: var(--color-ink); border-color: var(--lg-edge); }
+html[data-appearance="dark"] :is(.perf-chip, .perf-tab.active) { background: #594049; color: #ffe0e0; border-color: #aa7b82; }
+html[data-appearance="dark"] .search-box:focus-within { background: #303a44; }
+html[data-appearance="dark"] .tab-bar .tab-item:hover { background: rgba(255,255,255,.08); color: #ffd2d3; }
+
+body, .app-bar, .admin-panel, .filter-bar, .profile-header, .info-section,
+.form-card, .pin-modal, .search-panel { transition: background-color .24s ease, color .24s ease, border-color .24s ease, box-shadow .24s ease; }
+html[data-appearance="dark"] :is(.landing-card, .service-wheel .wheel-node, .bible-book-card, .verse-list, .bible-result, .att-row, .att-history-row, .duplicate-warning) { background: #2c3640; border-color: var(--color-line); color: var(--color-ink); }
+html[data-appearance="dark"] :is(.landing-card .icon-wrap, .bible-book-order, .visitation-home-actions > a:nth-child(3) svg, .visitation-home-actions > a:nth-child(4) svg, .visitation-home-actions > a:nth-child(5) svg) { background: #55434a; color: #ffd2d3; }
+html[data-appearance="dark"] :is(.visitation-home-actions > a:nth-child(3), .visitation-home-actions > a:nth-child(4), .visitation-home-actions > a:nth-child(5), .combo-add-btn, .child-row .remove-child-btn, .visit-date-row .remove-date-btn) { background: var(--appearance-glass); color: var(--color-ink); border-color: var(--color-line); box-shadow: var(--appearance-shadow); }
+html[data-appearance="dark"] :is(.selectable-card.is-selected, .att-row:has(.att-checkbox:checked)) { background: #344c40; border-color: #80ad8b; }
+html[data-appearance="dark"] :is(.admin-panel:has(#wipeBtn), .admin-panel:has(#visitationWipeBtn)) { background: #3c3036; border-color: #b37c7a; }
+html[data-appearance="dark"] :is(.field input:focus, .field select:focus, .field textarea:focus, .child-row select:focus, .child-row input:focus, .pin-modal input:focus) { background: #36424e; color: var(--color-ink); }
+@media (prefers-reduced-motion: reduce) {
+  body, .app-bar, .admin-panel, .filter-bar, .profile-header, .info-section,
+  .form-card, .pin-modal, .search-panel { transition: none; }
+}
+html[data-appearance="dark"] :is(.perf-drill-count, .chapter-btn:active) { background: #793e49; color: #fff; }
+html[data-appearance="dark"] .perf-stat.is-warn .perf-stat-value { color: #f1c184; }
+html[data-appearance="dark"] .perf-table tbody tr:nth-child(even) { background: rgba(255,255,255,.035); }
+html[data-appearance="dark"] .cal-badge-major { background: #594c36; color: #f9e4b7; }
+html[data-appearance="dark"] .cal-chip-fast { background: #4c4537; color: #f9e4b7; }
+html[data-appearance="dark"] :is(.cal-chip-feast, .cal-badge-saint) { background: #354b40; color: #c9e9ce; }
+html[data-appearance="dark"] .cal-badge-reading { background: #364655; color: #d1e5fc; }
