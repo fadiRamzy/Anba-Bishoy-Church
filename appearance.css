@@ -105,3 +105,10 @@ html[data-appearance="dark"] :is(.field input:focus, .field select:focus, .field
   body, .app-bar, .admin-panel, .filter-bar, .profile-header, .info-section,
   .form-card, .pin-modal, .search-panel { transition: none; }
 }
+html[data-appearance="dark"] :is(.perf-drill-count, .chapter-btn:active) { background: #793e49; color: #fff; }
+html[data-appearance="dark"] .perf-stat.is-warn .perf-stat-value { color: #f1c184; }
+html[data-appearance="dark"] .perf-table tbody tr:nth-child(even) { background: rgba(255,255,255,.035); }
+html[data-appearance="dark"] .cal-badge-major { background: #594c36; color: #f9e4b7; }
+html[data-appearance="dark"] .cal-chip-fast { background: #4c4537; color: #f9e4b7; }
+html[data-appearance="dark"] :is(.cal-chip-feast, .cal-badge-saint) { background: #354b40; color: #c9e9ce; }
+html[data-appearance="dark"] .cal-badge-reading { background: #364655; color: #d1e5fc; }
