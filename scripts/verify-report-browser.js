@@ -5,7 +5,7 @@ const { chromium } = require('playwright-core');
  page.on('pageerror', e=>console.log('PAGE ERROR',e.message));
  await page.goto('http://127.0.0.1:4173/',{waitUntil:'domcontentloaded'});
  await page.waitForFunction(()=>typeof MembersDB!=='undefined' && typeof perfExportFullReportPDF==='function');
- const results=[]; function check(n,v){results.push([n,!!v]);console.log((v?'PASS ':'FAIL ')+n)}
+ const results=[]; function check(n,v){results.push([n,!!v]);console.log((v?'PASS ':'::error::FAIL ')+n)}
  await page.evaluate(async()=>{
   const old=await MembersDB.getAll(); for(const m of old) await MembersDB.remove(m.id);
   for(let i=1;i<=30;i++) await MembersDB.put({id:i,name:'اسم '+i,phone1:'01000111111',street:'شارع',locationLink:'x',sector:i<=15?'قطاع أ':'قطاع ب',stage:'مرحلة ١',city:'المنيا',neighborhood:i<=10?'حي أول':'حي ثان',class:i<=15?'فصل ألف':'فصل باء',visits:i%2?['2026-11-01']:[],attendance:[{date:'2026-10-01',present:i%2===1}]});
@@ -46,4 +46,4 @@ const { chromium } = require('playwright-core');
  check('mobile filter tap size',await page.locator('#iftSector').evaluate(e=>e.getBoundingClientRect().height>=44));
  await page.evaluate(()=>location.hash='#/performance?tab=individuals');await page.waitForSelector('#perfExportSelected');check('mobile performance fits viewport',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  console.log(`RESULT ${results.filter(x=>x[1]).length}/${results.length}`);await browser.close();process.exit(results.some(x=>!x[1])?1:0);
-})().catch(e=>{console.error(e);process.exit(2)});
+})().catch(e=>{console.log('::error::'+String(e).replace(/\n/g,' '));process.exit(2)});
