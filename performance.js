@@ -200,6 +200,7 @@ function perfStatCard(value, label, sub, kind) {
 /* ==========================================================================
    Router entry point                                                     */
 /* ========================================================================== */
+let perfPeriodOpen = false;
 async function renderPerformance(params) {
   renderChrome(true);
   const members = await MembersDB.getAll();
@@ -263,12 +264,13 @@ async function renderPerformance(params) {
         </div>
         <div class="perf-head-actions">
           ${isAmin && tab === 'overview' ? `<button type="button" class="btn btn-gold btn-sm" id="perfReportBtn">${ICONS.download}<span>تصدير التقرير الكامل</span></button>` : ''}
+          <button type="button" class="btn btn-outline btn-sm" id="perfPeriodToggle" aria-controls="perfPeriodPanel" aria-expanded="${perfPeriodOpen}">فلتر التقرير</button>
           ${isAmin ? `<a class="btn btn-primary btn-sm" href="#/add">${ICONS.plus}<span>إضافة مخدوم</span></a>` : ''}
           <button type="button" class="btn btn-outline btn-sm" id="perfLockBtn">${ICONS.lock}<span>قفل</span></button>
         </div>
       </div>
       <div class="perf-tabs" role="tablist">${tabsHtml}</div>
-      <div class="perf-period" role="group" aria-label="فترة احتساب المؤشرات">
+      <div id="perfPeriodPanel" class="perf-period" role="group" aria-label="فترة احتساب المؤشرات" ${perfPeriodOpen ? '' : 'hidden'}>
         <span>فترة التقرير</span>
         <label>من <input type="date" id="perfPeriodStart" value="${escapeHTML(sessionStorage.getItem('perf_period_start') || '')}" /></label>
         <label>إلى <input type="date" id="perfPeriodEnd" value="${escapeHTML(sessionStorage.getItem('perf_period_end') || '')}" /></label>
@@ -276,6 +278,22 @@ async function renderPerformance(params) {
       </div>
       <div id="perfBody"></div>
     </div>`;
+  const periodPanel = document.getElementById('perfPeriodPanel');
+  const periodToggle = document.getElementById('perfPeriodToggle');
+  periodToggle.addEventListener('click', () => {
+    perfPeriodOpen = !perfPeriodOpen;
+    periodPanel.hidden = !perfPeriodOpen;
+    periodToggle.setAttribute('aria-expanded', String(perfPeriodOpen));
+    if (perfPeriodOpen) document.getElementById('perfPeriodStart').focus();
+  });
+  periodPanel.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      perfPeriodOpen = false;
+      periodPanel.hidden = true;
+      periodToggle.setAttribute('aria-expanded', 'false');
+      periodToggle.focus();
+    }
+  });
   const periodStart = document.getElementById('perfPeriodStart');
   const periodEnd = document.getElementById('perfPeriodEnd');
   const setPeriod = () => {
@@ -475,6 +493,8 @@ async function renderPerformance(params) {
     /* أمين خدمة only: افتقاد drill-down for the selected group (or the whole level) */
     const visitParam = isAmin ? (params && params.visit) : '';
     let visitPanel = '';
+    let matchedVisits = [];
+    let visitExportLabel = '';
     if (visitParam === 'visited' || visitParam === 'unvisited') {
       const groupFilter = (params && params.group) || '';
       const makeKey = (m) => ((cfg.keyFn(m) || '').toString().trim() || '— غير محدد');
@@ -483,6 +503,8 @@ async function renderPerformance(params) {
         .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ar'));
       const groupLabel = groupFilter ? cfg.labelFn(groupFilter) : 'كل الخدمة';
       const isVisitedList = visitParam === 'visited';
+      matchedVisits = matched;
+      visitExportLabel = `${isVisitedList ? 'تم افتقادهم' : 'لم يتم افتقادهم'} — ${groupLabel}`;
       const rowsV = matched.map((m) => {
         const visits = perfVisitDates(m);
         const last = visits[0] || '';
@@ -499,6 +521,7 @@ async function renderPerformance(params) {
       <div class="perf-drill">
         <div class="perf-drill-head">
           <h3>${isVisitedList ? 'المخدومون الذين تم افتقادهم' : 'المخدومون الذين لم يتم افتقادهم'} — ${escapeHTML(groupLabel)}<span class="perf-drill-count">${fmtNum(matched.length)}</span></h3>
+          <button type="button" class="btn btn-outline btn-sm" id="perfLevelDrillExport">${ICONS.download}<span>تصدير القائمة PDF</span></button>
           <a class="perf-chip perf-chip-clear" href="#/performance?${qs({ tab })}">✕ إغلاق القائمة</a>
         </div>
         <div class="perf-table-wrap">
@@ -509,7 +532,18 @@ async function renderPerformance(params) {
         </div>
       </div>`;
     }
-    body.innerHTML = perfGroupTable(groups, cfg.header, isAmin, { tab }) + visitPanel;
+    body.innerHTML = `<div class="perf-export-bar"><button type="button" class="btn btn-gold btn-sm" id="perfLevelExport">${ICONS.download}<span>تصدير الجدول PDF</span></button></div>` + perfGroupTable(groups, cfg.header, isAmin, { tab }) + visitPanel;
+    body.querySelector('#perfLevelExport').addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      if (!members.length) { showToast('لا توجد بيانات للتصدير', 'error'); return; }
+      perfExportWithButton(btn, () => perfExportLevelPDF(groups, members, cfg.header, isAmin));
+    });
+    const drillExport = body.querySelector('#perfLevelDrillExport');
+    if (drillExport) drillExport.addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      if (!matchedVisits.length) { showToast('لا توجد نتائج للتصدير', 'error'); return; }
+      perfExportWithButton(btn, () => perfExportAttendanceOrVisitPDF(matchedVisits, visitExportLabel, 'visit'));
+    });
     return;
   }
 
@@ -649,11 +683,11 @@ async function renderPerformance(params) {
 
     const rows = shown.map(({ member, missing }) => `
       <tr>
-        <td class="perf-pick-cell"><input type="checkbox" class="perf-incomplete-pick" data-id="${member.id}" aria-label="تحديد ${escapeHTML(member.name || '')}" /></td>
-        <td class="perf-group"><a class="perf-member-link" href="#/member/${member.id}">${escapeHTML(member.name || '— بلا اسم')}</a></td>
-        <td class="perf-meta">${escapeHTML([cleanLabel(member.sector || ''), cleanLabel(member.class || '')].filter(Boolean).join(' · ') || '—')}</td>
-        <td class="perf-missing-cell">${missing.map((f) => `<span class="perf-missing">${escapeHTML(f.label)}</span>`).join('')}</td>
-        <td class="perf-actions">
+        <td class="perf-pick-cell" data-label="تحديد"><input type="checkbox" class="perf-incomplete-pick" data-id="${member.id}" aria-label="تحديد ${escapeHTML(member.name || '')}" /></td>
+        <td class="perf-group" data-label="المخدوم"><a class="perf-member-link" href="#/member/${member.id}">${escapeHTML(member.name || '— بلا اسم')}</a></td>
+        <td class="perf-meta" data-label="القطاع · الفصل">${escapeHTML([cleanLabel(member.sector || ''), cleanLabel(member.class || '')].filter(Boolean).join(' · ') || '—')}</td>
+        <td class="perf-missing-cell" data-label="الحقول الناقصة">${missing.map((f) => `<span class="perf-missing">${escapeHTML(f.label)}</span>`).join('')}</td>
+        <td class="perf-actions" data-label="الإجراء">
           <a class="btn btn-outline btn-sm" href="#/member/${member.id}">فتح الملف</a>
           <button type="button" class="btn btn-primary btn-sm perf-edit-btn" data-id="${member.id}">إكمال البيانات</button>
         </td>
@@ -671,8 +705,8 @@ async function renderPerformance(params) {
         <button type="button" class="btn btn-outline btn-sm" id="perfIncompleteExportSelected">${ICONS.download}<span>تصدير المحدد PDF</span></button>
         <button type="button" class="btn btn-gold btn-sm" id="perfIncompleteExportShown">${ICONS.download}<span>تصدير المعروض PDF</span></button>
       </div>
-      <div class="perf-table-wrap">
-        <table class="perf-table">
+      <div class="perf-table-wrap perf-incomplete-wrap">
+        <table class="perf-table perf-incomplete-table">
           <thead><tr><th class="perf-pick-cell"></th><th>المخدوم</th><th>القطاع · الفصل</th><th>الحقول الناقصة</th><th>الإجراء</th></tr></thead>
           <tbody>${rows || `<tr><td colspan="5" class="perf-empty">لا توجد ملفات غير مكتملة بهذا الفلتر</td></tr>`}</tbody>
         </table>
@@ -786,6 +820,25 @@ async function perfExportAttendanceOrVisitPDF(list, label, kind, filename) {
     rows,
     filename: filename ? `${filename}_${perfExportStamp()}.pdf` : `مؤشر_الأداء_${perfExportStamp()}.pdf`,
   });
+  showToast('تم تصدير ملف PDF', 'success');
+}
+
+/* The currently displayed organizational level, using its displayed order and totals. */
+async function perfExportLevelPDF(groups, members, levelLabel, showVisit) {
+  const total = perfTotals(members);
+  const visit = perfVisitStats(members);
+  const headers = [
+    { label: levelLabel, width: 29 }, { label: 'المخدومون', width: 10, align: 'center' },
+    { label: '% حضور', width: 10, align: 'center' }, { label: '% غياب', width: 10, align: 'center' },
+    { label: 'الحاضرون', width: 10, align: 'center' }, { label: 'الغائبون', width: 10, align: 'center' },
+  ];
+  if (showVisit) headers.push({ label: 'تم افتقادهم', width: 10, align: 'center' }, { label: 'لم يتم افتقادهم', width: 11, align: 'center' }, { label: '% افتقاد', width: 10, align: 'center' });
+  const values = (label, a, v) => [escapeHTML(label), fmtNum(a.count), fmtPct(a.pctPresent), fmtPct(a.pctAbsent), fmtNum(a.present), fmtNum(a.absent),
+    ...(showVisit ? [fmtNum(v.visited), fmtNum(v.notVisited), fmtPct(v.pctVisited)] : [])];
+  const rows = groups.map((g) => values(g.label, g, g.visit));
+  rows.push(values('الإجمالي', total, visit));
+  await simpleTablePdf({ title: 'مؤشر قياس الأداء', subtitle: levelLabel, landscape: true, headers, rows,
+    note: `تاريخ الإصدار: ${perfExportToday()}`, filename: `مؤشر_الأداء_${levelLabel}_${perfExportStamp()}.pdf` });
   showToast('تم تصدير ملف PDF', 'success');
 }
 
