@@ -61,12 +61,22 @@ function tx(storeName, mode) {
 
 /* ---------------------------- members CRUD ---------------------------- */
 
+/* Class spelling correction (2026-11): 'داوؤد النبي' -> 'داود النبي'.
+   Canonicalized at READ time so stored records are never rewritten and old
+   records keep working in filters, PDFs and the edit form. Idempotent. */
+const CLASS_LABEL_ALIASES = { 'داوؤد النبي': 'داود النبي' };
+function canonicalMemberClass(m) {
+  if (!m || typeof m !== 'object') return m;
+  const next = CLASS_LABEL_ALIASES[m.class];
+  return next ? { ...m, class: next } : m;
+}
+
 const MembersDB = {
   async getAll() {
     const store = await tx(STORE_MEMBERS, 'readonly');
     return new Promise((resolve, reject) => {
       const req = store.getAll();
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => resolve(req.result.map(canonicalMemberClass));
       req.onerror = () => reject(req.error);
     });
   },
@@ -75,7 +85,7 @@ const MembersDB = {
     const store = await tx(STORE_MEMBERS, 'readonly');
     return new Promise((resolve, reject) => {
       const req = store.get(Number(id));
-      req.onsuccess = () => resolve(req.result || null);
+      req.onsuccess = () => resolve(req.result ? canonicalMemberClass(req.result) : null);
       req.onerror = () => reject(req.error);
     });
   },
