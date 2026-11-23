@@ -52,20 +52,24 @@ const PerformanceAuth = {
 /* ------------------------------------------------------------------ */
 /*  Statistics helpers (actual attendance records only, never estimates) */
 /* ------------------------------------------------------------------ */
+// The performance dashboard has an inclusive, optional reporting period.
+// An empty bound means no limit; with both empty the period is all history.
 function perfAttendanceRecords(m) {
-  return Array.isArray(m.attendance) ? m.attendance.filter((r) => r && typeof r.date === 'string') : [];
+  const from = sessionStorage.getItem('perf_period_start') || '';
+  const to = sessionStorage.getItem('perf_period_end') || '';
+  return Array.isArray(m.attendance) ? m.attendance.filter((r) =>
+    r && typeof r.date === 'string' && (!from || r.date >= from) && (!to || r.date <= to)) : [];
+}
+function perfMemberAttendance(m) {
+  return perfAttendanceRecords(m).some((r) => r.present === true);
 }
 function perfTotals(members) {
-  let records = 0, present = 0;
-  for (const m of members) {
-    const list = perfAttendanceRecords(m);
-    records += list.length;
-    for (const r of list) if (r.present === true) present += 1;
-  }
-  const absent = records - present;
-  const pctPresent = records ? (present / records) * 100 : null;
-  const pctAbsent = records ? (absent / records) * 100 : null;
-  return { count: members.length, records, present, absent, pctPresent, pctAbsent };
+  const count = members.length;
+  const present = members.filter(perfMemberAttendance).length;
+  const absent = count - present;
+  return { count, present, absent,
+    pctPresent: count ? present * 100 / count : null,
+    pctAbsent: count ? absent * 100 / count : null };
 }
 const fmtNum = (n) => Number(n || 0).toLocaleString('en-US');
 const fmtPct = (p) => (p === null || !isFinite(p) ? '—' : `${p.toFixed(1)}%`);
@@ -162,12 +166,12 @@ function perfGroupTable(groups, headerLabel, showVisit, linkCtx) {
       <td class="perf-num">${fmtNum(g.absent)}</td>${visitCells(g)}
     </tr>`).join('');
   const tot = groups.reduce((acc, g) => ({
-    count: acc.count + g.count, records: acc.records + g.records,
+    count: acc.count + g.count,
     present: acc.present + g.present, absent: acc.absent + g.absent,
     visitVisited: acc.visitVisited + g.visit.visited,
-  }), { count: 0, records: 0, present: 0, absent: 0, visitVisited: 0 });
-  tot.pctPresent = tot.records ? (tot.present / tot.records) * 100 : null;
-  tot.pctAbsent = tot.records ? (tot.absent / tot.records) * 100 : null;
+  }), { count: 0, present: 0, absent: 0, visitVisited: 0 });
+  tot.pctPresent = tot.count ? (tot.present / tot.count) * 100 : null;
+  tot.pctAbsent = tot.count ? (tot.absent / tot.count) * 100 : null;
   tot.visitNot = tot.count - tot.visitVisited;
   tot.visitPct = tot.count ? (tot.visitVisited / tot.count) * 100 : null;
   const visitHead = showVisit ? '<th>تم افتقادهم</th><th>لم يتم افتقادهم</th><th>% افتقاد</th>' : '';
@@ -176,9 +180,9 @@ function perfGroupTable(groups, headerLabel, showVisit, linkCtx) {
   return `
   <div class="perf-table-wrap">
     <table class="perf-table">
-      <thead><tr><th>${escapeHTML(headerLabel)}</th><th>المخدومون</th><th>% حضور</th><th>% غياب</th><th>أيام الحضور</th><th>أيام الغياب</th>${visitHead}</tr></thead>
+      <thead><tr><th>${escapeHTML(headerLabel)}</th><th>المخدومون</th><th>% حضور</th><th>% غياب</th><th>الحاضرون</th><th>الغائبون</th>${visitHead}</tr></thead>
       <tbody>${rows || `<tr><td colspan="${colspan}" class="perf-empty">لا توجد بيانات مسجلة</td></tr>`}</tbody>
-      <tfoot><tr><th>الإجمالي</th><th class="perf-num">${fmtNum(tot.count)}</th>${tot.records ? `<th class="perf-num">${tot.pctPresent.toFixed(1)}%</th><th class="perf-num">${tot.pctAbsent.toFixed(1)}%</th>` : '<th class="perf-num">—</th><th class="perf-num">—</th>'}<th class="perf-num">${fmtNum(tot.present)}</th><th class="perf-num">${fmtNum(tot.absent)}</th>${visitFoot}</tr></tfoot>
+      <tfoot><tr><th>الإجمالي</th><th class="perf-num">${fmtNum(tot.count)}</th>${tot.count ? `<th class="perf-num">${tot.pctPresent.toFixed(1)}%</th><th class="perf-num">${tot.pctAbsent.toFixed(1)}%</th>` : '<th class="perf-num">—</th><th class="perf-num">—</th>'}<th class="perf-num">${fmtNum(tot.present)}</th><th class="perf-num">${fmtNum(tot.absent)}</th>${visitFoot}</tr></tfoot>
     </table>
   </div>`;
 }
@@ -258,8 +262,34 @@ async function renderPerformance(params) {
         </div>
       </div>
       <div class="perf-tabs" role="tablist">${tabsHtml}</div>
+      <div class="perf-period" role="group" aria-label="فترة احتساب الحضور">
+        <span>فترة الحضور</span>
+        <label>من <input type="date" id="perfPeriodStart" value="${escapeHTML(sessionStorage.getItem('perf_period_start') || '')}" /></label>
+        <label>إلى <input type="date" id="perfPeriodEnd" value="${escapeHTML(sessionStorage.getItem('perf_period_end') || '')}" /></label>
+        <button type="button" class="btn btn-outline btn-sm" id="perfPeriodClear">كل الفترات</button>
+      </div>
       <div id="perfBody"></div>
     </div>`;
+  const periodStart = document.getElementById('perfPeriodStart');
+  const periodEnd = document.getElementById('perfPeriodEnd');
+  const setPeriod = () => {
+    if (periodStart.value && periodEnd.value && periodStart.value > periodEnd.value) {
+      showToast('تاريخ البداية يجب أن يكون قبل تاريخ النهاية', 'error');
+      periodStart.value = sessionStorage.getItem('perf_period_start') || '';
+      periodEnd.value = sessionStorage.getItem('perf_period_end') || '';
+      return;
+    }
+    sessionStorage.setItem('perf_period_start', periodStart.value);
+    sessionStorage.setItem('perf_period_end', periodEnd.value);
+    renderPerformance(params);
+  };
+  periodStart.addEventListener('change', setPeriod);
+  periodEnd.addEventListener('change', setPeriod);
+  document.getElementById('perfPeriodClear').addEventListener('click', () => {
+    sessionStorage.removeItem('perf_period_start');
+    sessionStorage.removeItem('perf_period_end');
+    renderPerformance(params);
+  });
   document.getElementById('perfLockBtn').addEventListener('click', () => { PerformanceAuth.lock(); renderPerformance({}); });
   const reportBtn = document.getElementById('perfReportBtn');
   if (reportBtn) reportBtn.addEventListener('click', () => perfExportWithButton(reportBtn, () => perfExportFullReportPDF(members)));
@@ -271,10 +301,9 @@ async function renderPerformance(params) {
   if (tab === 'overview') {
     const statKey = (params && params.stat) || '';
     const perMember = members.map((m) => {
-      const list = perfAttendanceRecords(m);
-      const present = list.filter((r) => r.present === true).length;
-      const absent = list.length - present;
-      const pct = list.length ? (present / list.length) * 100 : null;
+      const present = perfMemberAttendance(m) ? 1 : 0;
+      const absent = 1 - present;
+      const pct = present * 100;
       return { m, present, absent, pct };
     });
     const alpha = (a, b) => String(a.m.name || '').localeCompare(String(b.m.name || ''), 'ar');
@@ -349,7 +378,7 @@ async function renderPerformance(params) {
       </div>`;
     const ddHead = ddIsVisit
       ? '<tr><th class="perf-pick-cell"></th><th>المخدوم</th><th>القطاع · الفصل</th><th>آخر افتقاد</th><th>عدد مرات الافتقاد</th><th>الإجراء</th></tr>'
-      : '<tr><th class="perf-pick-cell"></th><th>المخدوم</th><th>القطاع · الفصل</th><th>أيام الحضور</th><th>أيام الغياب</th><th>% حضور</th><th>الإجراء</th></tr>';
+      : '<tr><th class="perf-pick-cell"></th><th>المخدوم</th><th>القطاع · الفصل</th><th>الحاضرون</th><th>الغائبون</th><th>% حضور</th><th>الإجراء</th></tr>';
     const ddColspan = ddIsVisit ? 6 : 7;
     const panel = dd ? `
       <div class="perf-drill">
@@ -370,7 +399,7 @@ async function renderPerformance(params) {
         ${linkCard('total', fmtNum(total.count), 'إجمالي المخدومين', 'اضغط لعرض كل المخدومين')}
         ${linkCard('presence', fmtPct(total.pctPresent), 'نسبة الحضور', 'اضغط لعرض المخدومين الذين لديهم حضور', total.pctPresent === null ? '' : 'is-good')}
         ${linkCard('absence', fmtPct(total.pctAbsent), 'نسبة الغياب', 'اضغط لعرض المخدومين الغائبين', total.pctAbsent === null ? '' : 'is-bad')}
-        ${linkCard('absentDays', fmtNum(total.absent), 'إجمالي أيام الغياب', 'اضغط لعرض المخدومين الغائبين', 'is-bad')}
+        ${linkCard('absentDays', fmtNum(total.absent), 'إجمالي الغائبين', 'اضغط لعرض المخدومين الغائبين', 'is-bad')}
       </div>
       <h3 class="perf-visit-title">${ICONS.visit} مؤشرات الافتقاد</h3>
       <div class="perf-stat-grid perf-stat-grid-visit">
@@ -387,7 +416,7 @@ async function renderPerformance(params) {
         </div>
       </div>
       ${panel}
-      <p class="perf-footnote">المؤشرات محسوبة من سجلات الحضور وسجلات الافتقاد الفعلية المحفوظة لكل مخدوم — اضغط على أي مؤشر لعرض المخدومين المعنيين والوصول المباشر إلى ملفاتهم.</p>`;
+      <p class="perf-footnote">المؤشرات محسوبة من الحضور خلال الفترة المختارة وسجلات الافتقاد الفعلية المحفوظة لكل مخدوم — اضغط على أي مؤشر لعرض المخدومين المعنيين والوصول المباشر إلى ملفاتهم.</p>`;
     body.querySelectorAll('.perf-edit-btn').forEach((btn) => btn.addEventListener('click', () => {
       const member = members.find((m) => String(m.id) === String(btn.dataset.id));
       if (member) openPerfEditModal(member, role, params);
@@ -494,19 +523,16 @@ async function renderPerformance(params) {
     const classPillsHtml = pill('', 'كل الفصول') + classOptions.map((k) => pill(k, perfClassLabel(k))).join('');
 
     const rows = members.map((m) => {
-      const list = perfAttendanceRecords(m);
-      const present = list.filter((r) => r.present === true).length;
-      const absent = list.length - present;
-      const pct = list.length ? (present / list.length) * 100 : null;
+      const present = perfMemberAttendance(m) ? 1 : 0;
+      const absent = 1 - present;
+      const pct = present * 100;
       const classKey = perfClassKey(m);
       const peerList = peers.get(classKey) || [];
       let compare;
       if (peerList.length <= 1) compare = 'لا توجد مقارنة داخل الفصل';
       else {
         const peerPcts = peerList.map((p) => {
-          const pl = perfAttendanceRecords(p);
-          const pp = pl.filter((r) => r.present === true).length;
-          return pl.length ? (pp / pl.length) * 100 : 0;
+          return perfMemberAttendance(p) ? 100 : 0;
         });
         const mine = pct === null ? 0 : pct;
         const rank = 1 + peerPcts.filter((p) => p > mine).length;
@@ -543,7 +569,7 @@ async function renderPerformance(params) {
       </div>
       <div class="perf-table-wrap">
         <table class="perf-table">
-          <thead><tr><th class="perf-pick-cell"></th><th>المخدوم</th><th>القطاع · الفصل</th><th>أيام الحضور</th><th>أيام الغياب</th><th>% حضور</th><th>المقارنة داخل الفصل</th><th></th></tr></thead>
+          <thead><tr><th class="perf-pick-cell"></th><th>المخدوم</th><th>القطاع · الفصل</th><th>الحاضرون</th><th>الغائبون</th><th>% حضور</th><th>المقارنة داخل الفصل</th><th></th></tr></thead>
           <tbody id="perfIndividualRows">${rows || `<tr><td colspan="8" class="perf-empty">لا توجد سجلات مخدومين بعد</td></tr>`}</tbody>
         </table>
       </div>`;
@@ -721,10 +747,9 @@ async function perfExportAttendanceOrVisitPDF(list, label, kind, filename) {
         `<span style="text-align:center;">${dates.length}</span>`,
       ];
     }
-    const recs = perfAttendanceRecords(m);
-    const present = recs.filter((r) => r.present === true).length;
-    const absent = recs.length - present;
-    const pct = recs.length ? (present / recs.length) * 100 : null;
+    const present = perfMemberAttendance(m) ? 1 : 0;
+    const absent = 1 - present;
+    const pct = present * 100;
     return [
       `<span style="font-weight:700;">${escapeHTML(m.name || '—')}</span>`,
       perfExportClassCell(m),
@@ -748,8 +773,8 @@ async function perfExportAttendanceOrVisitPDF(list, label, kind, filename) {
       : [
           { label: 'الاسم', width: 30 },
           { label: 'القطاع · الفصل', width: 24 },
-          { label: 'أيام الحضور', width: 13, align: 'center' },
-          { label: 'أيام الغياب', width: 13, align: 'center' },
+          { label: 'حاضر', width: 13, align: 'center' },
+          { label: 'غائب', width: 13, align: 'center' },
           { label: '% حضور', width: 14, align: 'center' },
         ],
     rows,
@@ -797,13 +822,13 @@ async function perfExportFullReportPDF(members) {
   };
   const values = (list) => {
     const { attendance: a, visits: v, incomplete } = stats(list);
-    return [a.count, a.present, a.absent, v.visited, v.notVisited, list.length - incomplete, incomplete].map(fmtNum);
+    return [a.count, a.present, a.absent, v.visited, v.notVisited, incomplete, list.length - incomplete].map(fmtNum);
   };
   const { attendance: total, visits, incomplete } = stats(members);
   const percentage = (n) => members.length ? fmtPct(100 * n / members.length) : '—';
   const percentages = ['—', fmtPct(total.pctPresent), fmtPct(total.pctAbsent),
     fmtPct(visits.pctVisited), fmtPct(visits.pctNotVisited),
-    percentage(members.length - incomplete), percentage(incomplete)];
+    percentage(incomplete), percentage(members.length - incomplete)];
   // Each valid category occurs once in its own level, independently of other
   // fields. Missing categories are omitted, not invented or relabelled.
   const levels = [
@@ -833,11 +858,17 @@ async function perfExportFullReportPDF(members) {
   document.body.appendChild(stage);
   const pages = [];
   let page, body;
-  const headings = ['البيان', 'المخدومون', 'حضور', 'غياب', 'افتقاد', 'لم يُفتقد', 'مكتمل', 'ناقص'];
+  const headings = ['البيان', 'المخدومون', 'حضور', 'غياب', 'افتقاد', 'لم يُفتقد', 'ناقص', 'مكتمل'];
   const tableStyle = 'width:100%;border-collapse:collapse;table-layout:fixed;direction:rtl;';
   const cellStyle = `border:1px solid #d5c9b8;padding:3px 4px;font-family:${PDF_FONT_STACK};font-size:10px;line-height:1.45;overflow-wrap:anywhere;word-break:normal;vertical-align:middle;`;
-  const header = `<colgroup><col style="width:37%">${Array(7).fill('<col style="width:9%">').join('')}</colgroup><thead><tr>${headings.map((h) => `<th style="${cellStyle}background:#591420;color:white;text-align:center;font-weight:700;">${escapeHTML(h)}</th>`).join('')}</tr></thead>`;
-  const rowHtml = (cells, emphasized) => `<tr>${cells.map((v, i) => `<td style="${cellStyle}${i ? 'text-align:center;' : 'text-align:right;'}${emphasized ? 'font-weight:700;background:#fbf3df;' : ''}">${escapeHTML(String(v))}</td>`).join('')}</tr>`;
+  const headerCell = `${cellStyle}background:#591420;color:white;text-align:center;font-weight:700;`;
+  const header = `<colgroup><col style="width:37%">${Array(7).fill('<col style="width:9%">').join('')}</colgroup><thead><tr>${headings.slice(0, 6).map((h) => `<th rowspan="2" style="${headerCell}">${escapeHTML(h)}</th>`).join('')}<th colspan="2" style="${headerCell}">ملفات</th></tr><tr>${headings.slice(6).map((h) => `<th style="${headerCell}">${escapeHTML(h)}</th>`).join('')}</tr></thead>`;
+  const rowHtml = (cells, emphasized) => `<tr>${cells.map((v, i) => {
+    const value = escapeHTML(String(v));
+    const highlight = (i === 3 || i === 5) && /[0-9]/.test(String(v));
+    const content = highlight ? `<span style="background:#fbe6e6;border-radius:3px;padding:1px 3px;">${value}</span>` : value;
+    return `<td style="${cellStyle}${i ? 'text-align:center;' : 'text-align:right;'}${emphasized ? 'font-weight:700;background:#fbf3df;' : ''}">${content}</td>`;
+  }).join('')}</tr>`;
   function newPage() {
     page = document.createElement('div');
     page.style.cssText = `width:${pageW}px;height:${pageH}px;box-sizing:border-box;background:#fffdf8;padding:12px 16px;direction:rtl;font-family:${PDF_FONT_STACK};`;

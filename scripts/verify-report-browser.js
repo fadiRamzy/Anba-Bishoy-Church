@@ -25,9 +25,56 @@ const { chromium } = require('playwright-core');
   const x={fits:bodies.every(b=>b.scrollHeight<=b.clientHeight), cellsFit:cells.every(c=>c.scrollWidth<=c.clientWidth+1 && c.scrollHeight<=c.clientHeight+1), title:texts.includes('التقرير الكامل عن الخدمة'),noUnknown:!texts.includes('غير محدد'),noNames:!texts.includes('اسم 1'),sectorA:(texts.match(/قطاع أ/g)||[]).length,sectorB:(texts.match(/قطاع ب/g)||[]).length,cls:(texts.match(/فصل ألف/g)||[]).length, labels: ['القطاع','المرحلة','المدينة','الحي','الفصل','المخدومون'].every(x=>texts.includes(x)), summary:texts.includes('50.0%') && texts.includes('30')};shell.remove();return x;
  },report);
  for(const [k,v] of Object.entries(r)) check('report '+k,typeof v==='number'?v===1:v);
+ // Verify beneficiary-based counts, inclusive dates, every grouping and PDF.
+ const calculation = await page.evaluate(async () => {
+  const original = await MembersDB.getAll();
+  for (const m of original) await MembersDB.remove(m.id);
+  const items = Array.from({length:20}, (_, i) => ({
+   id:i+1,name:'اختبار '+i,sector:i%2?'ب':'أ',stage:i%2?'ثاني':'أول',city:i%2?'شرق':'غرب',
+   neighborhood:i%2?'حي ب':'حي أ',class:i%2?'فصل ب':'فصل أ',
+   attendance:i<4 ? [{date:'2026-10-02',present:true},{date:'2026-10-03',present:true}] : [{date:'2026-09-01',present:true}],
+   visits:[] }));
+  for (const m of items) await MembersDB.put(m);
+  await renderPerformance({tab:'overview'});
+  const start=document.querySelector('#perfPeriodStart'); start.value='2026-10-01'; start.dispatchEvent(new Event('change'));
+  await new Promise(resolve=>setTimeout(resolve,150));
+  const end=document.querySelector('#perfPeriodEnd'); end.value='2026-10-31'; end.dispatchEvent(new Event('change'));
+  await new Promise(resolve=>setTimeout(resolve,150));
+  const periodUI=sessionStorage.getItem('perf_period_start')==='2026-10-01' && sessionStorage.getItem('perf_period_end')==='2026-10-31';
+  const total=perfTotals(items);
+  const missing=perfTotals([{id:999,attendance:[]},{id:1000}]);
+  const levels=['sector','stage','city','neighborhood','class'].every(field =>
+    perfGroup(items,m=>m[field]).every(g=>g.count===10 && g.present===2 && g.absent===8 && g.pctPresent===20 && g.pctAbsent===80));
+  await renderPerformance({tab:'overview',stat:'absence'});
+  const dashboard=document.querySelector('#perfBody').textContent;
+  const drill=document.querySelectorAll('.perf-drill-pick').length;
+  await perfExportFullReportPDF(items);
+  const pdf=__reports[__reports.length-1];
+  const container=document.createElement('div');container.innerHTML=pdf.join('');
+  const summary=[...container.querySelectorAll('table')][0];
+  const rows=[...summary.querySelectorAll('tbody tr')].map(r=>[...r.cells].map(c=>c.textContent.trim()));
+  const headings=[...summary.querySelectorAll('thead tr')];
+  const grouped=headings.length===2 && headings[0].lastElementChild.textContent==='ملفات' && headings[0].lastElementChild.colSpan===2 && headings[1].children.length===2 && headings[1].children[0].textContent==='ناقص' && headings[1].children[1].textContent==='مكتمل';
+  const highlighted=[...container.querySelectorAll('tbody tr')].every(r=>[...r.cells].every((c,i)=>{
+    const marker=c.querySelector('span[style*="background"]');
+    return (i===3||i===5) && /[0-9]/.test(c.textContent) ? !!marker : !marker;
+  }));
+  for (const m of items) await MembersDB.remove(m.id);
+  for (const m of original) await MembersDB.put(m);
+  sessionStorage.removeItem('perf_period_start');sessionStorage.removeItem('perf_period_end');
+  return {total,missing,levels,dashboard,drill,rows,grouped,highlighted,periodUI};
+ });
+ check('20 registered: 4 present, 16 absent, 20% and 80%',calculation.total.count===20 && calculation.total.present===4 && calculation.total.absent===16 && calculation.total.pctPresent===20 && calculation.total.pctAbsent===80);
+ check('no attendance yields all absent',calculation.missing.present===0 && calculation.missing.absent===2 && calculation.missing.pctAbsent===100);
+ check('reporting period selection is applied',calculation.periodUI);
+ check('all five levels use beneficiary counts',calculation.levels);
+ check('dashboard displays correct scope and absent list',calculation.dashboard.includes('20.0%') && calculation.dashboard.includes('80.0%') && calculation.drill===16);
+ check('PDF totals match dashboard',calculation.rows[0][1]==='20' && calculation.rows[0][2]==='4' && calculation.rows[0][3]==='16' && calculation.rows[1][2]==='20.0%' && calculation.rows[1][3]==='80.0%');
+ check('profile columns have grouped heading',calculation.grouped);
+ check('only absence and unvisited figures highlighted',calculation.highlighted);
  const denied=await page.evaluate(async()=>{sessionStorage.setItem('perf_unlocked_role','khadim');try{await perfExportFullReportPDF(await MembersDB.getAll());return false}catch(e){return true}});check('servant cannot export numerical report',denied);
  await page.evaluate(async()=>{for(let i=31;i<=180;i++)await MembersDB.put({id:i,name:'زائر '+i,sector:'قطاع '+i,stage:'',city:'',neighborhood:'',class:'',attendance:[],visits:[]});sessionStorage.setItem('perf_unlocked_role','amin');await perfExportFullReportPDF(await MembersDB.getAll());});
- let long=await page.evaluate(()=>__reports[1]);
+ let long=await page.evaluate(()=>__reports[__reports.length-1]);
  const l=await page.evaluate(pages=>{const d=document.createElement('div');d.style='position:fixed;left:-9999px';d.innerHTML=pages.join('');document.body.append(d);const ok=[...d.querySelectorAll('.report-body')].every(x=>x.scrollHeight<=x.clientHeight);const repeat=[...d.querySelectorAll('.report-body')].every(x=>x.querySelector('thead'));d.remove();return {ok,repeat}},long);
  check('large report spans pages',long.length>2);check('large report pages fit',l.ok);check('table headers repeat on continuation pages',l.repeat);
  await page.evaluate(async()=>{window.__captured=[];simpleTablePdf=async o=>__captured.push(o); location.hash='#/iftiqad?view=visited';});
