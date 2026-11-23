@@ -43,7 +43,7 @@ const { chromium } = require('playwright-core');
  await page.evaluate(()=>{sessionStorage.setItem('perf_unlocked_role','khadim');location.hash='#/performance?tab=individuals'});await page.waitForSelector('#perfExportSelected');check('servant retains selection export',await page.locator('#perfExportSelected').count()===1);check('servant does not see report',await page.locator('#perfReportBtn').count()===0);
  await page.setViewportSize({width:375,height:812});await page.evaluate(()=>location.hash='#/iftiqad?view=visited');await page.waitForSelector('#iftSector');
  check('mobile directory fits viewport',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
- check('mobile filter tap size',await page.locator('#iftSector').evaluate(e=>e.getBoundingClientRect().height>=44));
+ check('mobile filter tap size',await page.locator('#iftSector').evaluate(e=>e.offsetHeight>=44));
  await page.evaluate(()=>location.hash='#/performance?tab=individuals');await page.waitForSelector('#perfExportSelected');check('mobile performance fits viewport',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  console.log(`RESULT ${results.filter(x=>x[1]).length}/${results.length}`);await browser.close();process.exit(results.some(x=>!x[1])?1:0);
 })().catch(e=>{console.log('::error::'+String(e).replace(/\n/g,' '));process.exit(2)});
