@@ -6,6 +6,23 @@ const { chromium } = require('playwright-core');
  await page.goto('http://127.0.0.1:4173/',{waitUntil:'domcontentloaded'});
  await page.waitForFunction(()=>typeof MembersDB!=='undefined' && typeof perfExportFullReportPDF==='function');
  const results=[]; function check(n,v){results.push([n,!!v]);console.log((v?'PASS ':'::error::FAIL ')+n)}
+ // Simulate an older installed Android shell that has neither appearance
+ // bootstrap nor stylesheet but receives the current mirrored app.js.
+ const legacy = await browser.newContext({serviceWorkers:'block'});
+ await legacy.addInitScript(() => localStorage.setItem('church_appearance','dark'));
+ await legacy.route('http://127.0.0.1:4173/', async route => {
+  let html = require('fs').readFileSync('index.html','utf8');
+  html = html.replace(/<script>\s*\(function \(\) \{[\s\S]*?window\.setChurchAppearance[\s\S]*?<\/script>/, '')
+             .replace(/<link rel="stylesheet" href="appearance\.css[^>]*>\s*/, '');
+  await route.fulfill({status:200,contentType:'text/html',body:html});
+ });
+ const oldPage=await legacy.newPage();
+ await oldPage.goto('http://127.0.0.1:4173/#/admin',{waitUntil:'load'});
+ await oldPage.waitForSelector('[data-appearance-choice="light"]');
+ check('legacy bundled shell recovers appearance bootstrap and stylesheet',await oldPage.evaluate(()=>document.documentElement.dataset.appearance==='dark' && typeof window.setChurchAppearance==='function' && !!document.querySelector('link[href*="appearance.css"]')));
+ await oldPage.locator('[data-appearance-choice="light"]').click();
+ check('legacy bundled shell selector persists',await oldPage.evaluate(()=>localStorage.getItem('church_appearance')==='light' && document.documentElement.dataset.appearance==='light'));
+ await legacy.close();
  // Exercise the unchanged navigation on desktop and phone before report tests.
  const navErrors=[]; page.on('pageerror', e=>navErrors.push(e.message));
  const expected=[['home','#/','الرئيسية'],['directory','#/home','دليل الخدمات'],['visitation','#/visitation','الافتقاد'],['bible','#/bible','الكتاب المقدس'],['admin','#/admin','الإدارة']];
@@ -43,7 +60,7 @@ const { chromium } = require('playwright-core');
   const primary=getComputedStyle(document.querySelector('.btn-primary')).backgroundImage;
   const gold=getComputedStyle(document.querySelector('.btn-gold')).backgroundImage;
   const danger=getComputedStyle(document.querySelector('.btn-danger')).backgroundImage;
-  return panel.includes('42, 51, 61') && primary!==gold && danger!==primary && danger!==gold;
+  return panel.includes('38, 39, 42') && primary!==gold && danger!==primary && danger!==gold;
  }));
  await page.locator('[data-appearance-choice="light"]').click();
  await page.reload({waitUntil:'domcontentloaded'});

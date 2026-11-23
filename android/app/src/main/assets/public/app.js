@@ -3,6 +3,30 @@
    Static, client-only. No network calls except loading data/seed.json once.
    ========================================================================== */
 
+/* Older Android installations keep their original bundled index.html while
+   app.js is mirrored from the website. Those shells predate the appearance
+   bootstrap and stylesheet; install them here without replacing the shell or
+   the Capacitor bridge. Newer shells already initialize before first paint. */
+(function ensureAppearanceForBundledShell() {
+  if (typeof window.setChurchAppearance === 'function') return;
+  function apply(value, save) {
+    value = value === 'dark' ? 'dark' : 'light';
+    document.documentElement.dataset.appearance = value;
+    document.documentElement.style.colorScheme = value;
+    if (save) { try { localStorage.setItem('church_appearance', value); } catch (_) {} }
+  }
+  let saved;
+  try { saved = localStorage.getItem('church_appearance'); } catch (_) {}
+  apply(saved, false);
+  window.setChurchAppearance = function (value) { apply(value, true); };
+  if (!document.querySelector('link[href*="appearance.css"]')) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'appearance.css?v=2';
+    document.head.appendChild(link);
+  }
+})();
+
 const APP_ROOT = document.getElementById('app');
 const TOAST = document.getElementById('toast');
 
