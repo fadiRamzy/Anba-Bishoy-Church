@@ -52,4 +52,4 @@ async function open() {
   ({browser, page} = await open());
   assert(await page.evaluate(() => document.documentElement.dataset.appearance === 'light'), 'Android light survives app restart');
   await browser.close();
-})().catch(e => { console.error(e); process.exit(1); });
+})().catch(e => { console.error(e); console.log('::error::Android appearance test: ' + String(e.stack || e).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A')); process.exit(1); });
