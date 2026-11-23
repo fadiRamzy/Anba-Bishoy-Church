@@ -19,7 +19,7 @@
    The website itself never takes this branch: its behaviour is unchanged.
    ========================================================================== */
 
-const CACHE_VERSION = 'abc-church-cache-v22';
+const CACHE_VERSION = 'abc-church-cache-v23';
 
 /* Native-app mirror (Android only). MIRROR_BASE is the deployed website the
    app loads its files from; requests keep their path and query string (so the
@@ -35,9 +35,9 @@ const IS_APP = self.location.hostname === 'localhost' && self.location.protocol 
 const PRECACHE_URLS = [
   './',
   'index.html',
-  'app.js?v=27',
+  'app.js?v=28',
   'iftiqad.js?v=2',
-  'performance.js?v=5',
+  'performance.js?v=6',
   'app-shell.js?v=2',
   'db.js?v=4',
   'styles.css?v=29',

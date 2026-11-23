@@ -76,9 +76,15 @@ const fmtPct = (p) => (p === null || !isFinite(p) ? '—' : `${p.toFixed(1)}%`);
 
 /* Visitation statistics — a member counts as visited when it has at least
    one recorded visit date (stored on the member record by الدليل/«دليل الافتقاد»). */
+function perfVisitDates(member) {
+  const from = sessionStorage.getItem('perf_period_start') || '';
+  const to = sessionStorage.getItem('perf_period_end') || '';
+  return visitDates(member).filter((date) => (!from || date >= from) && (!to || date <= to));
+}
+function perfIsVisited(member) { return perfVisitDates(member).length > 0; }
 function perfVisitStats(list) {
   let visited = 0;
-  for (const m of list) if (isVisitedMember(m)) visited += 1;
+  for (const m of list) if (perfIsVisited(m)) visited += 1;
   const notVisited = list.length - visited;
   return {
     visited,
@@ -262,8 +268,8 @@ async function renderPerformance(params) {
         </div>
       </div>
       <div class="perf-tabs" role="tablist">${tabsHtml}</div>
-      <div class="perf-period" role="group" aria-label="فترة احتساب الحضور">
-        <span>فترة الحضور</span>
+      <div class="perf-period" role="group" aria-label="فترة احتساب المؤشرات">
+        <span>فترة التقرير</span>
         <label>من <input type="date" id="perfPeriodStart" value="${escapeHTML(sessionStorage.getItem('perf_period_start') || '')}" /></label>
         <label>إلى <input type="date" id="perfPeriodEnd" value="${escapeHTML(sessionStorage.getItem('perf_period_end') || '')}" /></label>
         <button type="button" class="btn btn-outline btn-sm" id="perfPeriodClear">كل الفترات</button>
@@ -326,10 +332,10 @@ async function renderPerformance(params) {
     };
     /* visitation drill-downs (أمين خدمة only — the overview tab is أمين-only) */
     const alphaVisit = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ar');
-    const visitedMembers = members.filter(isVisitedMember).sort(alphaVisit);
-    const unvisitedMembers = members.filter((m) => !isVisitedMember(m)).sort(alphaVisit);
+    const visitedMembers = members.filter(perfIsVisited).sort(alphaVisit);
+    const unvisitedMembers = members.filter((m) => !perfIsVisited(m)).sort(alphaVisit);
     const visitList = (kind) => (kind === 'visited' ? visitedMembers : unvisitedMembers)
-      .map((m) => ({ m, present: 0, absent: 0, pct: null, visits: visitDates(m) }));
+      .map((m) => ({ m, present: 0, absent: 0, pct: null, visits: perfVisitDates(m) }));
     const vStats = perfVisitStats(members);
     drilldowns.visitTotal = { kind: 'visit', label: 'المخدومون الذين تم افتقادهم', list: visitList('visited') };
     drilldowns.visitPct = { kind: 'visit', label: 'المخدومون الذين تم افتقادهم', list: visitList('visited') };
@@ -416,7 +422,7 @@ async function renderPerformance(params) {
         </div>
       </div>
       ${panel}
-      <p class="perf-footnote">المؤشرات محسوبة من الحضور خلال الفترة المختارة وسجلات الافتقاد الفعلية المحفوظة لكل مخدوم — اضغط على أي مؤشر لعرض المخدومين المعنيين والوصول المباشر إلى ملفاتهم.</p>`;
+      <p class="perf-footnote">المؤشرات محسوبة من سجلات الحضور والافتقاد الفعلية خلال الفترة المختارة لكل مخدوم — اضغط على أي مؤشر لعرض المخدومين المعنيين والوصول المباشر إلى ملفاتهم.</p>`;
     body.querySelectorAll('.perf-edit-btn').forEach((btn) => btn.addEventListener('click', () => {
       const member = members.find((m) => String(m.id) === String(btn.dataset.id));
       if (member) openPerfEditModal(member, role, params);
@@ -473,12 +479,12 @@ async function renderPerformance(params) {
       const groupFilter = (params && params.group) || '';
       const makeKey = (m) => ((cfg.keyFn(m) || '').toString().trim() || '— غير محدد');
       const matched = members
-        .filter((m) => (!groupFilter || makeKey(m) === groupFilter) && (visitParam === 'visited' ? isVisitedMember(m) : !isVisitedMember(m)))
+        .filter((m) => (!groupFilter || makeKey(m) === groupFilter) && (visitParam === 'visited' ? perfIsVisited(m) : !perfIsVisited(m)))
         .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ar'));
       const groupLabel = groupFilter ? cfg.labelFn(groupFilter) : 'كل الخدمة';
       const isVisitedList = visitParam === 'visited';
       const rowsV = matched.map((m) => {
-        const visits = visitDates(m);
+        const visits = perfVisitDates(m);
         const last = visits[0] || '';
         return `
         <tr>
@@ -739,7 +745,7 @@ async function perfExportAttendanceOrVisitPDF(list, label, kind, filename) {
   const isVisit = kind === 'visit';
   const rows = sorted.map((m) => {
     if (isVisit) {
-      const dates = visitDates(m);
+      const dates = perfVisitDates(m);
       return [
         `<span style="font-weight:700;">${escapeHTML(m.name || '—')}</span>`,
         perfExportClassCell(m),
@@ -837,15 +843,22 @@ async function perfExportFullReportPDF(members) {
   ];
   const sections = levels.map(([title, field]) => {
     const groups = new Map();
+    const display = (value) => {
+      const label = cleanLabel(value || '').trim();
+      return ['—', 'غير محدد', '— غير محدد'].includes(label) ? '' : label;
+    };
     for (const member of members) {
-      const label = cleanLabel(member[field] || '').trim();
-      if (!label || label === '—' || label === 'غير محدد' || label === '— غير محدد') continue;
-      if (!groups.has(label)) groups.set(label, []);
-      groups.get(label).push(member);
+      // The class dashboard identifies a class by sector and class together.
+      const key = field === 'class' ? perfClassKey(member) : String(member[field] || '').trim();
+      const label = field === 'class'
+        ? [display(member.sector), display(member.class)].filter(Boolean).join(' · ')
+        : display(member[field]);
+      if (!groups.has(key)) groups.set(key, { label, members: [] });
+      groups.get(key).members.push(member);
     }
-    return { title, rows: [...groups.entries()]
-      .sort(([a], [b]) => a.localeCompare(b, 'ar'))
-      .map(([label, list]) => [label, ...values(list)]) };
+    return { title, rows: [...groups.values()]
+      .sort((a, b) => a.label.localeCompare(b.label, 'ar'))
+      .map(({ label, members: group }) => [label, ...values(group)]) };
   }).filter((section) => section.rows.length);
 
   // A report-only renderer: other PDF templates keep their existing behavior.
@@ -866,7 +879,7 @@ async function perfExportFullReportPDF(members) {
   const rowHtml = (cells, emphasized) => `<tr>${cells.map((v, i) => {
     const value = escapeHTML(String(v));
     const highlight = (i === 3 || i === 5) && /[0-9]/.test(String(v));
-    const content = highlight ? `<span style="background:#fbe6e6;border-radius:3px;padding:1px 3px;">${value}</span>` : value;
+    const content = highlight ? `<span style="display:inline-block;box-sizing:border-box;max-width:100%;overflow-wrap:anywhere;word-break:break-all;background:rgba(185,55,55,0.07);border-radius:3px;padding:0 1px;">${value}</span>` : value;
     return `<td style="${cellStyle}${i ? 'text-align:center;' : 'text-align:right;'}${emphasized ? 'font-weight:700;background:#fbf3df;' : ''}">${content}</td>`;
   }).join('')}</tr>`;
   function newPage() {
