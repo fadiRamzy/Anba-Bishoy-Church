@@ -44,6 +44,14 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Verify report and filters in Chrome
+        run: |
+          npm install --no-save --no-package-lock playwright-core
+          python3 -m http.server 4173 --bind 127.0.0.1 > "$RUNNER_TEMP/report-server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          node scripts/verify-report-browser.js
+
       - name: Populate www/ from website root (includes the native bridge)
         run: node scripts/sync-web.js
 
@@ -97,3 +105,19 @@ jobs:
               --title 'تطبيق الكنيسة (Android) — أحدث نسخة' \
               --notes 'أحدث بناء لأندرويد يُنشر تلقائيًا من سير عمل Build Android عند كل تحديث على Main.'
           fi
+
+      - name: Verify APK web assets
+        run: |
+          for file in index.html app.js iftiqad.js performance.js styles.css service-worker.js capacitor-bridge.js; do
+            unzip -p android/app/build/outputs/apk/debug/app-debug.apk "assets/public/$file" > "$RUNNER_TEMP/apk-asset"
+            cmp "www/$file" "$RUNNER_TEMP/apk-asset"
+          done
+
+      - name: Verify administration download serves this APK
+        if: github.ref == 'refs/heads/Main'
+        run: |
+          url='https://github.com/fadiRamzy/Anba-Bishoy-Church/releases/download/android-latest/Anba-Bishoy-Church.apk'
+          grep -F "$url" app.js
+          grep -F "$url" capacitor-bridge.js
+          curl --fail --location --retry 5 --retry-delay 5 --output "$RUNNER_TEMP/downloaded.apk" "$url"
+          cmp android/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/downloaded.apk"
