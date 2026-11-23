@@ -6,6 +6,27 @@ const { chromium } = require('playwright-core');
  await page.goto('http://127.0.0.1:4173/',{waitUntil:'domcontentloaded'});
  await page.waitForFunction(()=>typeof MembersDB!=='undefined' && typeof perfExportFullReportPDF==='function');
  const results=[]; function check(n,v){results.push([n,!!v]);console.log((v?'PASS ':'::error::FAIL ')+n)}
+ // Exercise the unchanged navigation on desktop and phone before report tests.
+ const navErrors=[]; page.on('pageerror', e=>navErrors.push(e.message));
+ const expected=[['home','#/','الرئيسية'],['directory','#/home','دليل الخدمات'],['visitation','#/visitation','الافتقاد'],['bible','#/bible','الكتاب المقدس'],['admin','#/admin','الإدارة']];
+ for (const viewport of [{width:1280,height:800},{width:375,height:812},{width:320,height:640}]) {
+  await page.setViewportSize(viewport);
+  for (const [tab,href] of expected) {
+   await page.locator(`[data-tab="${tab}"]`).click();
+   await page.waitForFunction(t=>document.querySelector(`[data-tab="${t}"]`).classList.contains('active'),tab);
+   check(`navigation ${viewport.width} ${tab}`,await page.evaluate(([t,h])=>location.hash===h && document.querySelector(`[data-tab="${t}"]`).getAttribute('aria-current')==='page',[tab,href]));
+   if (await page.locator('.pin-modal-backdrop .btn-cancel').count()) await page.locator('.pin-modal-backdrop .btn-cancel').click();
+  }
+  const geometry=await page.evaluate(()=>{
+   const bar=document.querySelector('.tab-bar-inner'), items=[...bar.querySelectorAll('.tab-item')], rects=items.map(x=>x.getBoundingClientRect()), icons=items.map(x=>x.querySelector('svg').getBoundingClientRect());
+   const labels=items.map(x=>x.querySelector('.tab-label'));
+   return {equal:rects.every(r=>Math.abs(r.width-rects[0].width)<1 && r.height>=44), icons:icons.every(r=>r.width===19 && r.height===19), labels:labels.every(l=>getComputedStyle(l).whiteSpace==='nowrap' && l.scrollWidth<=l.parentElement.clientWidth+1), fit:bar.getBoundingClientRect().left>=0 && bar.getBoundingClientRect().right<=innerWidth && bar.getBoundingClientRect().bottom<=innerHeight, space:parseFloat(getComputedStyle(document.querySelector('main')).paddingBottom)>=bar.getBoundingClientRect().height+10};
+  });
+  for(const [k,v] of Object.entries(geometry)) check(`navigation ${viewport.width} ${k}`,v);
+ }
+ check('navigation labels and order preserved',await page.evaluate(e=>JSON.stringify([...document.querySelectorAll('.tab-item')].map(a=>[a.dataset.tab,a.getAttribute('href'),a.querySelector('.tab-label').textContent.trim()]))===JSON.stringify(e),expected));
+ check('navigation no page errors',navErrors.length===0);
+ await page.setViewportSize({width:1280,height:800});
  await page.evaluate(async()=>{
   const old=await MembersDB.getAll(); for(const m of old) await MembersDB.remove(m.id);
   for(let i=1;i<=30;i++) await MembersDB.put({id:i,name:'اسم '+i,phone1:'01000111111',street:'شارع',locationLink:'x',sector:i<=15?'قطاع أ':'قطاع ب',stage:'مرحلة ١',city:'المنيا',neighborhood:i<=10?'حي أول':'حي ثان',class:i<=15?'فصل ألف':'فصل باء',visits:i%2?['2026-11-01']:[],attendance:[{date:'2026-10-01',present:i%2===1}]});
