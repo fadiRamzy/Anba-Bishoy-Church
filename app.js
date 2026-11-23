@@ -35,6 +35,8 @@ const ICONS = {
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>',
   book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5c-2-1.5-5-2-8-2v16c3 0 6 .5 8 2 2-1.5 5-2 8-2V3c-3 0-6 .5-8 2z"/><path d="M12 5v16"/></svg>',
   send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
+  chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4M4 20h16"/><path d="M9 16v-5M13 16V8M17 16v-8"/></svg>',
+  visit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.2-4.6-10-9.3C.4 8.4 2.6 5 6.3 5c2.2 0 3.9 1.1 5.7 3.4C13.8 6.1 15.5 5 17.7 5c3.7 0 5.9 3.4 4.3 6.7C19.2 16.4 12 21 12 21z"/></svg>',
 };
 
 /* ---------------------------------------------------------------------- */
@@ -472,6 +474,8 @@ async function router() {
   if (segments[0] === 'member' && segments[1]) return renderProfile(segments[1]);
   if (segments[0] === 'add') return renderForm(null);
   if (segments[0] === 'attendance') return renderAttendance();
+  if (segments[0] === 'performance') return renderPerformance(params);
+  if (segments[0] === 'iftiqad') return renderIftiqad(params);
   if (segments[0] === 'edit' && segments[1]) return renderForm(segments[1]);
   if (segments[0] === 'admin') return renderAdminPanel();
   if (segments[0] === 'birthdays') return renderBirthdays();
@@ -2339,6 +2343,14 @@ async function renderHome() {
           <span class="icon-wrap">${ICONS.calendar}</span>
           <span>الحضور</span>
         </a>
+        <a href="#/performance" class="nav-card">
+          <span class="icon-wrap">${ICONS.chart}</span>
+          <span>مؤشر قياس الأداء</span>
+        </a>
+        <a href="#/iftiqad" class="nav-card">
+          <span class="icon-wrap">${ICONS.visit}</span>
+          <span>دليل الافتقاد</span>
+        </a>
       </div>
     </div>
   `;
@@ -3447,21 +3459,22 @@ async function renderAttendance() {
       <h2 class="section-title">الحضور</h2>
       <p class="section-sub">اختر القطاع ثم الفصل لتسجيل حضور اليوم أو استخراج كشف الحضور</p>
 
-      <div class="filter-bar">
-        <div class="field">
-          <label for="attSectorSelect">القطاع</label>
-          <select id="attSectorSelect"><option value="">اختر القطاع</option>${sectors.map((s) => `<option value="${escapeHTML(s)}">${escapeHTML(cleanLabel(s))}</option>`).join('')}</select>
-        </div>
-        <div class="field">
-          <label for="attClassSelect">الفصل</label>
-          <select id="attClassSelect" disabled><option value="">اختر القطاع أولاً</option></select>
-        </div>
-        <div class="field att-date-field">
-          <button type="button" class="att-notif" id="attNotifBtn" aria-label="أشخاص لم يسجلوا حضورًا منذ أكثر من ١٤ يومًا">
-            ${ICONS.bell}
-            <span class="att-notif-count" id="attNotifCount">0</span>
-          </button>
-          <div class="att-date-group">
+      <div class="att-filter-outer">
+        <button type="button" class="att-notif" id="attNotifBtn" aria-label="أشخاص لم يسجلوا حضورًا منذ أكثر من ١٤ يومًا">
+          ${ICONS.bell}
+          <span class="att-notif-text">افتقد مخدومك</span>
+          <span class="att-notif-count" id="attNotifCount">0</span>
+        </button>
+        <div class="filter-bar">
+          <div class="field">
+            <label for="attSectorSelect">القطاع</label>
+            <select id="attSectorSelect"><option value="">اختر القطاع</option>${sectors.map((s) => `<option value="${escapeHTML(s)}">${escapeHTML(cleanLabel(s))}</option>`).join('')}</select>
+          </div>
+          <div class="field">
+            <label for="attClassSelect">الفصل</label>
+            <select id="attClassSelect" disabled><option value="">اختر القطاع أولاً</option></select>
+          </div>
+          <div class="field">
             <label for="attDateInput">تاريخ تسجيل الحضور</label>
             <input type="date" id="attDateInput" value="${today}" />
           </div>
@@ -3531,7 +3544,7 @@ async function renderAttendance() {
     backdrop.innerHTML = `
       <div class="pin-modal att-notif-modal" role="dialog" aria-modal="true" aria-label="أشخاص لم يسجلوا حضورًا منذ أكثر من ١٤ يومًا">
         <div class="att-notif-modal-head">
-          <h3>لم يحضروا منذ أكثر من ١٤ يومًا (${overdue.length})</h3>
+          <h3>افتقد مخدومك (${overdue.length})</h3>
           <button type="button" class="att-notif-close" aria-label="إغلاق">&times;</button>
         </div>
         ${overdue.length
@@ -3941,6 +3954,8 @@ async function renderProfile(idStr) {
   }
   const age = computeAge(member);
   const birth = formatBirthDate(member);
+  const visitList = visitDates(member);
+  const todayStr = visitTodayStr();
 
   APP_ROOT.innerHTML = `
     <div class="container">
@@ -4028,6 +4043,24 @@ async function renderProfile(idStr) {
           </div>`).join('')}
         </div>
       </div>` : ''}
+
+      <div class="info-section">
+        <h3>${ICONS.visit} سجل الافتقاد</h3>
+        <div class="visit-add-row">
+          <input type="date" id="visitDateInput" value="${todayStr}" max="${todayStr}" aria-label="تاريخ الافتقاد" />
+          <button type="button" class="btn btn-outline btn-sm" id="visitTodayBtn">${ICONS.calendar}<span>تاريخ اليوم</span></button>
+          <button type="button" class="btn btn-primary btn-sm" id="visitAddBtn">${ICONS.plus}<span>تسجيل افتقاد</span></button>
+        </div>
+        ${visitList.length ? `<div class="att-history visit-history">
+          <div class="att-history-row visit-history-row att-history-head"><span>تاريخ الافتقاد</span><span></span></div>
+          ${visitList.map((d) => `
+          <div class="att-history-row visit-history-row">
+            <span class="att-h-date" dir="ltr">${escapeHTML(formatDMY(d))}</span>
+            <span></span>
+            <button type="button" class="att-h-del visit-del" data-date="${escapeHTML(d)}" aria-label="حذف هذا الافتقاد">${ICONS.trash}</button>
+          </div>`).join('')}
+        </div>` : '<p class="muted visit-empty">لا توجد زيارات مسجلة بعد</p>'}
+      </div>
     </div>
   `;
 
@@ -4045,6 +4078,28 @@ async function renderProfile(idStr) {
       member.attendance = list;
       await MembersDB.put(member);
       showToast('تم حذف سجل الحضور', 'success');
+      renderProfile(member.id);
+    });
+  });
+  const visitAddBtn = document.getElementById('visitAddBtn');
+  const visitDateInput = document.getElementById('visitDateInput');
+  const doAddVisit = async (dateStr) => {
+    if (!(await Admin.require())) return;
+    const ok = await recordVisitDate(member, dateStr);
+    if (ok) {
+      showToast('تم تسجيل الافتقاد', 'success');
+      renderProfile(member.id);
+    }
+  };
+  visitAddBtn.addEventListener('click', () => doAddVisit(visitDateInput.value));
+  document.getElementById('visitTodayBtn').addEventListener('click', () => doAddVisit(visitTodayStr()));
+  [...document.querySelectorAll('.visit-del')].forEach((b) => {
+    b.addEventListener('click', async () => {
+      const d = b.dataset.date;
+      if (!(await Admin.require())) return;
+      if (!confirm(`هل تريد حذف سجل الافتقاد عن ${formatDMY(d)}؟`)) return;
+      await removeVisitDate(member, d);
+      showToast('تم حذف سجل الافتقاد', 'success');
       renderProfile(member.id);
     });
   });
@@ -4139,8 +4194,8 @@ const CLASS_MAP = {
   'جامعة شابات': ['اجتماع الشباب', 'اجتماع الشابات'],
   'خريجين شباب': ['اجتماع الشباب', 'اجتماع الشابات'],
   'خريجين شابات': ['اجتماع الشباب', 'اجتماع الشابات'],
-  'مدرسة الشمامسة': ['داوؤد النبي', 'المريمات', 'استطفانوس'],
-  'معهد الالحان': ['الفرقة الاولي اولاد', 'الفرقة الاولي بنات'],
+  'مدرسة الشمامسة': ['داود النبي', 'المريمات', 'استطفانوس'],
+  'معهد الالحان': ['الفرقة الاولي اولاد', 'الفرقة الاولي بنات', 'خورس'],
 };
 
 /* Backward compatibility: old records stored the gender-combined value
