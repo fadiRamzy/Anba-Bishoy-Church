@@ -52,30 +52,44 @@ function visitTodayStr() {
 }
 const stripHTML = (html) => String(html || '').replace(/<[^>]*>/g, '');
 
-/* Record one visit date for a member (duplicate same-date prevented). */
+/* Read and update within one IndexedDB transaction so a stale profile cannot
+   overwrite newer attendance or another visit recorded in a different tab. */
+async function updateVisitDate(member, date, remove) {
+  const store = await tx(STORE_MEMBERS, 'readwrite');
+  return new Promise((resolve, reject) => {
+    let changed = false;
+    let current;
+    const request = store.get(Number(member.id));
+    request.onsuccess = () => {
+      current = request.result;
+      if (!current) return;
+      const dates = visitDates(current);
+      const exists = dates.includes(date);
+      if (remove ? !exists : exists) return;
+      current.visits = remove ? dates.filter((d) => d !== date) : [...dates, date];
+      store.put(current);
+      changed = true;
+    };
+    store.transaction.oncomplete = () => {
+      if (changed) member.visits = current.visits.slice();
+      resolve(changed);
+    };
+    store.transaction.onerror = () => reject(store.transaction.error);
+    store.transaction.onabort = () => reject(store.transaction.error || new Error('Visit update aborted'));
+  });
+}
 async function recordVisitDate(member, dateStr) {
   const v = String(dateStr || '').trim();
   if (!isValidVisitDate(v)) {
     showToast('من فضلك اختر تاريخًا صحيحًا', 'error');
     return false;
   }
-  const list = visitDates(member);
-  if (list.includes(v)) {
-    showToast('هذا التاريخ مسجل بالفعل لنفس المخدوم', 'error');
-    return false;
-  }
-  member.visits = [...list, v];
-  await MembersDB.put(member);
-  return true;
+  const changed = await updateVisitDate(member, v, false);
+  if (!changed) showToast('تعذر التسجيل: التاريخ مسجل بالفعل أو المخدوم غير موجود', 'error');
+  return changed;
 }
 async function removeVisitDate(member, dateStr) {
-  const list = visitDates(member);
-  const idx = list.indexOf(dateStr);
-  if (idx < 0) return false;
-  list.splice(idx, 1);
-  member.visits = list;
-  await MembersDB.put(member);
-  return true;
+  return updateVisitDate(member, dateStr, true);
 }
 
 /* ==========================================================================
