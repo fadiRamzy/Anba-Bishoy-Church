@@ -67,12 +67,15 @@ const { chromium } = require('playwright-core');
     return a.length===8 && a.every(x=>x.getBoundingClientRect().width>0 && x.getBoundingClientRect().height>=44 && x.scrollWidth<=x.clientWidth+1);
    }));
    for (const href of ['#/browse/sector','#/browse/neighborhood','#/browse/stage','#/browse/city','#/birthdays','#/attendance','#/iftiqad','#/performance']) {
-    await page.evaluate(()=>renderHome());
+    await page.evaluate(()=>{ location.hash='#/home'; });
+    await page.waitForSelector('.nav-grid a');
     await page.locator(`.nav-grid a[href="${href}"]`).click();
     check(`directory destination ${mode} ${href}`,await page.evaluate(h=>location.hash===h,href));
+    await page.waitForFunction(()=>!document.querySelector('.nav-grid'));
     if (await page.locator('.pin-modal-backdrop .btn-cancel').count()) await page.locator('.pin-modal-backdrop .btn-cancel').click();
    }
-   await page.evaluate(()=>renderHome());
+   await page.evaluate(()=>{ location.hash='#/home'; });
+   await page.waitForSelector('#homeSearchInput');
    await page.locator('#homeSearchInput').fill('اسم 1');
    await page.waitForSelector('#homeSearchResults .member-card');
    await page.locator('#homeSearchResults .member-card').first().click();
