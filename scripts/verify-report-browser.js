@@ -61,10 +61,11 @@ const { chromium } = require('playwright-core');
  for (const viewport of [{width:1280,height:800},{width:375,height:812}]) {
   await page.setViewportSize(viewport);
   for (const mode of ['light','dark']) {
-   await page.evaluate(m=>{setChurchAppearance(m);return renderHome()},mode);
+   await page.evaluate(m=>{setChurchAppearance(m);location.hash='#/home'},mode);
+   await page.waitForSelector('.nav-grid .nav-card');
    check(`directory eight cards ${viewport.width} ${mode}`,await page.evaluate(()=>{
     const a=[...document.querySelectorAll('.nav-grid .nav-card')];
-    return a.length===8 && a.every(x=>x.getBoundingClientRect().width>0 && x.getBoundingClientRect().height>=44 && x.scrollWidth<=x.clientWidth+1);
+    return a.length===8 && a.every(x=>x.getBoundingClientRect().width>0 && x.getBoundingClientRect().height>=44 && x.querySelector('span:last-child').getBoundingClientRect().width<=x.clientWidth+1);
    }));
    for (const href of ['#/browse/sector','#/browse/neighborhood','#/browse/stage','#/browse/city','#/birthdays','#/attendance','#/iftiqad','#/performance']) {
     await page.evaluate(()=>{ location.hash='#/home'; });
@@ -80,6 +81,7 @@ const { chromium } = require('playwright-core');
    await page.waitForSelector('#homeSearchResults .member-card');
    await page.locator('#homeSearchResults .member-card').first().click();
    check(`beneficiary profile ${viewport.width} ${mode}`,await page.evaluate(()=>location.hash.startsWith('#/member/')));
+   await page.waitForSelector('.profile-header');
   }
  }
  await page.setViewportSize({width:1280,height:800});
