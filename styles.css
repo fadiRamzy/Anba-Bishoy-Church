@@ -3726,3 +3726,30 @@ a.perf-stat { text-decoration: none; color: inherit; font-family: inherit; }
 .perf-period label { display:flex; align-items:center; gap:5px; }
 .perf-period input { min-height:42px; max-width:100%; border:1px solid var(--color-line); border-radius:var(--radius-md); padding:6px 8px; font:inherit; color:var(--color-ink); background:#fff; }
 .perf-period input:focus-visible { outline:2px solid var(--color-gold); outline-offset:2px; }
+
+/* Performance-only period panel and incomplete-profile layout. */
+.perf-period[hidden] { display: none; }
+.perf-period { padding: 10px 12px; border: 1px solid var(--color-line); border-radius: var(--radius-md); background: var(--color-surface-tint, #fff); }
+.perf-head-actions { flex-wrap: wrap; }
+.perf-incomplete-wrap { overflow-x: hidden; }
+.perf-incomplete-table { width: 100%; min-width: 0; table-layout: fixed; }
+.perf-incomplete-table th, .perf-incomplete-table td { white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+.perf-incomplete-table th:nth-child(1) { width: 5%; }
+.perf-incomplete-table th:nth-child(2) { width: 19%; }
+.perf-incomplete-table th:nth-child(3) { width: 18%; }
+.perf-incomplete-table th:nth-child(4) { width: 36%; }
+.perf-incomplete-table th:nth-child(5) { width: 22%; }
+.perf-incomplete-table .perf-group { min-width: 0; }
+.perf-incomplete-table .perf-actions { display: table-cell; text-align: start; }
+.perf-incomplete-table .perf-actions .btn { margin: 2px; }
+.perf-incomplete-table .perf-missing { white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 719px) {
+  .perf-incomplete-wrap { border: 0; box-shadow: none; background: transparent; }
+  .perf-incomplete-table, .perf-incomplete-table tbody, .perf-incomplete-table tr { display: block; width: 100%; }
+  .perf-incomplete-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .perf-incomplete-table tbody tr { margin-bottom: 10px; border: 1px solid var(--color-line); border-radius: var(--radius-md); background: #fff; box-shadow: var(--shadow-card); padding: 8px 10px; }
+  .perf-incomplete-table tbody td, .perf-incomplete-table .perf-actions { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 6px; width: 100%; padding: 7px 2px; text-align: start; border-bottom: 1px solid var(--color-line-soft); }
+  .perf-incomplete-table tbody td:last-child { border-bottom: 0; }
+  .perf-incomplete-table tbody td[data-label]::before { content: attr(data-label); flex: 0 0 100%; color: var(--color-ink-soft); font-size: .72rem; font-weight: 700; }
+  .perf-incomplete-table .perf-actions .btn { min-height: 44px; }
+}
