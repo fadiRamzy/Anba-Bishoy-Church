@@ -275,6 +275,7 @@ const { chromium } = require('playwright-core');
  check('profile columns have grouped heading',calculation.grouped);
  check('only absence and unvisited figures highlighted',calculation.highlighted);
  // Desktop focus areas, cards, and incomplete-data band at each requested width.
+ await page.evaluate(()=>MembersDB.put({id:99999,name:'اختبار ناقص',sector:'قطاع أ',class:'فصل ألف',attendance:[],visits:[]}));
  for (const width of [1280,1366,1440,1600,1920,2560]) {
   await page.setViewportSize({width,height:900});
   await page.evaluate(async()=>{ setChurchAppearance('light'); await renderHome(); });
@@ -294,6 +295,7 @@ const { chromium } = require('playwright-core');
   });
   check(`desktop ${width} compact incomplete table ${JSON.stringify(incomplete)}`,incomplete.band<=1500 && incomplete.wrap===incomplete.band && incomplete.row<=76 && incomplete.widths.length===2 && incomplete.widths.every(w=>w===116) && incomplete.heights.every(h=>h===36) && incomplete.fit && incomplete.toolbar==='flex');
  }
+ await page.evaluate(()=>MembersDB.remove(99999));
  await page.setViewportSize({width:1280,height:800});
  const denied=await page.evaluate(async()=>{sessionStorage.setItem('perf_unlocked_role','khadim');try{await perfExportFullReportPDF(await MembersDB.getAll());return false}catch(e){return true}});check('servant cannot export numerical report',denied);
  await page.evaluate(async()=>{for(let i=31;i<=180;i++)await MembersDB.put({id:i,name:'زائر '+i,sector:'قطاع '+i,stage:'',city:'',neighborhood:'',class:'',attendance:[],visits:[]});sessionStorage.setItem('perf_unlocked_role','amin');await perfExportFullReportPDF(await MembersDB.getAll());});
