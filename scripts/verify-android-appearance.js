@@ -37,7 +37,7 @@ async function open() {
         for (let n=0;n<40;n++) { if (await evaluate(expression)) return; await pause(500); }
         throw new Error('Timed out waiting for ' + expression);
       };
-      await wait("typeof MembersDB !== 'undefined' && !!document.querySelector('#tabBar')");
+      await wait("typeof MembersDB !== 'undefined' && !!document.querySelector('#tabBar') && !!document.querySelector('#themeToggle')");
       return {socket, evaluate, wait, errors};
     } catch (e) { last = e; }
     await pause(1500);
