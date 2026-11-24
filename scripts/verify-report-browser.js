@@ -45,6 +45,8 @@ const { chromium } = require('playwright-core');
  check('navigation no page errors',navErrors.length===0);
  await page.setViewportSize({width:1280,height:800});
  // Desktop fills available width; mobile navigation and wheel geometry stay intact.
+ const mediaSession=await page.context().newCDPSession(page);
+ await mediaSession.send('Emulation.setEmulatedMedia',{features:[{name:'hover',value:'hover'},{name:'pointer',value:'fine'}]});
  for (const width of [375, 768, 1280, 1920]) {
   await page.setViewportSize({width,height:800});
   await page.evaluate(async()=>{setChurchAppearance('dark'); await renderLanding()});
@@ -65,6 +67,7 @@ const { chromium } = require('playwright-core');
   check(`warm glass and visible artwork ${width}`,layout.artwork.includes('site-bg.jpg') && layout.artwork.includes('0.62') && layout.glass.includes('gradient') && layout.blur.includes('blur'));
   check(`wheel label has no light glow ${width}`,!layout.titleShadow.includes('255, 255, 255'));
  }
+ await mediaSession.send('Emulation.setEmulatedMedia',{features:[]});
  await page.setViewportSize({width:1280,height:800});
  await page.evaluate(()=>setChurchAppearance('light'));
  // Appearance is local, starts light, and can be switched from Administration.
