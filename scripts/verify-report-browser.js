@@ -72,7 +72,7 @@ const { chromium } = require('playwright-core');
     tones:cards.map(card=>getComputedStyle(card.querySelector('.icon-wrap')).backgroundImage),
     hasScroll:document.documentElement.scrollWidth>innerWidth+1};
   });
-  check(`responsive width ${width}`,width>=1024 ? layout.container>=width-1 : layout.container<=width+1);
+  check(`responsive width ${width} container ${layout.container} pointer ${await page.evaluate(()=>matchMedia('(hover: hover) and (pointer: fine)').matches)}`,width>=1024 ? layout.container>=width-1 : layout.container<=width+1);
   check(`no horizontal overflow ${width}`,!layout.hasScroll);
   check(`wheel and brand colors ${width}`,layout.wheel>0 && new Set(layout.tones).size===3);
   check(`warm glass and visible artwork ${width}`,layout.artwork.includes('site-bg.jpg') && layout.artwork.includes('0.62') && layout.glass.includes('gradient') && layout.blur.includes('blur'));
