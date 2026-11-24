@@ -3905,7 +3905,7 @@ body.has-modal .tab-bar .tab-bar-inner { pointer-events: none; }
   .perf-incomplete-toolbar .perf-field-chips { margin: 0; }
   .perf-incomplete-toolbar .perf-export-bar { margin: 0; }
   .perf-incomplete-wrap { background: rgba(255,253,250,.97); }
-  .perf-incomplete-table th, .perf-incomplete-table td { padding: 8px 16px; vertical-align: middle; }
+  .perf-incomplete-table th, .perf-incomplete-table td { padding: 6px 16px; vertical-align: middle; }
   .perf-incomplete-table th:nth-child(1) { width: 56px; }
   .perf-incomplete-table th:nth-child(2) { width: 18%; }
   .perf-incomplete-table th:nth-child(3) { width: 16%; }
