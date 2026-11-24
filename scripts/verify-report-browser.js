@@ -274,6 +274,29 @@ const { chromium } = require('playwright-core');
  check('PDF totals match dashboard',calculation.rows[0][1]==='20' && calculation.rows[0][2]==='4' && calculation.rows[0][3]==='16' && calculation.rows[1][2]==='20.0%' && calculation.rows[1][3]==='80.0%');
  check('profile columns have grouped heading',calculation.grouped);
  check('only absence and unvisited figures highlighted',calculation.highlighted);
+ // Desktop focus areas, cards, and incomplete-data band at each requested width.
+ await page.evaluate(()=>MembersDB.put({id:99999,name:'اختبار ناقص',sector:'قطاع أ',class:'فصل ألف',attendance:[],visits:[]}));
+ for (const width of [1280,1366,1440,1600,1920,2560]) {
+  await page.setViewportSize({width,height:900});
+  await page.evaluate(async()=>{ setChurchAppearance('light'); await renderHome(); });
+  const directory=await page.evaluate(()=>{
+   const cards=[...document.querySelectorAll('.nav-grid .nav-card')];
+   const search=document.querySelector('.search-panel');
+   return {search:search.offsetWidth, widths:cards.map(c=>c.offsetWidth), rows:new Set(cards.map(c=>c.offsetTop)).size, columns:getComputedStyle(document.querySelector('.nav-grid')).gridTemplateColumns.split(' ').length};
+  });
+  check(`desktop ${width} focus and eight balanced tiles`,directory.search<=760 && directory.widths.length===8 && directory.widths.every(w=>w>=168 && w<=200) && directory.columns===(width>=1640?8:4));
+  await page.evaluate(()=>renderVisitationHome());
+  const visits=await page.evaluate(()=>[...document.querySelectorAll('.visitation-home-actions > a:nth-child(3),.visitation-home-actions > a:nth-child(4),.visitation-home-actions > a:nth-child(5)')].map(e=>({width:e.offsetWidth,height:e.offsetHeight,icon:e.querySelector('svg').offsetWidth})));
+  check(`desktop ${width} visitation cards`,visits.length===3 && visits.every(x=>x.width>=300 && x.width<=360 && x.height>=120 && x.height<=132));
+  await page.evaluate(async()=>{ sessionStorage.setItem('perf_unlocked_role','amin'); await renderPerformance({tab:'incomplete'}); });
+  const incomplete=await page.evaluate(()=>{
+   const band=document.querySelector('.perf-incomplete-band'), wrap=document.querySelector('.perf-incomplete-wrap'), row=document.querySelector('.perf-incomplete-table tbody tr'), actions=[...row.querySelectorAll('.perf-incomplete-actions .btn')];
+   return {band:band.offsetWidth, wrap:wrap.offsetWidth, row:row.offsetHeight, widths:actions.map(x=>x.offsetWidth), heights:actions.map(x=>x.offsetHeight), fit:wrap.scrollWidth<=wrap.clientWidth, toolbar:getComputedStyle(document.querySelector('.perf-incomplete-toolbar')).display};
+  });
+  check(`desktop ${width} compact incomplete table ${JSON.stringify(incomplete)}`,incomplete.band<=1500 && incomplete.wrap===incomplete.band && incomplete.row<=76 && incomplete.widths.length===2 && incomplete.widths.every(w=>w===116) && incomplete.heights.every(h=>h===36) && incomplete.fit && incomplete.toolbar==='flex');
+ }
+ await page.evaluate(()=>MembersDB.remove(99999));
+ await page.setViewportSize({width:1280,height:800});
  const denied=await page.evaluate(async()=>{sessionStorage.setItem('perf_unlocked_role','khadim');try{await perfExportFullReportPDF(await MembersDB.getAll());return false}catch(e){return true}});check('servant cannot export numerical report',denied);
  await page.evaluate(async()=>{for(let i=31;i<=180;i++)await MembersDB.put({id:i,name:'زائر '+i,sector:'قطاع '+i,stage:'',city:'',neighborhood:'',class:'',attendance:[],visits:[]});sessionStorage.setItem('perf_unlocked_role','amin');await perfExportFullReportPDF(await MembersDB.getAll());});
  let long=await page.evaluate(()=>__reports[__reports.length-1]);
