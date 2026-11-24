@@ -4683,8 +4683,8 @@ async function renderAdminPanel() {
       <div class="admin-panel appearance-panel">
         <h3>المظهر</h3>
         <div class="appearance-options" role="group" aria-label="المظهر">
-          <button type="button" class="btn btn-outline appearance-choice" data-appearance-choice="light" aria-pressed="${document.documentElement.dataset.appearance !== 'dark'}">الوضع الفاتح</button>
-          <button type="button" class="btn btn-outline appearance-choice" data-appearance-choice="dark" aria-pressed="${document.documentElement.dataset.appearance === 'dark'}">الوضع الداكن</button>
+          <button type="button" class="btn btn-outline appearance-choice" data-appearance-choice="light" aria-pressed="${document.documentElement.dataset.appearance !== 'dark'}">فاتح</button>
+          <button type="button" class="btn btn-outline appearance-choice" data-appearance-choice="dark" aria-pressed="${document.documentElement.dataset.appearance === 'dark'}">داكن</button>
         </div>
       </div>
 
