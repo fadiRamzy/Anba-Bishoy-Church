@@ -292,7 +292,7 @@ const { chromium } = require('playwright-core');
    const band=document.querySelector('.perf-incomplete-band'), wrap=document.querySelector('.perf-incomplete-wrap'), row=document.querySelector('.perf-incomplete-table tbody tr'), actions=[...row.querySelectorAll('.perf-incomplete-actions .btn')];
    return {band:band.offsetWidth, wrap:wrap.offsetWidth, row:row.offsetHeight, widths:actions.map(x=>x.offsetWidth), heights:actions.map(x=>x.offsetHeight), fit:wrap.scrollWidth<=wrap.clientWidth, toolbar:getComputedStyle(document.querySelector('.perf-incomplete-toolbar')).display};
   });
-  check(`desktop ${width} compact incomplete table`,incomplete.band<=1500 && incomplete.wrap===incomplete.band && incomplete.row<=76 && incomplete.widths.length===2 && incomplete.widths.every(w=>w===116) && incomplete.heights.every(h=>h===36) && incomplete.fit && incomplete.toolbar==='flex');
+  check(`desktop ${width} compact incomplete table ${JSON.stringify(incomplete)}`,incomplete.band<=1500 && incomplete.wrap===incomplete.band && incomplete.row<=76 && incomplete.widths.length===2 && incomplete.widths.every(w=>w===116) && incomplete.heights.every(h=>h===36) && incomplete.fit && incomplete.toolbar==='flex');
  }
  await page.setViewportSize({width:1280,height:800});
  const denied=await page.evaluate(async()=>{sessionStorage.setItem('perf_unlocked_role','khadim');try{await perfExportFullReportPDF(await MembersDB.getAll());return false}catch(e){return true}});check('servant cannot export numerical report',denied);
