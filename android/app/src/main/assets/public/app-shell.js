@@ -18,6 +18,37 @@
   var tabBar = document.getElementById('tabBar');
   var progress = document.getElementById('routeProgress');
 
+  /* The header survives route renders; the existing appearance setting is
+     the single source of truth for both this button and Administration. */
+  var topNav = document.getElementById('topNav');
+  if (topNav && topNav.parentNode) {
+    var themeToggle = document.createElement('button');
+    themeToggle.type = 'button';
+    themeToggle.id = 'themeToggle';
+    themeToggle.className = 'theme-toggle';
+    topNav.parentNode.insertBefore(themeToggle, topNav.nextSibling);
+    var sun = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M19.07 4.93l-1.42 1.42M6.35 17.65l-1.42 1.42"/></svg>';
+    var moon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 15.2A8.8 8.8 0 018.8 3.5 9 9 0 1020.5 15.2z"/></svg>';
+    function syncAppearanceControl() {
+      var dark = document.documentElement.dataset.appearance === 'dark';
+      themeToggle.innerHTML = dark ? moon : sun;
+      themeToggle.title = dark ? 'التبديل إلى الوضع الفاتح' : 'التبديل إلى الوضع الداكن';
+      themeToggle.setAttribute('aria-label', themeToggle.title);
+      themeToggle.setAttribute('aria-pressed', String(dark));
+      document.querySelectorAll('[data-appearance-choice]').forEach(function (choice) {
+        choice.setAttribute('aria-pressed', String(choice.dataset.appearanceChoice === (dark ? 'dark' : 'light')));
+      });
+    }
+    themeToggle.addEventListener('click', function () {
+      if (typeof window.setChurchAppearance === 'function') {
+        window.setChurchAppearance(document.documentElement.dataset.appearance === 'dark' ? 'light' : 'dark');
+        syncAppearanceControl();
+      }
+    });
+    new MutationObserver(syncAppearanceControl).observe(document.documentElement, { attributes: true, attributeFilter: ['data-appearance'] });
+    syncAppearanceControl();
+  }
+
   /* ---------------------------------------------------------------------- */
   /*  Which tab owns which existing route                                    */
   /* ---------------------------------------------------------------------- */

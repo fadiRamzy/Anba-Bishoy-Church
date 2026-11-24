@@ -19,7 +19,7 @@
    The website itself never takes this branch: its behaviour is unchanged.
    ========================================================================== */
 
-const CACHE_VERSION = 'abc-church-cache-v30';
+const CACHE_VERSION = 'abc-church-cache-v31';
 
 /* Native-app mirror (Android only). MIRROR_BASE is the deployed website the
    app loads its files from; requests keep their path and query string (so the
@@ -35,13 +35,13 @@ const IS_APP = self.location.hostname === 'localhost' && self.location.protocol 
 const PRECACHE_URLS = [
   './',
   'index.html',
-  'app.js?v=30',
+  'app.js?v=31',
   'iftiqad.js?v=2',
   'performance.js?v=9',
-  'app-shell.js?v=2',
+  'app-shell.js?v=3',
   'db.js?v=4',
-  'styles.css?v=35',
-  'appearance.css?v=3',
+  'styles.css?v=36',
+  'appearance.css?v=4',
   'bible/bible.js?v=5',
   'bible/metadata.json',
   'calendar/coptic-calendar.js?v=2',
@@ -91,6 +91,30 @@ function isBundledOnly(request, url) {
   return url.pathname === '/capacitor-bridge.js';
 }
 
+/* A newly installed APK can precede the Pages deployment. Pages ignores
+   query strings, so requesting v=3 from an older deployment otherwise returns
+   v=2 and silently replaces the newer bundled shell. Compare the published
+   document's version for the shared boot assets before mirroring them. */
+let publishedVersions;
+async function publishedAssetVersions() {
+  if (!publishedVersions || Date.now() - publishedVersions.time > 10000) {
+    const value = fetch(MIRROR_BASE + '/index.html', { cache: 'no-cache' })
+      .then(r => { if (!r.ok) throw new Error('published index unavailable'); return r.text(); });
+    publishedVersions = { time: Date.now(), value };
+  }
+  return publishedVersions.value;
+}
+async function mirrorIsOlder(url) {
+  const file = url.pathname.split('/').pop();
+  if (!['app.js', 'app-shell.js', 'styles.css', 'appearance.css'].includes(file)) return false;
+  const requested = Number(url.searchParams.get('v'));
+  if (!requested) return false;
+  const html = await publishedAssetVersions();
+  const escaped = file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = html.match(new RegExp('(?:src|href)=["\']' + escaped + '\\?v=(\\d+)', 'i'));
+  return !!match && Number(match[1]) < requested;
+}
+
 /* Android app only: serve the file at the same path on the live website.
    `no-cache` revalidates with the server on every launch (Pages answers 304
    when nothing changed, so it stays cheap) and a new deploy is picked up
@@ -103,6 +127,10 @@ async function fetchMirrored(request) {
   try {
     const response = await fetch(remote, { cache: 'no-cache' });
     if (!response || !response.ok) throw new Error('mirror ' + (response && response.status));
+    if (await mirrorIsOlder(url)) {
+      const bundled = await caches.match(request, { cacheName: CACHE_VERSION });
+      if (bundled) return bundled;
+    }
     if (!/\.apk$/i.test(url.pathname)) cache.put(request, response.clone()).catch(() => {});
     return response;
   } catch (err) {

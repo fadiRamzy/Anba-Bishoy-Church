@@ -54,6 +54,7 @@ jobs:
           trap 'kill "$server_pid"' EXIT
           node scripts/verify-report-browser.js
           node scripts/verify-mobile-screenshots.js
+          node scripts/verify-site-layout.js
 
       - name: Populate www/ from website root (includes the native bridge)
         run: node scripts/sync-web.js
@@ -139,3 +140,7 @@ jobs:
           grep -F "$url" capacitor-bridge.js
           curl --fail --location --retry 5 --retry-delay 5 --output "$RUNNER_TEMP/downloaded.apk" "$url"
           cmp android/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/downloaded.apk"
+
+      - name: Verify deployed website and Administration link
+        if: github.ref == 'refs/heads/Main'
+        run: node scripts/verify-live-site.js

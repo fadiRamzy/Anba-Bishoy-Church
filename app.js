@@ -22,7 +22,7 @@
   if (!document.querySelector('link[href*="appearance.css"]')) {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = 'appearance.css?v=3';
+    link.href = 'appearance.css?v=4';
     document.head.appendChild(link);
   }
 })();
@@ -1511,7 +1511,7 @@ async function renderVisitationDataManagement() {
       <p class="section-sub">بيانات "خدمات الافتقاد" فقط (${total} أسرة مسجّلة على هذا الجهاز).</p>
 
       <div class="admin-panel">
-        <h3>${ICONS.download.replace('width="19"', 'width="17"')} تصدير بيانات الافتقاد</h3>
+        <h3>${ICONS.download} تصدير بيانات الافتقاد</h3>
         <div class="admin-actions">
           <button id="visitationExportBtn" class="btn btn-gold">${ICONS.download}<span>تنزيل بيانات الافتقاد</span></button>
         </div>
@@ -4689,7 +4689,7 @@ async function renderAdminPanel() {
       </div>
 
       <div class="admin-panel">
-        <h3>${ICONS.download.replace('width="19"','width="17"')} تصدير نسخة كاملة من البيانات</h3>
+        <h3>${ICONS.download} تصدير نسخة كاملة من البيانات</h3>
         <div class="admin-actions">
           <button id="exportBtn" class="btn btn-gold">${ICONS.download}<span>تنزيل نسخة JSON</span></button>
           <button id="shareBtn" class="btn btn-primary">${ICONS.send}<span>مشاركة البيانات المحدثه</span></button>

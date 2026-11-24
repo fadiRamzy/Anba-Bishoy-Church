@@ -90,6 +90,7 @@ html[data-appearance="dark"] .btn-gold { background: linear-gradient(160deg,#9e7
 html[data-appearance="dark"] .btn-danger { background: linear-gradient(160deg,#71464b,#53363c); color:#ffe0db; border-color:#b37c7a; }
 html[data-appearance="dark"] :is(.nav-card .icon-wrap, .profile-avatar, .browse-tile) { background: #55434a; color: #ffd2d3; border-color: #80666a; box-shadow: var(--appearance-shadow); }
 html[data-appearance="dark"] :is(.tab-bar .tab-bar-inner, .tab-bar.is-scrolled .tab-bar-inner) { background: linear-gradient(160deg,rgba(99,73,60,.78),rgba(49,34,29,.88)); border-color:rgba(246,222,190,.29); box-shadow:var(--appearance-shadow); }
+html[data-appearance="dark"] .theme-toggle { color: #f2d496; background: var(--lg-raise); border-color: var(--lg-edge-hi); }
 html[data-appearance="dark"] .tab-bar .tab-item { color: #dedad6; }
 html[data-appearance="dark"] .tab-bar .tab-item.active { color: #ffd2d3; }
 html[data-appearance="dark"] .tab-bar .tab-item.active .tab-icon { background: rgba(236,164,171,.20); }

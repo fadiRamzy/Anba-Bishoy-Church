@@ -1,8 +1,8 @@
 /* Compare mobile rendering with the approved pre-change snapshot. */
 const { execFileSync } = require('child_process');
 const { chromium } = require('playwright-core');
-const baseline = '321f0c4';
-const files = ['index.html','styles.css','appearance.css','performance.js','app.js','service-worker.js'];
+const baseline = 'bdc9a60';
+const files = ['index.html','styles.css','appearance.css','performance.js','app.js','app-shell.js','service-worker.js'];
 const old = Object.fromEntries(files.map(f => [f, execFileSync('git',['show',`${baseline}:${f}`])]));
 (async () => {
   const browser = await chromium.launch({executablePath:process.env.CHROME_BIN || '/usr/bin/google-chrome',args:['--no-sandbox','--disable-dev-shm-usage']});
@@ -20,7 +20,7 @@ const old = Object.fromEntries(files.map(f => [f, execFileSync('git',['show',`${
       await page.goto('http://127.0.0.1:4173/#/home',{waitUntil:'load'});
       await page.waitForFunction(()=>typeof MembersDB!=='undefined' && typeof renderHome==='function');
       await page.evaluate(async()=>{await document.fonts.ready;await renderHome();});
-      await page.addStyleTag({content:'*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}'});
+      await page.addStyleTag({content:'*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important} .app-bar{visibility:hidden!important}'});
       await page.waitForTimeout(300);
       images.push(await page.screenshot({animations:'disabled'}));
       await context.close();
@@ -39,7 +39,7 @@ const old = Object.fromEntries(files.map(f => [f, execFileSync('git',['show',`${
       if (diff.count > diff.total * .001) throw new Error(`mobile screenshot differs at ${width}px ${mode}: ${JSON.stringify(diff)}`);
       console.log(`Minor rendering noise: ${diff.count} pixels of ${diff.total}`);
     }
-    console.log(`PASS unchanged mobile screenshot ${width}px ${mode}`);
+    console.log(`PASS unchanged mobile content screenshot (header excluded) ${width}px ${mode}`);
   }
   await browser.close();
 })().catch(e=>{console.error(e);console.log('::error::'+String(e));process.exit(1)});

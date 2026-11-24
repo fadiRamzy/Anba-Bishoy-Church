@@ -370,7 +370,7 @@ function makeWorld({ native, prepare }) {
      mirror must serve the shell + the bridge from the bundle and mirror only
      the app's assets. */
   const SW_SRC = fs.readFileSync(path.join(__dirname, 'service-worker.js'), 'utf8');
-  function bootSW({ hostname, protocol }) {
+  function bootSW({ hostname, protocol, publishedVersion = 17 }) {
     const listeners = {}, net = [];
     const cacheStub = (name) => ({
       put: () => Promise.resolve(),
@@ -392,7 +392,7 @@ function makeWorld({ native, prepare }) {
       },
       fetch: (input) => {
         net.push(typeof input === 'string' ? input : input.url);
-        return Promise.resolve({ ok: true, status: 200, clone() { return this; } });
+        return Promise.resolve({ ok: true, status: 200, clone() { return this; }, text() { return Promise.resolve(`<script src="app.js?v=${publishedVersion}"></script>`); } });
       },
       URL, Promise, console, Error,
     });
@@ -421,11 +421,17 @@ function makeWorld({ native, prepare }) {
     appSW.net.length === 0, JSON.stringify(appSW.net));
   await appSW.request(APP_ORIGIN + '/app.js?v=17');
   check('sw: app assets are still mirrored from the live site',
-    appSW.net.length === 1 &&
+    appSW.net.length === 2 &&
     appSW.net[0] === 'https://fadiramzy.github.io/Anba-Bishoy-Church/app.js?v=17', appSW.net[0]);
   const capCall = appSW.request(APP_ORIGIN + '/_capacitor_http_interceptor_/x');
   check('sw: /_capacitor_* handed back to the native bridge untouched', capCall === undefined);
-  check('sw: nothing else reached the network', appSW.net.length === 1, JSON.stringify(appSW.net));
+  check('sw: only asset and published index reached the network', appSW.net.length === 2 && appSW.net[1].endsWith('/index.html'), JSON.stringify(appSW.net));
+  const olderSW = bootSW({ hostname: 'localhost', protocol: 'https:', publishedVersion: 16 });
+  const newerBundle = await olderSW.request(APP_ORIGIN + '/app.js?v=17');
+  check('sw: newer bundled asset wins over older published deployment', !!newerBundle.fromBundle);
+  const newerSW = bootSW({ hostname: 'localhost', protocol: 'https:', publishedVersion: 18 });
+  const newerPublished = await newerSW.request(APP_ORIGIN + '/app.js?v=17');
+  check('sw: newer published asset is still mirrored', !!newerPublished.ok && !newerPublished.fromBundle);
 
   const webSW = bootSW({ hostname: 'fadiramzy.github.io', protocol: 'https:' });
   const webResp = await webSW.request('https://fadiramzy.github.io/Anba-Bishoy-Church/app.js?v=17');
