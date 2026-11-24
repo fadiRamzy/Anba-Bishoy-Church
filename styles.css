@@ -3883,3 +3883,10 @@ a.perf-stat { text-decoration: none; color: inherit; font-family: inherit; }
 }
 
 body.has-modal .tab-bar .tab-bar-inner { pointer-events: none; }
+
+/* Expand the application only on desktop-class viewports; phone and tablet
+   geometry, and the floating navigation proportions, remain unchanged. */
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  .container { max-width: none; width: 100%; padding-inline: clamp(24px, 2.5vw, 48px); }
+  .nav-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+}

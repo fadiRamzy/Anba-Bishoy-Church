@@ -22,7 +22,7 @@
   if (!document.querySelector('link[href*="appearance.css"]')) {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = 'appearance.css?v=2';
+    link.href = 'appearance.css?v=3';
     document.head.appendChild(link);
   }
 })();

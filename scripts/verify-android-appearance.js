@@ -65,7 +65,7 @@ async function checkPages(web, mode) {
   await web.wait("!!document.querySelector('[data-appearance-choice=dark]')");
   await web.evaluate("document.querySelector('[data-appearance-choice=dark]').click()");
   assert(await web.evaluate("document.documentElement.dataset.appearance === 'dark' && localStorage.getItem('church_appearance') === 'dark'"), 'Android selector saves dark');
-  assert(await web.evaluate("getComputedStyle(document.querySelector('.admin-panel')).backgroundColor.includes('38, 39, 42')"), 'Android dark surfaces rendered');
+  assert(await web.evaluate("getComputedStyle(document.querySelector('.admin-panel')).backgroundColor.includes('55, 41, 35')"), 'Android dark surfaces rendered');
   await web.evaluate("location.hash = '#/home'");
   await web.wait("!!document.querySelector('.nav-grid')");
   assert(await web.evaluate("getComputedStyle(document.documentElement).colorScheme === 'dark'"), 'Android directory uses dark mode');

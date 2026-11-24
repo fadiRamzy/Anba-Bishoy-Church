@@ -44,6 +44,43 @@ const { chromium } = require('playwright-core');
  check('navigation labels and order preserved',await page.evaluate(e=>JSON.stringify([...document.querySelectorAll('.tab-item')].map(a=>[a.dataset.tab,a.getAttribute('href'),a.querySelector('.tab-label').textContent.trim()]))===JSON.stringify(e),expected));
  check('navigation no page errors',navErrors.length===0);
  await page.setViewportSize({width:1280,height:800});
+ // Desktop fills available width; mobile navigation and wheel geometry stay intact.
+ // Headless Chrome reports no pointer; exercise the very same desktop CSS
+ // declarations with just the pointer constraint removed in this test page.
+ const desktopRuleFound=await page.evaluate(()=>{
+  const sheet=[...document.styleSheets].find(s=>s.href && s.href.includes('styles.css'));
+  const rule=[...sheet.cssRules].find(r=>r.conditionText && r.conditionText.includes('min-width: 1024px') && r.conditionText.includes('pointer: fine'));
+  if (!rule) return false;
+  if (!matchMedia('(hover: hover) and (pointer: fine)').matches) {
+   const style=document.createElement('style'); style.id='test-desktop-media';
+   style.textContent='@media (min-width: 1024px) {'+[...rule.cssRules].map(r=>r.cssText).join('')+'}'; document.head.append(style);
+  }
+  return true;
+ });
+ check('desktop-only width rule present', desktopRuleFound);
+ for (const width of [375, 768, 1280, 1920]) {
+  await page.setViewportSize({width,height:800});
+  await page.evaluate(async()=>{setChurchAppearance('dark'); await renderLanding()});
+  const layout=await page.evaluate(()=>{
+   const container=document.querySelector('#app > .container'), wheel=document.querySelector('.service-wheel');
+   const cards=[...wheel.querySelectorAll('.wheel-node')];
+   const style=getComputedStyle(cards[0]);
+   return {container:container.offsetWidth, wheel:wheel.getBoundingClientRect().width,
+    artwork:getComputedStyle(document.body,'::before').backgroundImage,
+    glass:style.backgroundImage, blur:style.backdropFilter,
+    titleShadow:getComputedStyle(cards[0].querySelector('.landing-card-title')).textShadow,
+    tones:cards.map(card=>getComputedStyle(card.querySelector('.icon-wrap')).backgroundImage),
+    hasScroll:document.documentElement.scrollWidth>innerWidth+1};
+  });
+  check(`responsive width ${width} container ${layout.container} pointer ${await page.evaluate(()=>matchMedia('(hover: hover) and (pointer: fine)').matches)}`,width>=1024 ? layout.container>=width-1 : layout.container<=width+1);
+  check(`no horizontal overflow ${width}`,!layout.hasScroll);
+  check(`wheel and brand colors ${width}`,layout.wheel>0 && new Set(layout.tones).size===3);
+  check(`warm glass and visible artwork ${width}`,layout.artwork.includes('site-bg.jpg') && layout.artwork.includes('0.62') && layout.glass.includes('gradient') && layout.blur.includes('blur'));
+  check(`wheel label has no light glow ${width}`,!layout.titleShadow.includes('255, 255, 255'));
+ }
+ await page.evaluate(()=>document.getElementById('test-desktop-media')?.remove());
+ await page.setViewportSize({width:1280,height:800});
+ await page.evaluate(()=>setChurchAppearance('light'));
  // Appearance is local, starts light, and can be switched from Administration.
  check('appearance defaults to light',await page.evaluate(()=>document.documentElement.dataset.appearance==='light'));
  await page.evaluate(()=>renderAdminPanel());
@@ -60,7 +97,7 @@ const { chromium } = require('playwright-core');
   const primary=getComputedStyle(document.querySelector('.btn-primary')).backgroundImage;
   const gold=getComputedStyle(document.querySelector('.btn-gold')).backgroundImage;
   const danger=getComputedStyle(document.querySelector('.btn-danger')).backgroundImage;
-  return panel.includes('38, 39, 42') && primary!==gold && danger!==primary && danger!==gold;
+  return panel.includes('55, 41, 35') && primary!==gold && danger!==primary && danger!==gold;
  }));
  await page.locator('[data-appearance-choice="light"]').click();
  await page.reload({waitUntil:'domcontentloaded'});
