@@ -52,7 +52,7 @@ async function checkPages(web, mode) {
   ]) {
     await web.evaluate(`location.hash = ${JSON.stringify(hash)}`);
     await web.wait(`!!document.querySelector(${JSON.stringify(selector)})`);
-    assert(await web.evaluate(`document.documentElement.dataset.appearance === ${JSON.stringify(mode)}`), `Android ${mode} ${hash}`);
+    assert(await web.evaluate(`document.documentElement.dataset.appearance === ${JSON.stringify(mode)} && !!document.querySelector('#themeToggle')`), `Android ${mode} ${hash} header toggle`);
   }
 }
 (async () => {
@@ -61,6 +61,11 @@ async function checkPages(web, mode) {
   adb('shell', 'svc', 'data', 'disable');
   let web = await open();
   assert(await web.evaluate("location.protocol === 'https:' && location.hostname === 'localhost'"), 'Android packaged origin');
+  await web.wait("!!document.querySelector('#themeToggle')");
+  await web.evaluate("document.querySelector('#themeToggle').click()");
+  assert(await web.evaluate("document.documentElement.dataset.appearance === 'dark' && localStorage.getItem('church_appearance') === 'dark'"), 'Android header toggle saves dark');
+  await web.evaluate("document.querySelector('#themeToggle').click()");
+  assert(await web.evaluate("document.documentElement.dataset.appearance === 'light'"), 'Android header toggle switches back to light');
   await web.evaluate("location.hash = '#/admin'");
   await web.wait("!!document.querySelector('[data-appearance-choice=dark]')");
   await web.evaluate("document.querySelector('[data-appearance-choice=dark]').click()");

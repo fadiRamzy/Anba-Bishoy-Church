@@ -284,6 +284,21 @@ main {
 .top-nav > span:last-child,
 .top-nav > span:empty { display: none; }
 
+/* Independent of route-rendered header actions, so it stays available. */
+.theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 40px; width: 40px; height: 40px; padding: 0;
+  border: 1px solid var(--lg-edge, var(--color-line)); border-radius: 50%;
+  background: var(--lg-raise, var(--color-surface)); color: var(--color-gold-dark);
+  box-shadow: var(--lg-drop, var(--shadow-soft));
+  transition: background .2s ease, color .2s ease, transform .15s ease;
+}
+.theme-toggle svg { width: 20px; height: 20px; flex: none; }
+.theme-toggle:hover { border-color: var(--color-gold); color: var(--color-maroon); }
+.theme-toggle:active { transform: scale(.95); }
+.theme-toggle:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .theme-toggle { transition: none; } }
+
 .back-link {
   display: inline-flex;
   align-items: center;
@@ -3887,9 +3902,26 @@ body.has-modal .tab-bar .tab-bar-inner { pointer-events: none; }
 /* Expand the application only on desktop-class viewports; phone and tablet
    geometry, and the floating navigation proportions, remain unchanged. */
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  :root { --w-search: 760px; --w-form: 1160px; --w-panel: 960px; --w-toolbar: 1100px; }
   .container { max-width: none; width: 100%; padding-inline: clamp(24px, 2.5vw, 48px); }
-  .hero-verse-card { max-width: 760px; }
-  .search-panel:has(#homeSearchForm), .search-panel:has(#visitationHomeSearchForm) { width: min(100%, 760px); margin-inline: auto; }
+  .hero-verse-card { max-width: var(--w-search); }
+  .search-panel { width: 100%; max-width: var(--w-search); margin-inline: auto; }
+  .form-card { width: 100%; max-width: var(--w-form); margin-inline: auto; }
+  .admin-panel { width: 100%; max-width: var(--w-panel); margin-inline: auto; }
+  .filter-bar { width: 100%; max-width: var(--w-toolbar); margin-inline: auto; }
+  .info-section, .profile-header, .att-list { width: 100%; max-width: var(--w-form); margin-inline: auto; }
+  .info-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .profile-actions { margin-inline-start: 12px; flex-wrap: wrap; }
+  .perf-stat-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 260px)); }
+  .section-title { font-size: 1.4rem; }
+  .breadcrumbs { font-size: .82rem; }
+  .section-sub { font-size: .9rem; }
+  .tag { font-size: .75rem; }
+  .admin-panel h3 { font-size: .98rem; }
+  .admin-panel p { font-size: .84rem; }
+  .admin-panel h3 svg { width: 30px; height: 30px; padding: 8px; border-radius: 12px; }
+  .admin-actions select.btn { font-size: .8125rem; font-weight: 600; }
+  :where(svg:not([width]):not([height])) { width: 1em; height: auto; flex-shrink: 0; }
   #app > .container:has(.visitation-home-actions) > .breadcrumbs { max-width: 760px; margin-inline: auto; }
   .nav-grid { width: max-content; max-width: 100%; grid-template-columns: repeat(4, 184px); gap: 16px; margin-inline: auto; }
   .nav-grid .nav-card { width: 184px; min-height: 112px; }
@@ -3899,7 +3931,7 @@ body.has-modal .tab-bar .tab-bar-inner { pointer-events: none; }
   .visitation-home-actions > a:nth-child(3), .visitation-home-actions > a:nth-child(4), .visitation-home-actions > a:nth-child(5) { min-height: 124px; }
   .visitation-home-actions > a:nth-child(3) svg, .visitation-home-actions > a:nth-child(4) svg, .visitation-home-actions > a:nth-child(5) svg { width: 38px; height: 38px; flex: none; }
   .visitation-home-actions > a:last-child { width: min(100%, 380px); min-height: 42px; margin-top: 0; padding: 9px 15px; border: 1px solid var(--lg-edge); border-radius: var(--radius-md); background: var(--lg-raise); box-shadow: var(--lg-drop); }
-  .filter-bar { grid-template-columns: repeat(auto-fit, minmax(180px, 220px)); gap: 14px; }
+  .filter-bar { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
   .perf-incomplete-band { max-width: 1500px; margin-inline: auto; }
   .perf-incomplete-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 20px; margin-bottom: 18px; }
   .perf-incomplete-toolbar .perf-field-chips { margin: 0; }

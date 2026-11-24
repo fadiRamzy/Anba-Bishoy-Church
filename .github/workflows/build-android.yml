@@ -54,6 +54,7 @@ jobs:
           trap 'kill "$server_pid"' EXIT
           node scripts/verify-report-browser.js
           node scripts/verify-mobile-screenshots.js
+          node scripts/verify-site-layout.js
 
       - name: Populate www/ from website root (includes the native bridge)
         run: node scripts/sync-web.js
