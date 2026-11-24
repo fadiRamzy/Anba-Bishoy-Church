@@ -37,9 +37,15 @@ async function open() {
         for (let n=0;n<40;n++) { if (await evaluate(expression)) return; await pause(500); }
         throw new Error('Timed out waiting for ' + expression);
       };
-      await wait("typeof MembersDB !== 'undefined' && !!document.querySelector('#tabBar') && !!document.querySelector('#themeToggle')");
+      try {
+        await wait("typeof MembersDB !== 'undefined' && !!document.querySelector('#tabBar') && !!document.querySelector('#themeToggle')");
+      } catch (error) {
+        const diagnostics = await evaluate(`(async () => ({url: location.href, ready: document.readyState, html: !!document.querySelector('#topNav'), shell: [...document.scripts].map(s => s.src).filter(s => s.includes('app-shell')), shellText: (await (await fetch('app-shell.js?v=3')).text()).includes('themeToggle'), worker: !!navigator.serviceWorker.controller, caches: await caches.keys()}))()`);
+        socket.close();
+        throw new Error(error.message + ' diagnostics=' + JSON.stringify(diagnostics));
+      }
       return {socket, evaluate, wait, errors};
-    } catch (e) { last = e; }
+    } catch (e) { last = e; if (String(e).includes("diagnostics=")) throw e; }
     await pause(1500);
   }
   throw last || new Error('Android WebView not available');
