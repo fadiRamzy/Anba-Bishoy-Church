@@ -65,7 +65,7 @@ const { chromium } = require('playwright-core');
    const container=document.querySelector('#app > .container'), wheel=document.querySelector('.service-wheel');
    const cards=[...wheel.querySelectorAll('.wheel-node')];
    const style=getComputedStyle(cards[0]);
-   return {container:container.getBoundingClientRect().width, wheel:wheel.getBoundingClientRect().width,
+   return {container:container.offsetWidth, wheel:wheel.getBoundingClientRect().width,
     artwork:getComputedStyle(document.body,'::before').backgroundImage,
     glass:style.backgroundImage, blur:style.backdropFilter,
     titleShadow:getComputedStyle(cards[0].querySelector('.landing-card-title')).textShadow,
