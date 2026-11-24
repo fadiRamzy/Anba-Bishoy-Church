@@ -1,0 +1,32 @@
+/* Compare mobile rendering with the approved pre-change snapshot. */
+const { execFileSync } = require('child_process');
+const { chromium } = require('playwright-core');
+const baseline = '321f0c4';
+const files = ['index.html','styles.css','appearance.css','performance.js','app.js','service-worker.js'];
+const old = Object.fromEntries(files.map(f => [f, execFileSync('git',['show',`${baseline}:${f}`])]));
+(async () => {
+  const browser = await chromium.launch({executablePath:process.env.CHROME_BIN || '/usr/bin/google-chrome',args:['--no-sandbox','--disable-dev-shm-usage']});
+  for (const width of [360,390,430]) for (const mode of ['light','dark']) {
+    const images=[];
+    for (const previous of [true,false]) {
+      const context=await browser.newContext({viewport:{width,height:850},serviceWorkers:'block',reducedMotion:'reduce'});
+      await context.addInitScript(m=>localStorage.setItem('church_appearance',m),mode);
+      if (previous) await context.route('http://127.0.0.1:4173/**', async route=>{
+        const file=new URL(route.request().url()).pathname.slice(1) || 'index.html';
+        if (!old[file]) return route.continue();
+        await route.fulfill({status:200,contentType:file.endsWith('.html')?'text/html':file.endsWith('.css')?'text/css':'application/javascript',body:old[file]});
+      });
+      const page=await context.newPage();
+      await page.goto('http://127.0.0.1:4173/#/home',{waitUntil:'load'});
+      await page.waitForFunction(()=>typeof MembersDB!=='undefined' && typeof renderHome==='function');
+      await page.evaluate(async()=>{await document.fonts.ready;await renderHome();});
+      await page.addStyleTag({content:'*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}'});
+      await page.waitForTimeout(300);
+      images.push(await page.screenshot({animations:'disabled'}));
+      await context.close();
+    }
+    if (!images[0].equals(images[1])) throw new Error(`mobile screenshot differs at ${width}px in ${mode}`);
+    console.log(`PASS unchanged mobile screenshot ${width}px ${mode}`);
+  }
+  await browser.close();
+})().catch(e=>{console.error(e);console.log('::error::'+String(e));process.exit(1)});

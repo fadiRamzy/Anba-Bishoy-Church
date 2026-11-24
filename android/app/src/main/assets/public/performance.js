@@ -698,6 +698,8 @@ async function renderPerformance(params) {
         ${perfStatCard(fmtNum(incomplete.length), 'ملفات غير مكتملة', `من إجمالي ${fmtNum(members.length)} مسجلًا`, 'is-warn')}
         ${perfStatCard(fmtNum(members.length - incomplete.length), 'ملفات مكتملة', 'البيانات المطلوبة موجودة', 'is-good')}
       </div>
+      <div class="perf-incomplete-band">
+      <div class="perf-incomplete-toolbar">
       <div class="perf-field-chips">${fieldChips || '<span class="perf-empty">لا توجد حقول ناقصة — كل الملفات مكتملة 🎉</span>'}</div>
       <div class="perf-export-bar">
         <label class="perf-pick-all"><input type="checkbox" id="perfIncompletePickAll" /><span>تحديد الكل</span></label>
@@ -705,11 +707,13 @@ async function renderPerformance(params) {
         <button type="button" class="btn btn-outline btn-sm" id="perfIncompleteExportSelected">${ICONS.download}<span>تصدير المحدد PDF</span></button>
         <button type="button" class="btn btn-gold btn-sm" id="perfIncompleteExportShown">${ICONS.download}<span>تصدير المعروض PDF</span></button>
       </div>
+      </div>
       <div class="perf-table-wrap perf-incomplete-wrap">
         <table class="perf-table perf-incomplete-table">
           <thead><tr><th class="perf-pick-cell"></th><th>المخدوم</th><th>القطاع · الفصل</th><th>الحقول الناقصة</th><th>الإجراء</th></tr></thead>
           <tbody>${rows || `<tr><td colspan="5" class="perf-empty">لا توجد ملفات غير مكتملة بهذا الفلتر</td></tr>`}</tbody>
         </table>
+      </div>
       </div>`;
     body.querySelectorAll('.perf-edit-btn').forEach((btn) => btn.addEventListener('click', () => {
       const member = members.find((m) => String(m.id) === String(btn.dataset.id));
