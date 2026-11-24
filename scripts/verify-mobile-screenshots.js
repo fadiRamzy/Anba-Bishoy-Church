@@ -25,7 +25,18 @@ const old = Object.fromEntries(files.map(f => [f, execFileSync('git',['show',`${
       images.push(await page.screenshot({animations:'disabled'}));
       await context.close();
     }
-    if (!images[0].equals(images[1])) throw new Error(`mobile screenshot differs at ${width}px in ${mode}`);
+    if (!images[0].equals(images[1])) {
+      const probe=await browser.newPage();
+      const diff=await probe.evaluate(async ([a,b])=>{
+        const load=src=>new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=src;});
+        const [ia,ib]=await Promise.all([load(a),load(b)]), canvas=document.createElement('canvas');canvas.width=ia.width;canvas.height=ia.height;const ctx=canvas.getContext('2d');
+        ctx.drawImage(ia,0,0);const x=ctx.getImageData(0,0,canvas.width,canvas.height).data;ctx.drawImage(ib,0,0);const y=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+        let count=0,left=canvas.width,right=0,top=canvas.height,bottom=0;
+        for(let p=0;p<x.length;p+=4) if(x[p]!==y[p]||x[p+1]!==y[p+1]||x[p+2]!==y[p+2]) {const n=p/4, xx=n%canvas.width, yy=Math.floor(n/canvas.width);count++;left=Math.min(left,xx);right=Math.max(right,xx);top=Math.min(top,yy);bottom=Math.max(bottom,yy);}
+        return {count,left,right,top,bottom,total:canvas.width*canvas.height};
+      },images.map(i=>'data:image/png;base64,'+i.toString('base64')));
+      await probe.close();throw new Error(`mobile screenshot differs at ${width}px ${mode}: ${JSON.stringify(diff)}`);
+    }
     console.log(`PASS unchanged mobile screenshot ${width}px ${mode}`);
   }
   await browser.close();
